@@ -11,7 +11,7 @@ extern unsigned long prog_address;
 extern unsigned int prog_nbytes;
 extern unsigned int prog_pagesize;
 extern uchar prog_blockflags;
-extern uchar prog_pagecounter;
+extern unsigned int prog_pagecounter;
 extern uchar replyBuffer[8];
 
 usbMsgLen_t usbasp_vendor_setup(uchar data[8]);

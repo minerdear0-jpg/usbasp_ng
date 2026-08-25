@@ -3,9 +3,10 @@
 #include "usbasp/sck.h"
 #include "usbasp/clock.h"
 #include "usbasp/protocol.h"
+#include "usbasp/prog_state.h"
 
 uchar isp_hiaddr;
-uchar (*ispTransmit)(uchar);
+uchar (*ispTransmit)(uchar) = ispTransmit_sw;
 
 void ispConnect(void)
 {
@@ -57,7 +58,6 @@ uchar ispTransmit_hw(uchar send_byte)
 uchar ispEnterProgrammingMode(void)
 {
     uchar check;
-    extern uchar prog_sck;
 
     if (prog_sck == USBASP_ISP_SCK_AUTO)
         prog_sck = USBASP_ISP_SCK_1500;
@@ -95,6 +95,8 @@ uchar ispEnterProgrammingMode(void)
         } while (--tries);
 
         isp_spi_hw_disable();
+        if (prog_sck <= USBASP_ISP_SCK_0_5)
+            break;
         ispSetSCKOption(--prog_sck);
     }
 

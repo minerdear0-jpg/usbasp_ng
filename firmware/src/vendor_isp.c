@@ -16,7 +16,7 @@ unsigned long prog_address;
 unsigned int prog_nbytes = 0;
 unsigned int prog_pagesize;
 uchar prog_blockflags;
-uchar prog_pagecounter;
+unsigned int prog_pagecounter;
 uchar replyBuffer[8];
 
 usbMsgLen_t usbasp_vendor_setup(uchar data[8])
@@ -25,10 +25,13 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
 
     switch (data[1]) {
     case USBASP_FUNC_CONNECT:
-        if (board_sck_jumper_slow())
+        /* JP3/PC2: keep 8 kHz for ENABLEPROG auto-slow, not only the first tries. */
+        if (board_sck_jumper_slow()) {
+            prog_sck = USBASP_ISP_SCK_8;
             ispSetSCKOption(USBASP_ISP_SCK_8);
-        else
+        } else {
             ispSetSCKOption(prog_sck);
+        }
         prog_address_newmode = 0;
         board_led_red_on();
         ispConnect();
@@ -75,7 +78,7 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         prog_blockflags = data[5] & 0x0F;
         prog_pagesize += (((unsigned int)data[5] & 0xF0) << 4);
         if (prog_blockflags & PROG_BLOCKFLAG_FIRST)
-            prog_pagecounter = (uchar)prog_pagesize;
+            prog_pagecounter = prog_pagesize;
         prog_nbytes = usbasp_read_le16(&data[6]);
         prog_state = PROG_STATE_WRITEFLASH;
         len = USB_NO_MSG;
@@ -190,7 +193,8 @@ uchar usbasp_isp_read(uchar *data, uchar len)
         else
             data[i] = ispReadEEPROM((unsigned int)prog_address);
         prog_address++;
-        prog_nbytes--;
+        if (prog_nbytes)
+            prog_nbytes--;
     }
 
     if ((len < 8) || (prog_nbytes == 0))
@@ -213,8 +217,11 @@ uchar usbasp_isp_write(uchar *data, uchar len)
     if (prog_state == PROG_STATE_TPI_WRITE) {
         tpi_write_block((uint16_t)prog_address, data, len);
         prog_address += len;
-        prog_nbytes -= len;
-        if (prog_nbytes <= 0) {
+        if (prog_nbytes > len)
+            prog_nbytes -= len;
+        else
+            prog_nbytes = 0;
+        if (prog_nbytes == 0) {
             prog_state = PROG_STATE_IDLE;
             return 1;
         }
@@ -230,19 +237,20 @@ uchar usbasp_isp_write(uchar *data, uchar len)
                 prog_pagecounter--;
                 if (prog_pagecounter == 0) {
                     ispFlushPage(prog_address, data[i]);
-                    prog_pagecounter = (uchar)prog_pagesize;
+                    prog_pagecounter = prog_pagesize;
                 }
             }
         } else {
             ispWriteEEPROM((unsigned int)prog_address, data[i]);
         }
 
-        prog_nbytes--;
+        if (prog_nbytes)
+            prog_nbytes--;
 
         if (prog_nbytes == 0) {
             prog_state = PROG_STATE_IDLE;
             if ((prog_blockflags & PROG_BLOCKFLAG_LAST)
-                && (prog_pagecounter != (uchar)prog_pagesize)) {
+                && (prog_pagecounter != prog_pagesize)) {
                 ispFlushPage(prog_address, data[i]);
             }
             retVal = 1;

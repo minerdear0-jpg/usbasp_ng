@@ -1,4 +1,6 @@
-# USBISP-style clones: DDR-driven LEDs, PORTD left as input, no SCK jumper.
+# USBISP-style clones: DDR-driven LEDs, PORTD left as input.
+# No SCK jumper in firmware (USBASP_HAS_SCK_JUMPER=0). The PCB may still
+# have JP3; it is ignored. Bench no-dot measured ~4018 flash, this profile.
 set(USBASP_MCU atmega8)
 set(USBASP_F_CPU 12000000)
 set(USBASP_PROFILE classic)

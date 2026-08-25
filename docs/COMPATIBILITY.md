@@ -40,6 +40,7 @@ Preserve:
 
 - CONNECT then ENABLEPROG
 - SETISPSCK meaning (id 0 = AUTO; AUTO in firmware is 1.5 MHz then auto-slow)
+- JP3/PC2 slow jumper pins `prog_sck` to 8 kHz for the whole CONNECT session (ENABLEPROG must not ramp back to 1.5 MHz)
 - paged flash FIRST/LAST and 12-bit page size packing
 - EEPROM byte write with wait
 - SETLONGADDRESS → little-endian u32, then ignore 16-bit addresses in later commands

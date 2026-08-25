@@ -100,6 +100,7 @@ def test_writeflash_meg128_pagesize():
     flags = data[5] & 0x0F
     assert pagesize == 0x100
     assert flags == 1
+    # Firmware must keep pagecounter as uint: (uchar)0x100 == 0 would skip flushes.
 
 
 def test_sck_ids_match_avrdude():

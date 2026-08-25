@@ -28,3 +28,7 @@
 #
 # Pass: zero exit, vid=0x16c0 pid=0x05dc, signature 0x1e 0x93 0x07 for mega8.
 # Measured fuses on yellow-dot: lfuse 0xef hfuse 0xd9. Do not write 0xc9 blindly.
+#
+# no-dot programmer: usbisp-sized classic (~4018 B). JP3 on that board is not
+# sampled (HAS_SCK_JUMPER=0). Clone profile (4024+) reads PC2 for 8 kHz.
+
