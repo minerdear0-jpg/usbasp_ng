@@ -6,6 +6,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[3]
 PROTOCOL_H = ROOT / "include" / "usbasp" / "protocol.h"
+TPI_DEFS_H = ROOT / "include" / "usbasp" / "tpi_defs.h"
 SPEC = Path(__file__).resolve().parent / "spec.yaml"
 
 EXPECTED_FUNCS = {
@@ -126,6 +127,30 @@ def test_tpi_connect_delay_le16():
     assert (data[2] | (data[3] << 8)) == dly
 
 
+def test_tpi_rawwrite_byte():
+    send = [0xE0, 0, 0, 0]  # SKEY
+    data = setup_data(0xC0, 14, send, 0)
+    assert data[2] == 0xE0
+
+
+def test_tpi_readblock_addr_nbytes():
+    addr, n = 0x4000, 0x40
+    send = [addr & 0xFF, (addr >> 8) & 0xFF, 0, 0]
+    data = setup_data(0xC0, 15, send, n)
+    assert (data[2] | (data[3] << 8)) == addr
+    assert (data[6] | (data[7] << 8)) == n
+
+
+def test_tpi_opcodes():
+    text = TPI_DEFS_H.read_text()
+    assert re.search(r"#define\s+TPI_OP_SKEY\s+0xE0", text)
+    assert re.search(r"#define\s+TPISR\s+0x0", text)
+    # DISCONNECT: SSTCS(TPISR) = 0xC0 | 0
+    m = re.search(r"#define\s+TPI_OP_SSTCS\(a\)\s+\(0xC0\s*\|\s*\(\(a\)&0x0F\)\)", text)
+    assert m
+    assert (0xC0 | (0x0 & 0x0F)) == 0xC0
+
+
 def test_forbidden_func_gap():
     text = PROTOCOL_H.read_text()
     assert "USBASP_FUNC_UART" not in text
@@ -152,6 +177,9 @@ def main():
         test_writeflash_meg128_pagesize,
         test_sck_ids_match_avrdude,
         test_tpi_connect_delay_le16,
+        test_tpi_rawwrite_byte,
+        test_tpi_readblock_addr_nbytes,
+        test_tpi_opcodes,
         test_forbidden_func_gap,
         test_spec_func_ids,
     ]

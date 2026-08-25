@@ -89,6 +89,10 @@ Contract tests (no hardware):
 cd firmware && make test
 ```
 
+Hex for ATmega8 clone and HIDUART: [Releases](https://github.com/minerdear0-jpg/usbasp_ng/releases). `v0.1.0` classic, `v0.1.1` HIDUART.
+
+Still waiting on silicon (not blocking the protocol): ATmega328P ISP target, ATtiny10 TPI (`-p t10`). Checklists: [`hw-smoke-atmega328p.txt`](firmware/tests/compatibility/avrdude/hw-smoke-atmega328p.txt), [`hw-smoke-tpi.txt`](firmware/tests/compatibility/avrdude/hw-smoke-tpi.txt).
+
 ## Trees
 
 | Path | Role |

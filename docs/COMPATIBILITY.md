@@ -94,6 +94,8 @@ Classic:
 
 No dioannidis clock-id bits in byte 1. No HID flags in the avrdude bitmap.
 
+TPI (FUNC 11–16) is compiled and advertised (`USBASP_CAP_TPI`). It is **not** exercised on silicon in this repo yet (no tiny4/5/10 on the bench).
+
 ## What classic must not grow
 
 BOS, MS OS 2.0, WCID, HID, serial EEPROM, composite descriptors — those belong only in `src_hid/` / hiduart boards.

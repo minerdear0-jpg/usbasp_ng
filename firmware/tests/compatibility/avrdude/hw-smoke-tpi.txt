@@ -1,0 +1,8 @@
+# TPI (tiny4/5/9/10/20/40). No part on the bench yet.
+# Programmer: no-dot classic, JP3 open. Target on the ISP header (RESET, MOSI=TPIDATA, SCK=TPICLK).
+# Buy: ATTINY10-TSHR + SOT-23-6 adapter. avrdude -p t10
+#
+#   avrdude -c usbasp -p t10 -U signature:r:-:h
+#   avrdude -c usbasp -p t10 -U flash:r:/tmp/t10.bin:r
+#
+# Pass: zero exit. Do not write no-dot. Silicon untested as of v0.1.x.
