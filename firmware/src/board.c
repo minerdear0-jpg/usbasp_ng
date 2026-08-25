@@ -4,6 +4,7 @@
 #include "usbasp/board.h"
 #include "usbasp/clock.h"
 #include "usbasp/sck.h"
+#include "usbasp/prog_state.h"
 
 #if USBASP_LED_STYLE == USBASP_LED_PORT
 /* Fischl 2011: LEDs active-low on PORTC, DDRC already outputs.
@@ -56,7 +57,7 @@ void board_led_green_off(void) { ledGreenOff(); }
 #define T0_OVF_BREATHE 4 /* ~5.5 ms per duty step → ~1.4 s half-cycle */
 
 static uchar usb_live, t0_prev, rx_phase, tx_hold, t0_hi, isp_t0, isp_div;
-static uchar jp_duty, jp_up = 1, usb_phase;
+static uchar jp_duty, jp_up = 1, usb_phase, jp_was;
 static uint16_t t0_frac, half_ovf, idle_ovf, jp_step, usb_half;
 
 static void usb_xfer_kick(void)
@@ -123,7 +124,7 @@ void board_usb_bus_reset(unsigned char resetStarts)
     if (resetStarts) {
         usbConfiguration = 0;
         usb_live = tx_hold = 0;
-        rx_phase = isp_div = jp_duty = usb_phase = 0;
+        rx_phase = isp_div = jp_duty = usb_phase = jp_was = 0;
         jp_up = 1;
         t0_frac = half_ovf = idle_ovf = jp_step = usb_half = 0;
         ledGreenOff();
@@ -159,6 +160,14 @@ void board_led_isp_activity(void)
 void board_led_usb_update(void)
 {
     uchar hi = TIMERVALUE & 0x80;
+    uchar jp = (uchar)board_sck_jumper_slow();
+
+    /* Apply 8 kHz as soon as JP3 is closed — do not wait for avrdude CONNECT. */
+    if (jp && !jp_was)
+        ispSetSCKOption(USBASP_ISP_SCK_8);
+    else if (!jp && jp_was)
+        ispSetSCKOption(prog_sck);
+    jp_was = jp;
 
     led_time_step();
 
