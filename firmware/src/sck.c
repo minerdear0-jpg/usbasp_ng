@@ -84,3 +84,9 @@ void ispSetSCKOption(uchar option)
         sck_sw_delay = (uchar)(3u << (USBASP_ISP_SCK_32 - option));
     }
 }
+
+int isp_sck_is_8khz(void)
+{
+    return (ispTransmit == ispTransmit_sw)
+        && (sck_sw_delay == (uchar)(3u << (USBASP_ISP_SCK_32 - USBASP_ISP_SCK_8)));
+}

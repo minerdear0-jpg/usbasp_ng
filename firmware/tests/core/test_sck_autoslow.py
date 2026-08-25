@@ -47,6 +47,7 @@ def test_sw_delay_matches_fischl_table():
     assert sw_delay(SCK_32) == 3
     assert sw_delay(SCK_16) == 6
     assert sw_delay(SCK_8) == 12
+    assert sw_delay(SCK_8) == (3 << (SCK_32 - SCK_8))
     assert sw_delay(SCK_4) == 24
     assert sw_delay(SCK_2) == 48
     assert sw_delay(SCK_1) == 96

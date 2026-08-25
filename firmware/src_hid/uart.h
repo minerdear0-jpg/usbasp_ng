@@ -21,7 +21,8 @@
 
 #define UART_STATE_ENABLED  16
 #define UART_STATE_DISABLED 0
-#define PROG_STATE_SET_REPORT 7
+/* HID SET_REPORT data-stage flag; not an ISP prog_state (must not clobber WRITEFLASH). */
+#define UART_HID_SET_REPORT 7
 
 #if (defined __AVR_ATmega8__) || (defined __AVR_ATmega8A__)
 #   define USBASPUART_UDR       UDR

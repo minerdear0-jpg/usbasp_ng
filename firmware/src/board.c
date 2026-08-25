@@ -3,6 +3,7 @@
 #include "usbdrv.h"
 #include "usbasp/board.h"
 #include "usbasp/clock.h"
+#include "usbasp/sck.h"
 
 #if USBASP_LED_STYLE == USBASP_LED_PORT
 /* Fischl 2011: LEDs active-low on PORTC, DDRC already outputs.
@@ -52,10 +53,11 @@ void board_led_green_off(void) { ledGreenOff(); }
  * During a dump usbFunctionRead blocks in SPI; main would starve a 1 Hz LED. */
 #define T0_OVF_HALF ((F_CPU / 64 / 2) / 256) /* 0.5 s → 1 Hz */
 #define T0_OVF_IDLE ((F_CPU / 64 / 10) / 256) /* ~100 ms after last kick */
-#define T0_OVF_2HZ_HALF ((F_CPU / 64 / 4) / 256) /* 0.25 s → 2 Hz */
+#define T0_OVF_BREATHE 4 /* ~5.5 ms per duty step → ~1.4 s half-cycle */
 
-static uchar usb_live, t0_prev, rx_phase, tx_hold, t0_hi, isp_t0, isp_div, jp_phase;
-static uint16_t t0_frac, half_ovf, idle_ovf, jp_half;
+static uchar usb_live, t0_prev, rx_phase, tx_hold, t0_hi, isp_t0, isp_div;
+static uchar jp_duty, jp_up = 1, usb_phase;
+static uint16_t t0_frac, half_ovf, idle_ovf, jp_step, usb_half;
 
 static void usb_xfer_kick(void)
 {
@@ -76,10 +78,25 @@ static void led_time_step(void)
     t0_prev = now;
     while (t0_frac >= 256) {
         t0_frac -= 256;
-        jp_half++;
-        if (jp_half >= T0_OVF_2HZ_HALF) {
-            jp_half = 0;
-            jp_phase ^= 1;
+        jp_step++;
+        if (jp_step >= T0_OVF_BREATHE) {
+            jp_step = 0;
+            if (jp_up) {
+                if (jp_duty < 255)
+                    jp_duty++;
+                else
+                    jp_up = 0;
+            } else {
+                if (jp_duty)
+                    jp_duty--;
+                else
+                    jp_up = 1;
+            }
+        }
+        usb_half++;
+        if (usb_half >= T0_OVF_HALF) {
+            usb_half = 0;
+            usb_phase ^= 1;
         }
         if (!usb_live)
             continue;
@@ -106,8 +123,9 @@ void board_usb_bus_reset(unsigned char resetStarts)
     if (resetStarts) {
         usbConfiguration = 0;
         usb_live = tx_hold = 0;
-        rx_phase = isp_div = jp_phase = 0;
-        t0_frac = half_ovf = idle_ovf = jp_half = 0;
+        rx_phase = isp_div = jp_duty = usb_phase = 0;
+        jp_up = 1;
+        t0_frac = half_ovf = idle_ovf = jp_step = usb_half = 0;
         ledGreenOff();
         ledRedOff();
     }
@@ -153,15 +171,20 @@ void board_led_usb_update(void)
     t0_hi = hi;
 
     if (!usb_live) {
-        /* PC0 (USB/RX, left lamp on the clone): 2 Hz while JP3/PC2 is closed. */
-        if (usbConfiguration && board_sck_jumper_slow()) {
-            if (jp_phase)
+        /* 8 kHz SW (applied clock, not the jumper pin): breathe.
+         * HW SCK idle: 1 Hz from USB configured (host SET_CONFIGURATION).
+         * SOF count needs INT0 on D-; this clone interrupts on D+. */
+        if (usbConfiguration && isp_sck_is_8khz()) {
+            if ((uchar)TIMERVALUE < jp_duty)
                 ledGreenOn();
             else
                 ledGreenOff();
-        } else if (usbConfiguration)
-            ledGreenOn();
-        else
+        } else if (usbConfiguration) {
+            if (usb_phase)
+                ledGreenOn();
+            else
+                ledGreenOff();
+        } else
             ledGreenOff();
     }
 }

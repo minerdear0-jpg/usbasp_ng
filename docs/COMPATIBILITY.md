@@ -57,7 +57,7 @@ NG-internal improvements that stay on the same wire:
 - do not reset requested SCK on DISCONNECT
 - AT89S51/52 programming-enable probe
 - board layer for LED polarity and optional PC2 jumper
-- LEDs: PC0 1 Hz on USB/ISP traffic (timebase TCNT0, not main-loop edges); idle PC0 2 Hz if JP3/PC2 closed (slow SCK); PC1 ISP ~10 Hz
+- LEDs: PC0 1 Hz on USB/ISP traffic; idle PC0 breathes only when 8 kHz software SCK is applied (JP3 or SETISPSCK); otherwise idle 1 Hz while configured (USB host). PC1 ISP ~10 Hz
 - software SCK: cycle-count half-period (INT0 may stretch); LED stays out of ispTransmit_sw
 - SETISPSCK applies the selected clock immediately
 

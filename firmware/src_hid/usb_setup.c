@@ -9,6 +9,7 @@ static uchar featureReport[8];
 static uchar interruptBuffer[8];
 static uchar monitorBuffer[8];
 static uchar uart_state = UART_STATE_DISABLED;
+static uchar hid_set_report;
 
 usbMsgLen_t usbFunctionDescriptor(struct usbRequest *rq)
 {
@@ -53,7 +54,7 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
                     return sizeof(featureReport);
                 case USBRQ_HID_SET_REPORT:
                     if (usbasp_read_le16(&data[5]) != 0) {
-                        prog_state = PROG_STATE_SET_REPORT;
+                        hid_set_report = 1;
                         return USB_NO_MSG;
                     }
                     break;
@@ -75,12 +76,12 @@ uchar usbFunctionRead(uchar *data, uchar len)
 
 uchar usbFunctionWrite(uchar *data, uchar len)
 {
-    if (prog_state == PROG_STATE_SET_REPORT) {
+    if (hid_set_report) {
         featureReport[0] = data[0];
         featureReport[1] = data[1];
         featureReport[2] = data[2];
         uart_state = uart_config(featureReport);
-        prog_state = PROG_STATE_IDLE;
+        hid_set_report = 0;
         return 1;
     }
     return usbasp_isp_write(data, len);
@@ -125,7 +126,8 @@ static void hid_ep1_in(void)
 
 static void hid_ep2_in(void)
 {
-    monitorBuffer[7] = (uchar)(prog_state | uart_state);
+    monitorBuffer[7] = (uchar)(prog_state | uart_state
+        | (hid_set_report ? UART_HID_SET_REPORT : 0));
     usbSetInterrupt3(monitorBuffer, sizeof(monitorBuffer));
 }
 
