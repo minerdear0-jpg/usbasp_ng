@@ -23,8 +23,9 @@
 #   avrdude -c usbasp -p atmega8
 #   avrdude -c usbasp -p atmega8 -U signature:r:-:h
 #   avrdude -c usbasp -p atmega8 -U flash:r:/tmp/yellow-dot.bin:r
-#   avrdude -c usbasp -p atmega8 -B 8   # slower SCK (SETISPSCK)
-#   avrdude -c usbasp -p atmega8 -B 0.5 # 1.5 MHz; 3 MHz needs -B short enough (CAP_3MHZ)
+#   avrdude -c usbasp -p atmega8            # AUTO should enable without -B
+#   avrdude -c usbasp -p atmega8 -B 8       # slower SCK (SETISPSCK)
+#   avrdude -c usbasp -p atmega8 -B 0.5     # 1.5 MHz; 3 MHz needs -B short enough (CAP_3MHZ)
 #
 # Pass: zero exit, vid=0x16c0 pid=0x05dc, signature 0x1e 0x93 0x07 for mega8.
 # Measured fuses on yellow-dot: lfuse 0xef hfuse 0xd9. Do not write 0xc9 blindly.

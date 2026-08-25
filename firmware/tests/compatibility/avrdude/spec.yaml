@@ -51,6 +51,7 @@ functions:
     dir: in
     response_len: 1
     response: "0 ok, 1 no target"
+    notes: "AUTO: 1.5 MHz then 375 k / 93.75 k / 16 k / 500 Hz (not every id)"
   WRITEFLASH:
     id: 6
     dir: out

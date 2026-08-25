@@ -1,4 +1,5 @@
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include "usbasp/isp.h"
 #include "usbasp/sck.h"
 #include "usbasp/clock.h"
@@ -14,6 +15,7 @@ void ispConnect(void)
     ISP_DDR |= (1 << ISP_SCK);
     ISP_DDR |= (1 << ISP_MOSI);
     ISP_DDR |= (1 << ISP_RST);
+    ISP_OUT &= ~(1 << ISP_SCK);
     ISP_OUT |= (1 << ISP_MISO);
     isp_hiaddr = 0xff;
 }
@@ -29,10 +31,15 @@ void ispDisconnect(void)
 
 uchar ispTransmit_sw(uchar send_byte)
 {
-    board_led_isp_activity();
     uchar rec_byte = 0;
     uchar i;
+    uchar sreg;
+
+    board_led_isp_activity();
+
     for (i = 0; i < 8; i++) {
+        sreg = SREG;
+        cli();
         if ((send_byte & 0x80) != 0)
             ISP_OUT |= (1 << ISP_MOSI);
         else
@@ -42,8 +49,12 @@ uchar ispTransmit_sw(uchar send_byte)
         if ((ISP_IN & (1 << ISP_MISO)) != 0)
             rec_byte++;
         ISP_OUT |= (1 << ISP_SCK);
+        SREG = sreg;
         isp_sck_delay();
+        sreg = SREG;
+        cli();
         ISP_OUT &= ~(1 << ISP_SCK);
+        SREG = sreg;
         isp_sck_delay();
     }
     return rec_byte;
@@ -61,11 +72,15 @@ uchar ispTransmit_hw(uchar send_byte)
 uchar ispEnterProgrammingMode(void)
 {
     uchar check;
+    uchar autoslow = 0;
 
-    if (prog_sck == USBASP_ISP_SCK_AUTO)
+    if (prog_sck == USBASP_ISP_SCK_AUTO) {
+        autoslow = 1;
         prog_sck = USBASP_ISP_SCK_1500;
+    }
 
     while (prog_sck >= USBASP_ISP_SCK_0_5) {
+        ispSetSCKOption(prog_sck);
         uchar (*spiTx)(uchar) = ispTransmit;
 
         if (ispTransmit == ispTransmit_hw)
@@ -76,7 +91,7 @@ uchar ispEnterProgrammingMode(void)
             ISP_OUT |= (1 << ISP_RST);
             clockWait(1);
             ISP_OUT &= ~(1 << ISP_RST);
-            clockWait(62); /* ~20 ms */
+            clockWait(62); /* ~20 ms at 320 us ticks */
 
             spiTx(0xAC);
             spiTx(0x53);
@@ -100,7 +115,13 @@ uchar ispEnterProgrammingMode(void)
         isp_spi_hw_disable();
         if (prog_sck <= USBASP_ISP_SCK_0_5)
             break;
-        ispSetSCKOption(--prog_sck);
+        if (autoslow)
+            prog_sck = isp_sck_autoslow(prog_sck);
+        else
+            prog_sck--;
+        if (prog_sck < USBASP_ISP_SCK_0_5)
+            break;
+        ispSetSCKOption(prog_sck);
     }
 
     return 1;

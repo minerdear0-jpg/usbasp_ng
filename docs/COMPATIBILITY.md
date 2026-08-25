@@ -39,7 +39,7 @@ See [firmware/tests/compatibility/avrdude/spec.yaml](../firmware/tests/compatibi
 Preserve:
 
 - CONNECT then ENABLEPROG
-- SETISPSCK meaning (id 0 = AUTO; AUTO in firmware is 1.5 MHz then auto-slow)
+- SETISPSCK meaning (id 0 = AUTO; AUTO starts at 1.5 MHz then coarse auto-slow: 375 kHz, 93.75 kHz, 16 kHz, 500 Hz)
 - JP3/PC2 slow jumper pins `prog_sck` to 8 kHz for the whole CONNECT session (ENABLEPROG must not ramp back to 1.5 MHz)
 - paged flash FIRST/LAST and 12-bit page size packing
 - EEPROM byte write with wait
@@ -58,6 +58,8 @@ NG-internal improvements that stay on the same wire:
 - AT89S51/52 programming-enable probe
 - board layer for LED polarity and optional PC2 jumper
 - LEDs: PC0 1 Hz on USB/ISP traffic (timebase TCNT0, not main-loop edges); PC1 ISP ~10 Hz
+- software SCK: cycle-count delay (ISR may stretch, not shorten); brief cli only around PORTB RMW
+- SETISPSCK applies the selected clock immediately
 
 ## L3 Host compatibility
 

@@ -99,6 +99,7 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
 
     case USBASP_FUNC_SETISPSCK:
         prog_sck = data[2];
+        ispSetSCKOption(prog_sck);
         replyBuffer[0] = 0;
         len = 1;
         break;

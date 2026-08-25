@@ -8,9 +8,9 @@ BUILDDIR := build/$(BOARD)
 ISP ?= usbasp
 SERIAL ?= 0000
 
-MCU := $(shell awk '/USBASP_MCU /{print $$2}' boards/$(BOARD).cmake | tr -d ')')
-HFUSE := $(shell awk '/USBASP_HFUSE /{print $$2}' boards/$(BOARD).cmake | tr -d ')')
-LFUSE := $(shell awk '/USBASP_LFUSE /{print $$2}' boards/$(BOARD).cmake | tr -d ')')
+MCU := $(shell sh scripts/cmake-set.sh USBASP_MCU boards/$(BOARD).cmake)
+HFUSE := $(shell sh scripts/cmake-set.sh USBASP_HFUSE boards/$(BOARD).cmake)
+LFUSE := $(shell sh scripts/cmake-set.sh USBASP_LFUSE boards/$(BOARD).cmake)
 
 ifneq ($(findstring hiduart,$(BOARD)),)
 HEX_NAME := usbasp-hiduart
@@ -40,6 +40,7 @@ clean:
 test:
 	python3 tests/compatibility/avrdude/test_contract.py
 	python3 tests/core/test_endian.py
+	python3 tests/core/test_sck_autoslow.py
 	python3 tests/core/test_classic_isolation.py
 	python3 tests/core/test_serial_eep.py
 

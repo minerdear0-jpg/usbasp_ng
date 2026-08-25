@@ -1,4 +1,5 @@
 #include <avr/io.h>
+#include <util/delay_basic.h>
 #include "usbasp_config.h"
 #include "usbasp/sck.h"
 #include "usbasp/isp.h"
@@ -18,9 +19,23 @@ void isp_spi_hw_disable(void)
 
 void isp_sck_delay(void)
 {
-    uint8_t starttime = TIMERVALUE;
-    while ((uint8_t)(TIMERVALUE - starttime) < sck_sw_delay)
-        ;
+    /* sck_sw_delay is Timer0 ticks at F_CPU/64. A busy-wait on TCNT0 can
+     * expire inside a USB ISR and produce a too-short SCK. Cycle count
+     * only stretches if INT0 runs, which is safe for ISP. */
+    _delay_loop_2((uint16_t)sck_sw_delay * 16u);
+}
+
+uchar isp_sck_autoslow(uchar sck)
+{
+    if (sck > USBASP_ISP_SCK_375)
+        return USBASP_ISP_SCK_375;
+    if (sck > USBASP_ISP_SCK_93_75)
+        return USBASP_ISP_SCK_93_75;
+    if (sck > USBASP_ISP_SCK_16)
+        return USBASP_ISP_SCK_16;
+    if (sck > USBASP_ISP_SCK_0_5)
+        return USBASP_ISP_SCK_0_5;
+    return USBASP_ISP_SCK_AUTO;
 }
 
 void ispSetSCKOption(uchar option)
@@ -62,7 +77,9 @@ void ispSetSCKOption(uchar option)
             break;
         }
     } else {
+        SPCR = 0;
         ispTransmit = ispTransmit_sw;
+        ISP_OUT &= ~(1 << ISP_SCK);
         sck_sw_delay = (uchar)(3u << (USBASP_ISP_SCK_32 - option));
     }
 }
