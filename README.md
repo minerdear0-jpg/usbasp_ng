@@ -83,13 +83,15 @@ See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md). Short version:
 - GETCAPABILITIES = TPI + 3 MHz bit, **not** dioannidis clock bytes
 - Default SCK 1.5 MHz with auto-slowdown (same SETISPSCK wire)
 
+**Known bug:** software SCK ENABLEPROG `0x01` (`-B 22` / JP3 8 kHz) on this clone pair — [report](docs/SOFTWARE_SCK.md). Hardware SPI (`-B 8` and faster) works. Captures of `-B 8` vs `-B 22` welcome.
+
 Contract tests (no hardware):
 
 ```text
 cd firmware && make test
 ```
 
-Hex for ATmega8 clone and HIDUART: [Releases](https://github.com/minerdear0-jpg/usbasp_ng/releases). `v0.1.0` classic, `v0.1.1` HIDUART.
+Hex for ATmega8 clone and HIDUART: [Releases](https://github.com/minerdear0-jpg/usbasp_ng/releases). `v0.1.2` classic (~4942 B) and HIDUART (~6896 B).
 
 Still waiting on silicon (not blocking the protocol): ATmega328P ISP target, ATtiny10 TPI (`-p t10`). Checklists: [`hw-smoke-atmega328p.txt`](firmware/tests/compatibility/avrdude/hw-smoke-atmega328p.txt), [`hw-smoke-tpi.txt`](firmware/tests/compatibility/avrdude/hw-smoke-tpi.txt).
 

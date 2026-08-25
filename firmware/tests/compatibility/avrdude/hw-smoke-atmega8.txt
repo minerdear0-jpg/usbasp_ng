@@ -85,6 +85,7 @@
 #   HIDUART now writes the .eep after the hex (do not parallel flash and eeprom).
 #   UART loopback PD0–PD1 (TQFP 30–31, tweezers): HELLO echoed. Do not short pin 29 (RESET).
 #
-# Waveform: no scope. Third mega8 sniffer or FX2 LA — host/isp-sniffer/README.md
+# Waveform: parked until a capture of -B 22 vs -B 8. Report: docs/SOFTWARE_SCK.md
+#   Third mega8 sniffer or FX2 LA — host/isp-sniffer/README.md
 #   (do not flash sniffer onto no-dot or onto yellow unless replacing NG).
 

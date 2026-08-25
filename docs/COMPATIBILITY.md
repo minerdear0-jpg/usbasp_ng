@@ -80,7 +80,7 @@ Measured on ATmega8 clones (no-dot programmer, yellow-dot target / USB DUT):
 - signature `1E 93 07`
 - lfuse `0xef`, hfuse `0xd9` (not the 2011 documented `0xc9`)
 - SETISPSCK `-B 8` → 93750 Hz, `-B 0.5` → 1.5 MHz; AUTO dump of no-dot OK
-- software SCK `-B 22/50/250` (32/16/4 kHz): ENABLEPROG `0x01` on both NG classic and HIDUART (same pair). Not a composite-only IRQ issue; waveform not captured yet.
+- software SCK `-B 22/50/250` (32/16/4 kHz): ENABLEPROG `0x01` on both NG classic and HIDUART (same pair). Not a composite-only IRQ issue. Report and wanted capture: [SOFTWARE_SCK.md](SOFTWARE_SCK.md).
 - yellow as ISP target (no-dot programmer): EEPROM 512 B read; 16-byte write+verify+restore `0xFF`; `-B 0.25` → 3 MHz signature OK
 - yellow NG as programmer, no-dot as target: EEPROM read 512 B (`0xFF`); SETISPSCK `-B 8` / `-B 0.5` / `-B 0.25` (3 MHz) signature OK. JP3 closed → 8 kHz software SCK, ENABLEPROG `0x01` (same SW-SCK bug).
 - GETCAPABILITIES `01 00 00 01`
