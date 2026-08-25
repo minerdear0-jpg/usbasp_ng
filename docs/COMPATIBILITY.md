@@ -57,7 +57,7 @@ NG-internal improvements that stay on the same wire:
 - do not reset requested SCK on DISCONNECT
 - AT89S51/52 programming-enable probe
 - board layer for LED polarity and optional PC2 jumper
-- LEDs: PC0 1 Hz on USB/ISP traffic (timebase TCNT0, not main-loop edges); PC1 ISP ~10 Hz
+- LEDs: PC0 1 Hz on USB/ISP traffic (timebase TCNT0, not main-loop edges); idle PC0 2 Hz if JP3/PC2 closed (slow SCK); PC1 ISP ~10 Hz
 - software SCK: cycle-count half-period (INT0 may stretch); LED stays out of ispTransmit_sw
 - SETISPSCK applies the selected clock immediately
 
@@ -81,6 +81,8 @@ Measured on ATmega8 clones (no-dot programmer, yellow-dot target / USB DUT):
 - lfuse `0xef`, hfuse `0xd9` (not the 2011 documented `0xc9`)
 - SETISPSCK `-B 8` → 93750 Hz, `-B 0.5` → 1.5 MHz; AUTO dump of no-dot OK
 - software SCK `-B 22/50/250` (32/16/4 kHz): ENABLEPROG `0x01` on both NG classic and HIDUART (same pair). Not a composite-only IRQ issue; waveform not captured yet.
+- yellow as ISP target (no-dot programmer): EEPROM 512 B read; 16-byte write+verify+restore `0xFF`; `-B 0.25` → 3 MHz signature OK
+- yellow NG as programmer, no-dot as target: EEPROM read 512 B (`0xFF`); SETISPSCK `-B 8` / `-B 0.5` / `-B 0.25` (3 MHz) signature OK. JP3 closed → 8 kHz software SCK, ENABLEPROG `0x01` (same SW-SCK bug).
 - GETCAPABILITIES `01 00 00 01`
 - classic L0 USB: one interface, EP0 only, no HID/BOS; HIDUART is USB 2.01 composite (not L0)
 - HIDUART yellow-dot: iSerial `YEL0`; ISP read of no-dot through composite; UART loopback PD0–PD1

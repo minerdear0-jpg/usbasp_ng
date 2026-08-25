@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""AUTO backoff steps must match firmware/src/sck.c isp_sck_autoslow()."""
+"""AUTO backoff and software-SCK delay table vs firmware/src/sck.c."""
 
 AUTO = 0
 SCK_0_5 = 1
+SCK_1 = 2
+SCK_2 = 3
+SCK_4 = 4
+SCK_8 = 5
 SCK_16 = 6
+SCK_32 = 7
 SCK_93_75 = 8
 SCK_375 = 10
 SCK_1500 = 12
@@ -21,7 +26,11 @@ def autoslow(sck):
     return AUTO
 
 
-def main():
+def sw_delay(option):
+    return 3 << (SCK_32 - option)
+
+
+def test_autoslow_seq():
     seq = []
     sck = SCK_1500
     while sck >= SCK_0_5:
@@ -32,6 +41,28 @@ def main():
         sck = nxt
     assert seq == [SCK_1500, SCK_375, SCK_93_75, SCK_16, SCK_0_5], seq
     assert autoslow(SCK_0_5) == AUTO
+
+
+def test_sw_delay_matches_fischl_table():
+    assert sw_delay(SCK_32) == 3
+    assert sw_delay(SCK_16) == 6
+    assert sw_delay(SCK_8) == 12
+    assert sw_delay(SCK_4) == 24
+    assert sw_delay(SCK_2) == 48
+    assert sw_delay(SCK_1) == 96
+    assert sw_delay(SCK_0_5) == 192
+
+
+def test_hw_threshold():
+    assert all(i >= SCK_93_75 for i in range(8, 14))
+    assert all(i < SCK_93_75 for i in range(1, 8))
+    assert SCK_8 < SCK_93_75  # JP3 8 kHz is software SPI
+
+
+def main():
+    test_autoslow_seq()
+    test_sw_delay_matches_fischl_table()
+    test_hw_threshold()
     print("ok  sck_autoslow")
     return 0
 

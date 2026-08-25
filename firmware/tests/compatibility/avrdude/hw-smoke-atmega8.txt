@@ -39,4 +39,39 @@
 #   Conclusion: software SCK programming-enable is a real functional bug on this
 #   pair; it is not HIDUART/composite IRQ. Root cause (SCK vs MOSI vs MISO vs RST)
 #   not scoped yet. USB stayed enumerated after FAIL on classic.
+#   Parked: do not iterate sck.c until a scope capture of -B 22 vs -B 8.
+#
+# Next ISP (hardware SPI only, no -B 22/50/250):
+#   EEPROM read of no-dot (yellow programmer, J2 closed on target):
+#     avrdude -c usbasp -p atmega8 -U eeprom:r:/tmp/no-dot.eep:r
+#   Do not eeprom:w / flash:w / fuse:w on no-dot.
+#   EEPROM write+verify: yellow as target, no-dot as programmer, J2 closed:
+#     avrdude -c usbasp -p atmega8 -U eeprom:w:<tiny.bin>:r
+#     avrdude -c usbasp -p atmega8 -U eeprom:v:<tiny.bin>:r
+#   3 MHz (CAP_3MHZ): yellow programmer, -B shorter than 0.5, signature only:
+#     avrdude -c usbasp -p atmega8 -B 0.25 -v -U signature:r:-:h
+#   JP3/PC2 8 kHz: yellow programmer, jumper closed, AUTO signature; SCK must
+#     stay ~8 kHz for the whole CONNECT (must not ramp back to 1.5 MHz).
+#
+# Measured 2026-08-25 (no-dot USB programmer, yellow ISP target, J2 closed):
+#   signature 1E 93 07, lfuse 0xef, hfuse 0xd9
+#   EEPROM read 512 B (erased 0xFF); write+verify 16 B marker then restore 0xFF: PASS
+#     (yellow as mega8 EEPROM target; WRITEEEPROM firmware under test is no-dot)
+#   SETISPSCK from no-dot: -B 8 → 93750 Hz, -B 0.5 → 1.5 MHz, -B 0.25 → 3 MHz: PASS
+#   NG 3 MHz / JP3 / NG EEPROM host path: need yellow on USB (programmer).
+#
+# Measured 2026-08-25 (yellow NG USB programmer, no-dot ISP target, J2 closed):
+#   signature 1E 93 07, lfuse 0xef, hfuse 0xd9 (same as yellow)
+#   NG READEEPROM: 512 B, erased 0xFF. No eeprom:w / flash:w / fuse:w on no-dot.
+#   NG SETISPSCK: -B 8 → 93750 Hz, -B 0.5 → 1.5 MHz, -B 0.25 → 3 MHz: PASS
+#   JP3 still open (AUTO did not stay at 8 kHz). Close jumper on yellow to test.
+#
+# Measured 2026-08-25 JP3 closed (yellow NG programmer, no-dot target):
+#   AUTO and -B 0.5: ENABLEPROG 0x01. Avrdude still prints 1.5 MHz on -B 0.5
+#   (SETISPSCK reply) but CONNECT pins USBASP_ISP_SCK_8 (~8 kHz software).
+#   Same SW-SCK programming-enable bug as -B 22/50/250. JP3 cannot pass until
+#   software SCK works. Open jumper to restore HW SPI.
+#
+# Waveform: no scope. Third mega8 sniffer or FX2 LA — host/isp-sniffer/README.md
+#   (do not flash sniffer onto no-dot or onto yellow unless replacing NG).
 

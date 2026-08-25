@@ -52,9 +52,10 @@ void board_led_green_off(void) { ledGreenOff(); }
  * During a dump usbFunctionRead blocks in SPI; main would starve a 1 Hz LED. */
 #define T0_OVF_HALF ((F_CPU / 64 / 2) / 256) /* 0.5 s → 1 Hz */
 #define T0_OVF_IDLE ((F_CPU / 64 / 10) / 256) /* ~100 ms after last kick */
+#define T0_OVF_2HZ_HALF ((F_CPU / 64 / 4) / 256) /* 0.25 s → 2 Hz */
 
-static uchar usb_live, t0_prev, rx_phase, tx_hold, t0_hi, isp_t0, isp_div;
-static uint16_t t0_frac, half_ovf, idle_ovf;
+static uchar usb_live, t0_prev, rx_phase, tx_hold, t0_hi, isp_t0, isp_div, jp_phase;
+static uint16_t t0_frac, half_ovf, idle_ovf, jp_half;
 
 static void usb_xfer_kick(void)
 {
@@ -75,6 +76,11 @@ static void led_time_step(void)
     t0_prev = now;
     while (t0_frac >= 256) {
         t0_frac -= 256;
+        jp_half++;
+        if (jp_half >= T0_OVF_2HZ_HALF) {
+            jp_half = 0;
+            jp_phase ^= 1;
+        }
         if (!usb_live)
             continue;
         half_ovf++;
@@ -100,8 +106,8 @@ void board_usb_bus_reset(unsigned char resetStarts)
     if (resetStarts) {
         usbConfiguration = 0;
         usb_live = tx_hold = 0;
-        rx_phase = isp_div = 0;
-        t0_frac = half_ovf = idle_ovf = 0;
+        rx_phase = isp_div = jp_phase = 0;
+        t0_frac = half_ovf = idle_ovf = jp_half = 0;
         ledGreenOff();
         ledRedOff();
     }
@@ -147,7 +153,13 @@ void board_led_usb_update(void)
     t0_hi = hi;
 
     if (!usb_live) {
-        if (usbConfiguration)
+        /* PC0 (USB/RX, left lamp on the clone): 2 Hz while JP3/PC2 is closed. */
+        if (usbConfiguration && board_sck_jumper_slow()) {
+            if (jp_phase)
+                ledGreenOn();
+            else
+                ledGreenOff();
+        } else if (usbConfiguration)
             ledGreenOn();
         else
             ledGreenOff();

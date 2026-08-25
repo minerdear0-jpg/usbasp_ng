@@ -12,19 +12,22 @@ uchar (*ispTransmit)(uchar) = ispTransmit_sw;
 
 void ispConnect(void)
 {
-    ISP_DDR |= (1 << ISP_SCK);
-    ISP_DDR |= (1 << ISP_MOSI);
-    ISP_DDR |= (1 << ISP_RST);
-    ISP_OUT &= ~(1 << ISP_SCK);
+    ISP_DDR |= (1 << ISP_SCK) | (1 << ISP_MOSI) | (1 << ISP_RST);
+    ISP_OUT &= ~((1 << ISP_RST) | (1 << ISP_SCK));
     ISP_OUT |= (1 << ISP_MISO);
+    /* 2011: RST high-low longer than two target SCK before ENABLEPROG. */
+    clockWait(1);
+    ISP_OUT |= (1 << ISP_RST);
+    clockWait(1);
+    ISP_OUT &= ~(1 << ISP_RST);
+    /* 0xff: first flash access at 0 still writes Load Extended Address (dioannidis). */
     isp_hiaddr = 0xff;
 }
 
 void ispDisconnect(void)
 {
     ISP_DDR &= ~((1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI));
-    ISP_OUT &= ~(1 << ISP_MISO);
-    ISP_OUT &= ~(1 << ISP_MOSI);
+    ISP_OUT &= ~((1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI) | (1 << ISP_MISO));
     isp_spi_hw_disable();
     /* Keep requested SCK: avrdude may reconnect in the same session. */
 }

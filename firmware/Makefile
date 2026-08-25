@@ -41,6 +41,7 @@ test:
 	python3 tests/compatibility/avrdude/test_contract.py
 	python3 tests/core/test_endian.py
 	python3 tests/core/test_sck_autoslow.py
+	python3 tests/core/test_writeflash_page.py
 	python3 tests/core/test_classic_isolation.py
 	python3 tests/core/test_serial_eep.py
 
