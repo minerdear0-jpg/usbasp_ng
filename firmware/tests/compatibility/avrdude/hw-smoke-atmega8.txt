@@ -1,0 +1,10 @@
+# Hardware checks that do not need ATmega328P.
+# Programmer: USBasp NG on USB. ISP target: another ATmega8 (e.g. second USBasp, J2 closed).
+#
+#   avrdude -c usbasp -p atmega8
+#   avrdude -c usbasp -p atmega8 -U signature:r:-:h
+#   avrdude -c usbasp -p atmega8 -U flash:r:/tmp/usbasp-target.bin:r
+#   avrdude -c usbasp -p atmega8 -B 8   # slower SCK (SETISPSCK)
+#   avrdude -c usbasp -p atmega8 -B 0.5 # faster; 3 MHz only if CAP_3MHZ advertised
+#
+# Pass: zero exit, device vid=0x16c0 pid=0x05dc, signature 0x1e 0x93 0x07 for mega8.

@@ -1,0 +1,123 @@
+# USBASP-NG compatibility contract
+#
+ # SETUP data[] as V-USB delivers it (USB 8-byte setup):
+#   [0] bmRequestType
+#   [1] bRequest  = FUNC
+#   [2:3] wValue  = send[0] | send[1]<<8   (avrdude)
+#   [4:5] wIndex  = send[2] | send[3]<<8
+#   [6:7] wLength
+#
+# bmRequestType for avrdude:
+#   IN:  0xC0  vendor | device | device-to-host
+#   OUT: 0x40  vendor | device | host-to-device
+
+vid: 0x16c0
+pid: 0x05dc
+
+getcapabilities:
+  func: 127
+  dir: in
+  response_len: 4
+  classic_bytes: [0x01, 0x00, 0x00, 0x01]  # TPI | 3MHz
+  avrdude_caps: 0x01000001
+
+functions:
+  CONNECT:
+    id: 1
+    dir: in
+    response_len: 0
+    pre: idle
+    post: isp_connected
+    notes: reset address_newmode; apply SCK (jumper may force 8 kHz)
+  DISCONNECT:
+    id: 2
+    dir: in
+    response_len: 0
+    post: idle
+  TRANSMIT:
+    id: 3
+    dir: in
+    response_len: 4
+    wValue: "cmd[0], cmd[1]"
+    wIndex: "cmd[2], cmd[3]"
+  READFLASH:
+    id: 4
+    dir: in
+    wValue: "addr16 LE (compat mode if newmode==0)"
+    wLength: nbytes
+    data_stage: usbFunctionRead
+  ENABLEPROG:
+    id: 5
+    dir: in
+    response_len: 1
+    response: "0 ok, 1 no target"
+  WRITEFLASH:
+    id: 6
+    dir: out
+    wValue: "addr16 LE"
+    wIndex: "pagesize_lo | ((blockflags&0x0F)+((pagesize&0xF00)>>4))<<8"
+    wLength: nbytes
+    data_stage: usbFunctionWrite
+  READEEPROM:
+    id: 7
+    dir: in
+    data_stage: usbFunctionRead
+  WRITEEEPROM:
+    id: 8
+    dir: out
+    data_stage: usbFunctionWrite
+  SETLONGADDRESS:
+    id: 9
+    dir: in
+    response_len: 0
+    wValue_wIndex: "address uint32 LE"
+    post: address_newmode
+  SETISPSCK:
+    id: 10
+    dir: in
+    response_len: 1
+    response0: 0
+    wValue_lo: sck_id
+  TPI_CONNECT:
+    id: 11
+    dir: in
+    wValue: "tpi_dly_cnt LE16"
+  TPI_DISCONNECT:
+    id: 12
+    dir: in
+  TPI_RAWREAD:
+    id: 13
+    dir: in
+    response_len: 1
+  TPI_RAWWRITE:
+    id: 14
+    dir: in
+    wValue_lo: byte
+  TPI_READBLOCK:
+    id: 15
+    dir: in
+    data_stage: usbFunctionRead
+  TPI_WRITEBLOCK:
+    id: 16
+    dir: out
+    data_stage: usbFunctionWrite
+
+sck_ids:
+  AUTO: 0
+  "0_5": 1
+  "1": 2
+  "2": 3
+  "4": 4
+  "8": 5
+  "16": 6
+  "32": 7
+  "93_75": 8
+  "187_5": 9
+  "375": 10
+  "750": 11
+  "1500": 12
+  "3000": 13
+
+blockflags:
+  FIRST: 1
+  LAST: 2

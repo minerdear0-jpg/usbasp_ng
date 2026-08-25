@@ -1,0 +1,254 @@
+#include "usbasp_config.h"
+#include "usbasp/prog_state.h"
+#include "usbasp/protocol.h"
+#include "usbasp/endian.h"
+#include "usbasp/isp.h"
+#include "usbasp/tpi.h"
+#include "usbasp/tpi_defs.h"
+#include "usbasp/clock.h"
+#include "usbasp/board.h"
+
+uchar prog_sck = USBASP_ISP_SCK_AUTO;
+uchar prog_state = PROG_STATE_IDLE;
+uchar prog_address_newmode = 0;
+unsigned long prog_address;
+unsigned int prog_nbytes = 0;
+unsigned int prog_pagesize;
+uchar prog_blockflags;
+uchar prog_pagecounter;
+uchar replyBuffer[8];
+
+usbMsgLen_t usbasp_vendor_setup(uchar data[8])
+{
+    usbMsgLen_t len = 0;
+
+    switch (data[1]) {
+    case USBASP_FUNC_CONNECT:
+        if (board_sck_jumper_slow())
+            ispSetSCKOption(USBASP_ISP_SCK_8);
+        else
+            ispSetSCKOption(prog_sck);
+        prog_address_newmode = 0;
+        board_led_red_on();
+        ispConnect();
+        break;
+
+    case USBASP_FUNC_DISCONNECT:
+        ispDisconnect();
+        board_led_red_off();
+        break;
+
+    case USBASP_FUNC_TRANSMIT:
+        replyBuffer[0] = ispTransmit(data[2]);
+        replyBuffer[1] = ispTransmit(data[3]);
+        replyBuffer[2] = ispTransmit(data[4]);
+        replyBuffer[3] = ispTransmit(data[5]);
+        len = 4;
+        break;
+
+    case USBASP_FUNC_READFLASH:
+        if (!prog_address_newmode)
+            prog_address = usbasp_read_le16(&data[2]);
+        prog_nbytes = usbasp_read_le16(&data[6]);
+        prog_state = PROG_STATE_READFLASH;
+        len = USB_NO_MSG;
+        break;
+
+    case USBASP_FUNC_READEEPROM:
+        if (!prog_address_newmode)
+            prog_address = usbasp_read_le16(&data[2]);
+        prog_nbytes = usbasp_read_le16(&data[6]);
+        prog_state = PROG_STATE_READEEPROM;
+        len = USB_NO_MSG;
+        break;
+
+    case USBASP_FUNC_ENABLEPROG:
+        replyBuffer[0] = ispEnterProgrammingMode();
+        len = 1;
+        break;
+
+    case USBASP_FUNC_WRITEFLASH:
+        if (!prog_address_newmode)
+            prog_address = usbasp_read_le16(&data[2]);
+        prog_pagesize = data[4];
+        prog_blockflags = data[5] & 0x0F;
+        prog_pagesize += (((unsigned int)data[5] & 0xF0) << 4);
+        if (prog_blockflags & PROG_BLOCKFLAG_FIRST)
+            prog_pagecounter = (uchar)prog_pagesize;
+        prog_nbytes = usbasp_read_le16(&data[6]);
+        prog_state = PROG_STATE_WRITEFLASH;
+        len = USB_NO_MSG;
+        break;
+
+    case USBASP_FUNC_WRITEEEPROM:
+        if (!prog_address_newmode)
+            prog_address = usbasp_read_le16(&data[2]);
+        prog_pagesize = 0;
+        prog_blockflags = 0;
+        prog_nbytes = usbasp_read_le16(&data[6]);
+        prog_state = PROG_STATE_WRITEEEPROM;
+        len = USB_NO_MSG;
+        break;
+
+    case USBASP_FUNC_SETLONGADDRESS:
+        prog_address_newmode = 1;
+        prog_address = usbasp_read_le32(&data[2]);
+        break;
+
+    case USBASP_FUNC_SETISPSCK:
+        prog_sck = data[2];
+        replyBuffer[0] = 0;
+        len = 1;
+        break;
+
+    case USBASP_FUNC_TPI_CONNECT:
+        tpi_dly_cnt = usbasp_read_le16(&data[2]);
+        ISP_OUT |= (1 << ISP_RST);
+        ISP_DDR |= (1 << ISP_RST);
+        clockWait(3);
+        ISP_OUT &= ~(1 << ISP_RST);
+        board_led_red_on();
+        clockWait(16);
+        tpi_init();
+        break;
+
+    case USBASP_FUNC_TPI_DISCONNECT:
+        tpi_send_byte(TPI_OP_SSTCS(TPISR));
+        tpi_send_byte(0);
+        clockWait(10);
+        ISP_OUT |= (1 << ISP_RST);
+        clockWait(5);
+        ISP_OUT &= ~(1 << ISP_RST);
+        clockWait(5);
+        ISP_DDR &= ~((1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI));
+        ISP_OUT &= ~((1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI));
+        board_led_red_off();
+        break;
+
+    case USBASP_FUNC_TPI_RAWREAD:
+        replyBuffer[0] = tpi_recv_byte();
+        len = 1;
+        break;
+
+    case USBASP_FUNC_TPI_RAWWRITE:
+        tpi_send_byte(data[2]);
+        break;
+
+    case USBASP_FUNC_TPI_READBLOCK:
+        prog_address = usbasp_read_le16(&data[2]);
+        prog_nbytes = usbasp_read_le16(&data[6]);
+        prog_state = PROG_STATE_TPI_READ;
+        len = USB_NO_MSG;
+        break;
+
+    case USBASP_FUNC_TPI_WRITEBLOCK:
+        prog_address = usbasp_read_le16(&data[2]);
+        prog_nbytes = usbasp_read_le16(&data[6]);
+        prog_state = PROG_STATE_TPI_WRITE;
+        len = USB_NO_MSG;
+        break;
+
+    case USBASP_FUNC_GETCAPABILITIES:
+        replyBuffer[0] = USBASP_CAP_TPI;
+        replyBuffer[1] = 0;
+        replyBuffer[2] = 0;
+#if USBASP_HAS_3MHZ
+        replyBuffer[3] = (uchar)(USBASP_CAP_3MHZ >> 24);
+#else
+        replyBuffer[3] = 0;
+#endif
+        len = 4;
+        break;
+
+    default:
+        break;
+    }
+
+    return len;
+}
+
+uchar usbasp_isp_read(uchar *data, uchar len)
+{
+    uchar i;
+
+    if (prog_state != PROG_STATE_READFLASH
+        && prog_state != PROG_STATE_READEEPROM
+        && prog_state != PROG_STATE_TPI_READ) {
+        return 0xff;
+    }
+
+    if (prog_state == PROG_STATE_TPI_READ) {
+        tpi_read_block((uint16_t)prog_address, data, len);
+        prog_address += len;
+        return len;
+    }
+
+    for (i = 0; i < len; i++) {
+        if (prog_state == PROG_STATE_READFLASH)
+            data[i] = ispReadFlash(prog_address);
+        else
+            data[i] = ispReadEEPROM((unsigned int)prog_address);
+        prog_address++;
+        prog_nbytes--;
+    }
+
+    if ((len < 8) || (prog_nbytes == 0))
+        prog_state = PROG_STATE_IDLE;
+
+    return len;
+}
+
+uchar usbasp_isp_write(uchar *data, uchar len)
+{
+    uchar retVal = 0;
+    uchar i;
+
+    if (prog_state != PROG_STATE_WRITEFLASH
+        && prog_state != PROG_STATE_WRITEEEPROM
+        && prog_state != PROG_STATE_TPI_WRITE) {
+        return 0xff;
+    }
+
+    if (prog_state == PROG_STATE_TPI_WRITE) {
+        tpi_write_block((uint16_t)prog_address, data, len);
+        prog_address += len;
+        prog_nbytes -= len;
+        if (prog_nbytes <= 0) {
+            prog_state = PROG_STATE_IDLE;
+            return 1;
+        }
+        return 0;
+    }
+
+    for (i = 0; i < len; i++) {
+        if (prog_state == PROG_STATE_WRITEFLASH) {
+            if (prog_pagesize == 0) {
+                ispWriteFlash(prog_address, data[i], 1);
+            } else {
+                ispWriteFlash(prog_address, data[i], 0);
+                prog_pagecounter--;
+                if (prog_pagecounter == 0) {
+                    ispFlushPage(prog_address, data[i]);
+                    prog_pagecounter = (uchar)prog_pagesize;
+                }
+            }
+        } else {
+            ispWriteEEPROM((unsigned int)prog_address, data[i]);
+        }
+
+        prog_nbytes--;
+
+        if (prog_nbytes == 0) {
+            prog_state = PROG_STATE_IDLE;
+            if ((prog_blockflags & PROG_BLOCKFLAG_LAST)
+                && (prog_pagecounter != (uchar)prog_pagesize)) {
+                ispFlushPage(prog_address, data[i]);
+            }
+            retVal = 1;
+        }
+
+        prog_address++;
+    }
+
+    return retVal;
+}
