@@ -1,7 +1,7 @@
 # Convenience wrapper: one board profile per configure.
 #   make BOARD=usbasp-atmega8-clone
 #   make BOARD=usbasp-hiduart-atmega8
-#   make flash   # ISP-write hex onto a USBasp with J2 closed (uses another usbasp)
+#   make flash   # ISP hex; HIDUART also writes .eep after (chip erase wipes EEPROM)
 
 BOARD ?= usbasp-atmega8-clone
 BUILDDIR := build/$(BOARD)
@@ -49,6 +49,9 @@ test:
 
 flash: hex
 	avrdude -c $(ISP) -p $(MCU) -U flash:w:$(BUILDDIR)/$(HEX_NAME).hex:i
+ifneq ($(findstring hiduart,$(BOARD)),)
+	avrdude -c $(ISP) -p $(MCU) -U eeprom:w:$(BUILDDIR)/$(HEX_NAME).eep:i
+endif
 
 eeprom: hex
 	@test "$(HEX_NAME)" = "usbasp-hiduart" || { echo "eeprom is HIDUART-only"; false; }

@@ -19,9 +19,19 @@ def test_mega8_ursel_on_ucsrc():
     assert "(1 << USBASPUART_URSEL) | byte" in UART_C
 
 
+def test_hiduart_flash_restores_eeprom():
+    mk = (FW / "Makefile").read_text()
+    assert "flash:w:$(BUILDDIR)/$(HEX_NAME).hex" in mk
+    assert "eeprom:w:$(BUILDDIR)/$(HEX_NAME).eep" in mk
+    cmake = (FW / "CMakeLists.txt").read_text()
+    assert "eeprom:w:${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.eep" in cmake
+    assert "restore EEPROM serial" in cmake
+
+
 def main() -> int:
     test_logical_minimum_zero()
     test_mega8_ursel_on_ucsrc()
+    test_hiduart_flash_restores_eeprom()
     print("ok  hiduart_desc")
     return 0
 

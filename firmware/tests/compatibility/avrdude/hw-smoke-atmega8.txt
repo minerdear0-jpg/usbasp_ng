@@ -81,6 +81,8 @@
 #   Flash read 4018 B; EEPROM read 512 B all 0xFF. No write on no-dot.
 #   SETISPSCK AUTO / -B 8 / -B 0.5 / -B 0.25 (3 MHz): PASS (JP3 open).
 #   EEPROM rewrite SERIAL=YEL0 (10 B) as ISP target; USB iSerial YEL0 confirmed.
+#   avrdude flash chip-erase wipes EEPROM (hfuse 0xd9, EESAVE off). make flash for
+#   HIDUART now writes the .eep after the hex (do not parallel flash and eeprom).
 #   UART loopback PD0–PD1 (TQFP 30–31, tweezers): HELLO echoed. Do not short pin 29 (RESET).
 #
 # Waveform: no scope. Third mega8 sniffer or FX2 LA — host/isp-sniffer/README.md

@@ -156,11 +156,21 @@ option(USBASP_CONFIRM_FUSES
     "Allow the fuses target (clones often have hfuse 0xd9, not the 2011 0xc9)"
     OFF)
 
-add_custom_target(flash
-    COMMAND avrdude -c ${USBASP_ISP} -p ${MCU}
-            -U flash:w:${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.hex:i
-    DEPENDS ${APP_NAME}
-    COMMENT "ISP-flash ${APP_NAME}.hex onto ${MCU} (close J2 on the USBasp being programmed)")
+if(USBASP_HAS_HID_UART)
+    add_custom_target(flash
+        COMMAND avrdude -c ${USBASP_ISP} -p ${MCU}
+                -U flash:w:${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.hex:i
+        COMMAND avrdude -c ${USBASP_ISP} -p ${MCU}
+                -U eeprom:w:${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.eep:i
+        DEPENDS ${APP_NAME}
+        COMMENT "ISP-flash ${APP_NAME}.hex then restore EEPROM serial ${USBASP_SERIAL} (chip erase wipes EESAVE-off clones)")
+else()
+    add_custom_target(flash
+        COMMAND avrdude -c ${USBASP_ISP} -p ${MCU}
+                -U flash:w:${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.hex:i
+        DEPENDS ${APP_NAME}
+        COMMENT "ISP-flash ${APP_NAME}.hex onto ${MCU} (close J2 on the USBasp being programmed)")
+endif()
 
 if(USBASP_CONFIRM_FUSES)
     add_custom_target(fuses
