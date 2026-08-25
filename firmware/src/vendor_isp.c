@@ -122,8 +122,12 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         clockWait(5);
         ISP_OUT &= ~(1 << ISP_RST);
         clockWait(5);
-        ISP_DDR &= ~((1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI));
-        ISP_OUT &= ~((1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI));
+        ISP_DDR &= ~(1 << ISP_RST);
+        ISP_DDR &= ~(1 << ISP_SCK);
+        ISP_DDR &= ~(1 << ISP_MOSI);
+        ISP_OUT &= ~(1 << ISP_RST);
+        ISP_OUT &= ~(1 << ISP_SCK);
+        ISP_OUT &= ~(1 << ISP_MOSI);
         break;
 
     case USBASP_FUNC_TPI_RAWREAD:
