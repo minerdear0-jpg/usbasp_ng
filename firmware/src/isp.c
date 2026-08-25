@@ -4,6 +4,7 @@
 #include "usbasp/clock.h"
 #include "usbasp/protocol.h"
 #include "usbasp/prog_state.h"
+#include "usbasp/board.h"
 
 uchar isp_hiaddr;
 uchar (*ispTransmit)(uchar) = ispTransmit_sw;
@@ -28,6 +29,7 @@ void ispDisconnect(void)
 
 uchar ispTransmit_sw(uchar send_byte)
 {
+    board_led_isp_activity();
     uchar rec_byte = 0;
     uchar i;
     for (i = 0; i < 8; i++) {
@@ -49,6 +51,7 @@ uchar ispTransmit_sw(uchar send_byte)
 
 uchar ispTransmit_hw(uchar send_byte)
 {
+    board_led_isp_activity();
     SPDR = send_byte;
     while (!(SPSR & (1 << SPIF)))
         ;

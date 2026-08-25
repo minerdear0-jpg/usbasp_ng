@@ -10,12 +10,12 @@ int main(void)
     clockInit();
     board_init();
     board_usb_reset_pulse();
-    board_led_green_on();
     usbInit();
     sei();
     for (;;) {
         hiduart_poll();
         usbPoll();
+        board_led_usb_update();
     }
     return 0;
 }

@@ -33,13 +33,11 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
             ispSetSCKOption(prog_sck);
         }
         prog_address_newmode = 0;
-        board_led_red_on();
         ispConnect();
         break;
 
     case USBASP_FUNC_DISCONNECT:
         ispDisconnect();
-        board_led_red_off();
         break;
 
     case USBASP_FUNC_TRANSMIT:
@@ -111,7 +109,6 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         ISP_DDR |= (1 << ISP_RST);
         clockWait(3);
         ISP_OUT &= ~(1 << ISP_RST);
-        board_led_red_on();
         clockWait(16);
         tpi_init();
         break;
@@ -126,7 +123,6 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         clockWait(5);
         ISP_DDR &= ~((1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI));
         ISP_OUT &= ~((1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI));
-        board_led_red_off();
         break;
 
     case USBASP_FUNC_TPI_RAWREAD:

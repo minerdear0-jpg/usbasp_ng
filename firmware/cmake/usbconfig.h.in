@@ -21,6 +21,15 @@
 #define USB_CFG_HAVE_FLOWCONTROL        @USB_CFG_HAVE_FLOWCONTROL@
 #define USB_CFG_DRIVER_FLASH_PAGE       0
 #define USB_CFG_LONG_TRANSFERS          @USB_CFG_LONG_TRANSFERS@
+#ifndef __ASSEMBLER__
+/* usbConfiguration is not cleared by V-USB on bus reset; do it here so the
+ * idle LED tracks SET_CONFIGURATION, not power-on. */
+void board_usb_bus_reset(unsigned char resetStarts);
+#define USB_RESET_HOOK(resetStarts) board_usb_bus_reset(resetStarts)
+void board_usb_rx_activity(void);
+#define USB_RX_USER_HOOK(data, len) board_usb_rx_activity();
+#endif
+
 #define USB_COUNT_SOF                   0
 #define USB_CFG_CHECK_DATA_TOGGLING     0
 #define USB_CFG_HAVE_MEASURE_FRAME_LENGTH 0

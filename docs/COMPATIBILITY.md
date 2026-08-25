@@ -57,6 +57,7 @@ NG-internal improvements that stay on the same wire:
 - do not reset requested SCK on DISCONNECT
 - AT89S51/52 programming-enable probe
 - board layer for LED polarity and optional PC2 jumper
+- LEDs: PC0 1 Hz on USB/ISP traffic (timebase TCNT0, not main-loop edges); PC1 ISP ~10 Hz
 
 ## L3 Host compatibility
 
