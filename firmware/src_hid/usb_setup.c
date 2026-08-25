@@ -19,6 +19,7 @@ usbMsgLen_t usbFunctionDescriptor(struct usbRequest *rq)
     return 0;
 }
 
+/* V-USB: INT0 only clocks the bus. This setup runs from usbPoll() with I=1. */
 usbMsgLen_t usbFunctionSetup(uchar data[8])
 {
     usbMsgLen_t len = 0;

@@ -19,9 +19,10 @@ void isp_spi_hw_disable(void)
 
 void isp_sck_delay(void)
 {
-    /* sck_sw_delay is Timer0 ticks at F_CPU/64. A busy-wait on TCNT0 can
-     * expire inside a USB ISR and produce a too-short SCK. Cycle count
-     * only stretches if INT0 runs, which is safe for ISP. */
+    /* sck_sw_delay is Timer0 ticks at F_CPU/64, converted to CPU cycles.
+     * usbFunctionSetup() runs from usbPoll() with I=1, so INT0 may preempt
+     * this wait and stretch it. A TCNT0 compare can appear already elapsed
+     * after INT0; a cycle loop cannot run short. */
     _delay_loop_2((uint16_t)sck_sw_delay * 16u);
 }
 

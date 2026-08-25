@@ -35,8 +35,8 @@ uchar ispTransmit_sw(uchar send_byte)
     uchar i;
     uchar sreg;
 
-    board_led_isp_activity();
-
+    /* No LED/USB here: bitbang is a timing path. cli is only PORTB RMW
+     * vs INT0 (setup runs from usbPoll, I=1). */
     for (i = 0; i < 8; i++) {
         sreg = SREG;
         cli();
@@ -82,6 +82,7 @@ uchar ispEnterProgrammingMode(void)
     while (prog_sck >= USBASP_ISP_SCK_0_5) {
         ispSetSCKOption(prog_sck);
         uchar (*spiTx)(uchar) = ispTransmit;
+        board_led_isp_activity();
 
         if (ispTransmit == ispTransmit_hw)
             isp_spi_hw_enable();

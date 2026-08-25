@@ -58,7 +58,7 @@ NG-internal improvements that stay on the same wire:
 - AT89S51/52 programming-enable probe
 - board layer for LED polarity and optional PC2 jumper
 - LEDs: PC0 1 Hz on USB/ISP traffic (timebase TCNT0, not main-loop edges); PC1 ISP ~10 Hz
-- software SCK: cycle-count delay (ISR may stretch, not shorten); brief cli only around PORTB RMW
+- software SCK: cycle-count half-period (INT0 may stretch); LED stays out of ispTransmit_sw
 - SETISPSCK applies the selected clock immediately
 
 ## L3 Host compatibility
