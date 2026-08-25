@@ -1,0 +1,17 @@
+# ATmega328P on the ISP ribbon. Programmer is no-dot (classic, USB to host).
+# Do not write flash/fuses on no-dot.
+#
+# Signature 328P: 1E 95 0F   (ATmega328: 1E 95 14)
+# Page size 128 bytes. avrdude -c usbasp -p atmega328p
+#
+#   avrdude -c usbasp -p atmega328p -U signature:r:-:h
+#   avrdude -c usbasp -p atmega328p -U lfuse:r:-:h -U hfuse:r:-:h -U efuse:r:-:h
+#   avrdude -c usbasp -p atmega328p -U flash:r:/tmp/328p.bin:r
+#   avrdude -c usbasp -p atmega328p -B 8
+#   avrdude -c usbasp -p atmega328p -B 0.5
+#   avrdude -c usbasp -p atmega328p -U flash:w:<small.hex>:i
+#   avrdude -c usbasp -p atmega328p -U flash:v:<small.hex>:i
+#
+# Uno as target: 328P on ICSP, Uno USB unplugged (shared reset/5V). Power from USBasp or the board, not both blindly.
+#
+# Optional: HIDUART yellow (YEL0) as programmer instead of no-dot — same commands, unplug no-dot.

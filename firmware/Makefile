@@ -6,10 +6,11 @@
 BOARD ?= usbasp-atmega8-clone
 BUILDDIR := build/$(BOARD)
 ISP ?= usbasp
+SERIAL ?= 0000
 
-MCU := $(shell sed -n 's/^set(USBASP_MCU \([^)]*\))/\1/p' boards/$(BOARD).cmake)
-HFUSE := $(shell sed -n 's/^set(USBASP_HFUSE \([^)]*\))/\1/p' boards/$(BOARD).cmake)
-LFUSE := $(shell sed -n 's/^set(USBASP_LFUSE \([^)]*\))/\1/p' boards/$(BOARD).cmake)
+MCU := $(shell awk '/USBASP_MCU /{print $$2}' boards/$(BOARD).cmake | tr -d ')')
+HFUSE := $(shell awk '/USBASP_HFUSE /{print $$2}' boards/$(BOARD).cmake | tr -d ')')
+LFUSE := $(shell awk '/USBASP_LFUSE /{print $$2}' boards/$(BOARD).cmake | tr -d ')')
 
 ifneq ($(findstring hiduart,$(BOARD)),)
 HEX_NAME := usbasp-hiduart
@@ -17,15 +18,21 @@ else
 HEX_NAME := usbasp
 endif
 
-.PHONY: all configure hex clean test flash fuses probe
+BOARDS := usbasp-atmega8-clone usbasp-atmega8-usbisp usbasp-atmega88 \
+	usbasp-hiduart-atmega8 usbasp-hiduart-atmega88
+
+.PHONY: all configure hex clean test flash eeprom fuses probe all-boards
 
 all: hex
 
 configure:
-	cmake -S . -B $(BUILDDIR) -G Ninja -DBOARD=$(BOARD)
+	cmake -S . -B $(BUILDDIR) -G Ninja -DBOARD=$(BOARD) -DUSBASP_SERIAL=$(SERIAL)
 
 hex: configure
 	cmake --build $(BUILDDIR)
+
+all-boards:
+	@for b in $(BOARDS); do $(MAKE) BOARD=$$b hex; done
 
 clean:
 	rm -rf build
@@ -33,12 +40,24 @@ clean:
 test:
 	python3 tests/compatibility/avrdude/test_contract.py
 	python3 tests/core/test_endian.py
+	python3 tests/core/test_classic_isolation.py
+	python3 tests/core/test_serial_eep.py
 
 flash: hex
 	avrdude -c $(ISP) -p $(MCU) -U flash:w:$(BUILDDIR)/$(HEX_NAME).hex:i
 
+eeprom: hex
+	@test "$(HEX_NAME)" = "usbasp-hiduart" || { echo "eeprom is HIDUART-only"; false; }
+	avrdude -c $(ISP) -p $(MCU) -U eeprom:w:$(BUILDDIR)/$(HEX_NAME).eep:i
+
 fuses:
+ifndef CONFIRM_FUSES
+	@echo "Refusing fuses: cheap clones often have hfuse=0xd9, not 2011 0xc9."
+	@echo "Re-run: make fuses CONFIRM_FUSES=1 BOARD=$(BOARD)"
+	@false
+else
 	avrdude -c $(ISP) -p $(MCU) -u -U hfuse:w:$(HFUSE):m -U lfuse:w:$(LFUSE):m
+endif
 
 # Programmer already running NG: talk to an ATmega8 on the ISP header.
 probe:

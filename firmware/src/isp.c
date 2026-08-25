@@ -1,73 +1,11 @@
 #include <avr/io.h>
-#include "usbasp_config.h"
 #include "usbasp/isp.h"
+#include "usbasp/sck.h"
 #include "usbasp/clock.h"
 #include "usbasp/protocol.h"
 
-uchar sck_sw_delay;
 uchar isp_hiaddr;
 uchar (*ispTransmit)(uchar);
-
-static inline void spiHWenable(void)
-{
-    SPCR |= (1 << SPE) | (1 << MSTR);
-}
-
-static inline void spiHWdisable(void)
-{
-    SPCR = 0;
-}
-
-void ispSetSCKOption(uchar option)
-{
-    if (option == USBASP_ISP_SCK_AUTO)
-        option = USBASP_ISP_SCK_1500;
-
-#if !USBASP_HAS_3MHZ
-    if (option == USBASP_ISP_SCK_3000)
-        option = USBASP_ISP_SCK_1500;
-#endif
-
-    if (option >= USBASP_ISP_SCK_93_75) {
-        ispTransmit = ispTransmit_hw;
-        SPSR = 0;
-        sck_sw_delay = 1;
-
-        switch (option) {
-        case USBASP_ISP_SCK_3000:
-            SPCR = 0;
-            break;
-        case USBASP_ISP_SCK_1500:
-            SPSR = (1 << SPI2X);
-            SPCR = (1 << SPR0);
-            break;
-        case USBASP_ISP_SCK_750:
-            SPCR = (1 << SPR0);
-            break;
-        case USBASP_ISP_SCK_375:
-            SPSR = (1 << SPI2X);
-            SPCR = (1 << SPR1);
-            break;
-        case USBASP_ISP_SCK_187_5:
-            SPCR = (1 << SPR1);
-            break;
-        case USBASP_ISP_SCK_93_75:
-        default:
-            SPCR = (1 << SPR1) | (1 << SPR0);
-            break;
-        }
-    } else {
-        ispTransmit = ispTransmit_sw;
-        sck_sw_delay = (uchar)(3u << (USBASP_ISP_SCK_32 - option));
-    }
-}
-
-static void ispDelay(void)
-{
-    uint8_t starttime = TIMERVALUE;
-    while ((uint8_t)(TIMERVALUE - starttime) < sck_sw_delay)
-        ;
-}
 
 void ispConnect(void)
 {
@@ -83,7 +21,7 @@ void ispDisconnect(void)
     ISP_DDR &= ~((1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI));
     ISP_OUT &= ~(1 << ISP_MISO);
     ISP_OUT &= ~(1 << ISP_MOSI);
-    spiHWdisable();
+    isp_spi_hw_disable();
     /* Keep requested SCK: avrdude may reconnect in the same session. */
 }
 
@@ -101,9 +39,9 @@ uchar ispTransmit_sw(uchar send_byte)
         if ((ISP_IN & (1 << ISP_MISO)) != 0)
             rec_byte++;
         ISP_OUT |= (1 << ISP_SCK);
-        ispDelay();
+        isp_sck_delay();
         ISP_OUT &= ~(1 << ISP_SCK);
-        ispDelay();
+        isp_sck_delay();
     }
     return rec_byte;
 }
@@ -128,7 +66,7 @@ uchar ispEnterProgrammingMode(void)
         uchar (*spiTx)(uchar) = ispTransmit;
 
         if (ispTransmit == ispTransmit_hw)
-            spiHWenable();
+            isp_spi_hw_enable();
 
         uchar tries = 3;
         do {
@@ -156,7 +94,7 @@ uchar ispEnterProgrammingMode(void)
                 return 0;
         } while (--tries);
 
-        spiHWdisable();
+        isp_spi_hw_disable();
         ispSetSCKOption(--prog_sck);
     }
 

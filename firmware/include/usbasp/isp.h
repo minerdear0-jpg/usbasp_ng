@@ -22,6 +22,5 @@ uchar ispFlushPage(unsigned long address, uchar pollvalue);
 uchar ispReadFlash(unsigned long address);
 uchar ispWriteEEPROM(unsigned int address, uchar data);
 extern uchar (*ispTransmit)(uchar);
-void ispSetSCKOption(uchar sckoption);
 
 #endif

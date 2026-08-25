@@ -28,6 +28,8 @@ make BOARD=usbasp-atmega8-clone
 make BOARD=usbasp-atmega88
 make BOARD=usbasp-atmega8-usbisp
 make BOARD=usbasp-hiduart-atmega8
+make all-boards
+make test
 ```
 
 Or:
@@ -41,33 +43,37 @@ Board files: [`firmware/boards/`](firmware/boards/). They set MCU, F_CPU, LED st
 
 ## Flash (another programmer, J2 / RESET)
 
-ATmega8 example (fuses from the 2011 tree):
+ATmega8 example:
 
 ```text
 avrdude -c <isp> -p atmega8 -U flash:w:usbasp.hex:i
-avrdude -c <isp> -p atmega8 -U hfuse:w:0xc9:m -U lfuse:w:0xef:m
 ```
 
-ATmega88: `hfuse=0xdd` `lfuse=0xff`.
+Do not program fuses unless you mean to. Fischl 2011 documents `hfuse=0xc9 lfuse=0xef`; cheap clones on this bench already had `hfuse=0xd9 lfuse=0xef`. `make fuses` is blocked until `CONFIRM_FUSES=1`.
+
+ATmega88 (if you actually need fuses): `hfuse=0xdd` `lfuse=0xff`.
 
 ## avrdude (this programmer)
 
-Smoke without ATmega328P: second ATmega8 on the ISP header (other USBasp clone, J2 closed):
+**no-dot** — clone with NG classic, USB to the host (`-c usbasp`).  
+**yellow-dot** — experiment target: same ATmega8 clone on the ISP header (J2 closed). Flash HIDUART and other trials only onto yellow-dot.
 
 ```text
 avrdude -c usbasp -p atmega8
 avrdude -c usbasp -p atmega8 -U signature:r:-:h
 ```
 
-Checklist: [`firmware/tests/compatibility/avrdude/hw-smoke-atmega8.txt`](firmware/tests/compatibility/avrdude/hw-smoke-atmega8.txt).
+Checklist: [`firmware/tests/compatibility/avrdude/hw-smoke-atmega8.txt`](firmware/tests/compatibility/avrdude/hw-smoke-atmega8.txt), 328P: [`hw-smoke-atmega328p.txt`](firmware/tests/compatibility/avrdude/hw-smoke-atmega328p.txt).
 
 ```text
 avrdude -c usbasp -p atmega328p -U flash:w:firmware.hex:i
 ```
 
-From `firmware/`: `make flash` writes the hex onto a USBasp (J2 closed) using another USBasp. Linux udev: [`host/udev/`](host/udev/).
+From `firmware/`: `make flash` writes the hex onto a USBasp (J2 closed) using another USBasp. Linux udev: [`host/udev/`](host/udev/). Inspect: [`host/usb-inspect-usbasp.sh`](host/usb-inspect-usbasp.sh), [`host/usbasp-getcaps.py`](host/usbasp-getcaps.py). HIDUART loopback: [`host/usbasp-hiduart-loopback.py`](host/usbasp-hiduart-loopback.py) (TQFP pins 30–31).
 
 HIDUART image: on Windows use a **MinGW/libusb** avrdude, not the MSVC/libwinusb build.
+
+HIDUART USB serial is 4 characters in EEPROM (`make BOARD=usbasp-hiduart-atmega8 SERIAL=YEL0 eeprom`). Classic has no serial. Bench yellow-dot uses `YEL0`.
 
 ## Compatibility
 

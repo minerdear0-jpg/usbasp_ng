@@ -1,10 +1,30 @@
 # Hardware checks that do not need ATmega328P.
-# Programmer: USBasp NG on USB. ISP target: another ATmega8 (e.g. second USBasp, J2 closed).
 #
+# Bench names:
+#   no-dot       — USBasp clone with NG classic; the programmer (USB to host, -c usbasp)
+#   yellow-dot   — experiment target
+#                  ISP mode: on the header, J2 closed, no-dot programmes it
+#                  USB mode: yellow-dot itself on the host (lsusb, descriptors, avrdude -c usbasp
+#                  as the device under test, HIDUART enumeration). J2 open.
+#
+# USB mode (yellow-dot on host, J2 open, unplug no-dot):
+#   host/usb-inspect-usbasp.sh
+#   host/usbasp-getcaps.py
+#
+# Classic L0 (measured): 16c0:05dc, bcdUSB 1.10, device class 0xFF,
+#   1 interface, 0 endpoints, iSerial 0, no HID/BOS.
+# HIDUART (measured, yellow-dot, iSerial YEL0):
+#   USB 2.01, 3 interfaces, BOS/MS OS 2.0, GETCAPABILITIES 01 00 00 01
+#   ISP read of no-dot through composite: signature/flash OK (do not write no-dot)
+#   UART loopback: TQFP 30–31 (PD0–PD1), host/usbasp-hiduart-loopback.py
+
+#
+# ISP mode (yellow-dot on header, J2 closed, no-dot as programmer):
 #   avrdude -c usbasp -p atmega8
 #   avrdude -c usbasp -p atmega8 -U signature:r:-:h
-#   avrdude -c usbasp -p atmega8 -U flash:r:/tmp/usbasp-target.bin:r
+#   avrdude -c usbasp -p atmega8 -U flash:r:/tmp/yellow-dot.bin:r
 #   avrdude -c usbasp -p atmega8 -B 8   # slower SCK (SETISPSCK)
-#   avrdude -c usbasp -p atmega8 -B 0.5 # faster; 3 MHz only if CAP_3MHZ advertised
+#   avrdude -c usbasp -p atmega8 -B 0.5 # 1.5 MHz; 3 MHz needs -B short enough (CAP_3MHZ)
 #
-# Pass: zero exit, device vid=0x16c0 pid=0x05dc, signature 0x1e 0x93 0x07 for mega8.
+# Pass: zero exit, vid=0x16c0 pid=0x05dc, signature 0x1e 0x93 0x07 for mega8.
+# Measured fuses on yellow-dot: lfuse 0xef hfuse 0xd9. Do not write 0xc9 blindly.

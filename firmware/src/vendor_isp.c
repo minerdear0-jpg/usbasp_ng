@@ -3,6 +3,7 @@
 #include "usbasp/protocol.h"
 #include "usbasp/endian.h"
 #include "usbasp/isp.h"
+#include "usbasp/sck.h"
 #include "usbasp/tpi.h"
 #include "usbasp/tpi_defs.h"
 #include "usbasp/clock.h"

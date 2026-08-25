@@ -1,0 +1,19 @@
+name: firmware
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install avr-gcc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-avr avr-libc cmake ninja-build python3
+      - name: Contract tests
+        run: make -C firmware test
+      - name: All board profiles
+        run: make -C firmware all-boards

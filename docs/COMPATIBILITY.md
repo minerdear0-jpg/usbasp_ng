@@ -9,10 +9,12 @@ L0–L2 must not change without an explicit compatibility review.
 | VID | `0x16c0` |
 | PID | `0x05dc` |
 | Device class | `0xFF` (vendor), as Fischl 2011 |
+| Interface class | `0` (V-USB default; vendor is on the device, not the interface) |
+| bcdUSB | `1.10`, low speed |
 | Configuration | 1 |
 | Interfaces | 1 vendor interface, **no** extra HID/WCID interfaces |
-| Endpoints | Control EP0 only |
-| Serial string | none |
+| Endpoints | Control EP0 only (`bNumEndpoints = 0`) |
+| Serial string | none (`iSerial = 0`) |
 | Max power | 50 mA (2011) |
 
 Classic must keep the original USBasp **device/interface topology** enough that existing host stacks (avrdude + libusb / libusb-win32 / WinUSB-on-single-interface) still bind the same way.
@@ -68,6 +70,15 @@ avrdude -c usbasp -p atmega328p
 ```
 
 plus read/write/verify of flash.
+
+Measured on ATmega8 clones (no-dot programmer, yellow-dot target / USB DUT):
+
+- signature `1E 93 07`
+- lfuse `0xef`, hfuse `0xd9` (not the 2011 documented `0xc9`)
+- SETISPSCK `-B 8` → 93750 Hz, `-B 0.5` → 1.5 MHz
+- GETCAPABILITIES `01 00 00 01`
+- classic L0 USB: one interface, EP0 only, no HID/BOS; HIDUART is USB 2.01 composite (not L0)
+- HIDUART yellow-dot: iSerial `YEL0`; ISP read of no-dot through composite; UART loopback PD0–PD1
 
 ## Capability bytes (GETCAPABILITIES)
 

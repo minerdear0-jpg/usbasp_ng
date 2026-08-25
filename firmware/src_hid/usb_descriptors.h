@@ -14,6 +14,7 @@
 
 #include <avr/eeprom.h>
 #include <avr/pgmspace.h>
+#include "usbasp_config.h"
 
 #ifndef __HIDUART__
 #define __HIDUART__
@@ -51,7 +52,9 @@
 #define MS_OS_20_REG_PROPERTY_REG_LINK                 0x06, 0x00
 #define MS_OS_20_REG_PROPERTY_REG_MULTI_SZ             0x07, 0x00
 
-const int EEMEM usbDescriptorStringSerialNumber[] = {USB_STRING_DESCRIPTOR_HEADER(4), '0', '0', '0', '0'};
+const int EEMEM usbDescriptorStringSerialNumber[] = {
+    USB_STRING_DESCRIPTOR_HEADER(4),
+    USBASP_SERIAL_CH0, USBASP_SERIAL_CH1, USBASP_SERIAL_CH2, USBASP_SERIAL_CH3};
 
 /* USB device descriptor */
 PROGMEM const char usbDescriptorDevice[] = {

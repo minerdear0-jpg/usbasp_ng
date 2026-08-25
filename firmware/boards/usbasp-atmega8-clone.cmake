@@ -1,4 +1,7 @@
 # Fischl-style clone: PORTC LEDs, J3 SCK jumper on PC2.
+# Documented 2011 fuses: hfuse=0xc9 lfuse=0xef.
+# Measured on yellow-dot clone: hfuse=0xd9 lfuse=0xef. Do not blast hfuse
+# with make fuses unless you intend to change CKOPT/boot bits.
 set(USBASP_MCU atmega8)
 set(USBASP_F_CPU 12000000)
 set(USBASP_PROFILE classic)

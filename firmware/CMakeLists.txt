@@ -19,6 +19,19 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD}.cmake")
 set(MCU ${USBASP_MCU})
 set(F_CPU ${USBASP_F_CPU})
 
+set(USBASP_SERIAL "0000" CACHE STRING "HIDUART USB iSerial, exactly 4 chars [A-Za-z0-9]")
+string(LENGTH "${USBASP_SERIAL}" _usbasp_serial_len)
+if(NOT _usbasp_serial_len EQUAL 4)
+    message(FATAL_ERROR "USBASP_SERIAL must be exactly 4 characters (got '${USBASP_SERIAL}')")
+endif()
+if(NOT USBASP_SERIAL MATCHES "^[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]$")
+    message(FATAL_ERROR "USBASP_SERIAL must be [A-Za-z0-9] x4 (got '${USBASP_SERIAL}')")
+endif()
+string(SUBSTRING "${USBASP_SERIAL}" 0 1 USBASP_SERIAL_CH0)
+string(SUBSTRING "${USBASP_SERIAL}" 1 1 USBASP_SERIAL_CH1)
+string(SUBSTRING "${USBASP_SERIAL}" 2 1 USBASP_SERIAL_CH2)
+string(SUBSTRING "${USBASP_SERIAL}" 3 1 USBASP_SERIAL_CH3)
+
 if(USBASP_HAS_HID_UART)
     set(USB_CFG_HAVE_INTRIN_ENDPOINT 1)
     set(USB_CFG_HAVE_INTRIN_ENDPOINT3 1)
@@ -67,6 +80,7 @@ configure_file(
 set(COMMON_SRC
     src/clock.c
     src/board.c
+    src/sck.c
     src/isp.c
     src/vendor_isp.c
     src/tpi.S
@@ -83,11 +97,14 @@ else()
 endif()
 
 add_executable(${APP_NAME} ${COMMON_SRC} ${APP_SRC})
-target_include_directories(${APP_NAME} PRIVATE
+set(USBASP_INCLUDES
     "${CMAKE_CURRENT_BINARY_DIR}/generated"
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vusb"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src_hid")
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vusb")
+if(USBASP_HAS_HID_UART)
+    list(APPEND USBASP_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/src_hid")
+endif()
+target_include_directories(${APP_NAME} PRIVATE ${USBASP_INCLUDES})
 
 target_compile_options(${APP_NAME} PRIVATE
     -mmcu=${MCU}
@@ -110,14 +127,34 @@ target_link_options(${APP_NAME} PRIVATE
 
 set_target_properties(${APP_NAME} PROPERTIES OUTPUT_NAME ${APP_NAME} SUFFIX ".elf")
 
+set(USBASP_ISP "usbasp" CACHE STRING "avrdude programmer id used to ISP-flash this hex")
+
 add_custom_command(TARGET ${APP_NAME} POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -j .text -j .data -O ihex
             $<TARGET_FILE:${APP_NAME}> ${APP_NAME}.hex
-    COMMAND avr-size --format=avr --mcu=${MCU} $<TARGET_FILE:${APP_NAME}>
+    COMMAND ${CMAKE_COMMAND}
+            -DMCU=${MCU}
+            -DELF=$<TARGET_FILE:${APP_NAME}>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_size.cmake
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    COMMENT "objcopy ${APP_NAME}.hex")
+    COMMENT "objcopy ${APP_NAME}.hex and enforce flash/RAM budget")
 
-set(USBASP_ISP "usbasp" CACHE STRING "avrdude programmer id used to ISP-flash this hex")
+if(USBASP_HAS_HID_UART)
+    add_custom_command(TARGET ${APP_NAME} POST_BUILD
+        COMMAND ${CMAKE_OBJCOPY} -j .eeprom --change-section-lma .eeprom=0
+                -O ihex $<TARGET_FILE:${APP_NAME}> ${APP_NAME}.eep
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "objcopy ${APP_NAME}.eep")
+    add_custom_target(eeprom
+        COMMAND avrdude -c ${USBASP_ISP} -p ${MCU}
+                -U eeprom:w:${CMAKE_CURRENT_BINARY_DIR}/${APP_NAME}.eep:i
+        DEPENDS ${APP_NAME}
+        COMMENT "ISP-write HIDUART serial EEPROM ${USBASP_SERIAL}")
+endif()
+
+option(USBASP_CONFIRM_FUSES
+    "Allow the fuses target (clones often have hfuse 0xd9, not the 2011 0xc9)"
+    OFF)
 
 add_custom_target(flash
     COMMAND avrdude -c ${USBASP_ISP} -p ${MCU}
@@ -125,12 +162,25 @@ add_custom_target(flash
     DEPENDS ${APP_NAME}
     COMMENT "ISP-flash ${APP_NAME}.hex onto ${MCU} (close J2 on the USBasp being programmed)")
 
-add_custom_target(fuses
-    COMMAND avrdude -c ${USBASP_ISP} -p ${MCU} -u
-            -U hfuse:w:${USBASP_HFUSE}:m
-            -U lfuse:w:${USBASP_LFUSE}:m
-    COMMENT "Program fuses hfuse=${USBASP_HFUSE} lfuse=${USBASP_LFUSE}")
+if(USBASP_CONFIRM_FUSES)
+    add_custom_target(fuses
+        COMMAND avrdude -c ${USBASP_ISP} -p ${MCU} -u
+                -U hfuse:w:${USBASP_HFUSE}:m
+                -U lfuse:w:${USBASP_LFUSE}:m
+        COMMENT "Program fuses hfuse=${USBASP_HFUSE} lfuse=${USBASP_LFUSE}")
+else()
+    add_custom_target(fuses
+        COMMAND ${CMAKE_COMMAND} -E echo
+            "Refusing fuses: clones may already be hfuse=0xd9 lfuse=0xef."
+        COMMAND ${CMAKE_COMMAND} -E echo
+            "Reconfigure with -DUSBASP_CONFIRM_FUSES=ON or: make fuses CONFIRM_FUSES=1"
+        COMMAND ${CMAKE_COMMAND} -E false
+        COMMENT "Fuses blocked until USBASP_CONFIRM_FUSES=ON")
+endif()
 
 message(STATUS "Board=${BOARD} MCU=${MCU} F_CPU=${F_CPU} profile=${USBASP_PROFILE}")
 message(STATUS "Flash: avrdude -c usbasp -p ${MCU} -U flash:w:${APP_NAME}.hex:i")
 message(STATUS "Fuses: hfuse=${USBASP_HFUSE} lfuse=${USBASP_LFUSE}")
+if(USBASP_HAS_HID_UART)
+    message(STATUS "HIDUART serial (EEPROM): ${USBASP_SERIAL}")
+endif()

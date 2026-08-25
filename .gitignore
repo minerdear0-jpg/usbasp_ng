@@ -4,3 +4,5 @@ build/
 *.eep
 *.map
 *.o
+/dioannidis/
+/usbasp.2011-05-28/

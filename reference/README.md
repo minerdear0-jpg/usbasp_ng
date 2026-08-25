@@ -12,3 +12,5 @@ These directories are historical references.
 | `dioannidis-v1.11/` | Dimitrios Ioannidis fork (HID UART, WCID, ISP fixes, AT89 probe) |
 
 Working firmware lives in [`../firmware/`](../firmware/).
+
+Do not nest a second copy of these trees inside `reference/` (no `dioannidis-v1.11/dioannidis/` or `usbasp-2011-05-28/usbasp.2011-05-28/`).

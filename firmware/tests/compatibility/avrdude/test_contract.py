@@ -102,9 +102,44 @@ def test_writeflash_meg128_pagesize():
     assert flags == 1
 
 
+def test_sck_ids_match_avrdude():
+    text = PROTOCOL_H.read_text()
+    expected = {
+        "USBASP_ISP_SCK_AUTO": 0,
+        "USBASP_ISP_SCK_0_5": 1,
+        "USBASP_ISP_SCK_8": 5,
+        "USBASP_ISP_SCK_1500": 12,
+        "USBASP_ISP_SCK_3000": 13,
+    }
+    for name, num in expected.items():
+        m = re.search(rf"#define\s+{name}\s+(\d+)", text)
+        assert m, name
+        assert int(m.group(1)) == num
+
+
+def test_tpi_connect_delay_le16():
+    """avrdude: temp[0]=dly, temp[1]=dly>>8 → wValue LE."""
+    dly = 0x123
+    send = [dly & 0xFF, (dly >> 8) & 0xFF, 0, 0]
+    data = setup_data(0xC0, 11, send, 4)
+    assert (data[2] | (data[3] << 8)) == dly
+
+
 def test_forbidden_func_gap():
     text = PROTOCOL_H.read_text()
     assert "USBASP_FUNC_UART" not in text
+
+
+def test_spec_func_ids():
+    text = SPEC.read_text()
+    for name, num in EXPECTED_FUNCS.items():
+        short = name.replace("USBASP_FUNC_", "")
+        if short == "GETCAPABILITIES":
+            m = re.search(r"^getcapabilities:\s*\n(?:[ \t]+.+\n)*?[ \t]+func:\s*(\d+)", text, re.M)
+        else:
+            m = re.search(rf"^[ \t]+{short}:\s*\n[ \t]+id:\s*(\d+)", text, re.M)
+        assert m, f"spec.yaml missing {short}"
+        assert int(m.group(1)) == num, f"spec {short}: {m.group(1)} != {num}"
 
 
 def main():
@@ -114,7 +149,10 @@ def main():
         test_capabilities_layout,
         test_setlongaddress_le,
         test_writeflash_meg128_pagesize,
+        test_sck_ids_match_avrdude,
+        test_tpi_connect_delay_le16,
         test_forbidden_func_gap,
+        test_spec_func_ids,
     ]
     failed = 0
     for t in tests:

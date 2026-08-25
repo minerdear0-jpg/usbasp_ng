@@ -1,0 +1,68 @@
+#include <avr/io.h>
+#include "usbasp_config.h"
+#include "usbasp/sck.h"
+#include "usbasp/isp.h"
+#include "usbasp/clock.h"
+
+uchar sck_sw_delay;
+
+void isp_spi_hw_enable(void)
+{
+    SPCR |= (1 << SPE) | (1 << MSTR);
+}
+
+void isp_spi_hw_disable(void)
+{
+    SPCR = 0;
+}
+
+void isp_sck_delay(void)
+{
+    uint8_t starttime = TIMERVALUE;
+    while ((uint8_t)(TIMERVALUE - starttime) < sck_sw_delay)
+        ;
+}
+
+void ispSetSCKOption(uchar option)
+{
+    if (option == USBASP_ISP_SCK_AUTO)
+        option = USBASP_ISP_SCK_1500;
+
+#if !USBASP_HAS_3MHZ
+    if (option == USBASP_ISP_SCK_3000)
+        option = USBASP_ISP_SCK_1500;
+#endif
+
+    if (option >= USBASP_ISP_SCK_93_75) {
+        ispTransmit = ispTransmit_hw;
+        SPSR = 0;
+        sck_sw_delay = 1;
+
+        switch (option) {
+        case USBASP_ISP_SCK_3000:
+            SPCR = 0;
+            break;
+        case USBASP_ISP_SCK_1500:
+            SPSR = (1 << SPI2X);
+            SPCR = (1 << SPR0);
+            break;
+        case USBASP_ISP_SCK_750:
+            SPCR = (1 << SPR0);
+            break;
+        case USBASP_ISP_SCK_375:
+            SPSR = (1 << SPI2X);
+            SPCR = (1 << SPR1);
+            break;
+        case USBASP_ISP_SCK_187_5:
+            SPCR = (1 << SPR1);
+            break;
+        case USBASP_ISP_SCK_93_75:
+        default:
+            SPCR = (1 << SPR1) | (1 << SPR0);
+            break;
+        }
+    } else {
+        ispTransmit = ispTransmit_sw;
+        sck_sw_delay = (uchar)(3u << (USBASP_ISP_SCK_32 - option));
+    }
+}
