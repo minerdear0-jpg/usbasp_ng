@@ -38,6 +38,10 @@ void ispDisconnect(void)
     ISP_OUT &= ~(1 << ISP_MOSI);
     ISP_OUT &= ~(1 << ISP_MISO);
     isp_spi_hw_disable();
+    if (board_sck_jumper_slow())
+        ispSetSCKOption(USBASP_ISP_SCK_8);
+    else
+        ispSetSCKOption(prog_sck);
     /* Keep requested SCK: avrdude may reconnect in the same session. */
 }
 
@@ -85,14 +89,19 @@ uchar ispEnterProgrammingMode(void)
 {
     uchar check;
     uchar autoslow = 0;
+    uchar jumper = (uchar)board_sck_jumper_slow();
+    uchar sck = prog_sck;
 
-    if (prog_sck == USBASP_ISP_SCK_AUTO) {
+    if (jumper) {
+        sck = USBASP_ISP_SCK_8;
+    } else if (sck == USBASP_ISP_SCK_AUTO) {
         autoslow = 1;
-        prog_sck = USBASP_ISP_SCK_1500;
+        sck = USBASP_ISP_SCK_1500;
+        prog_sck = sck;
     }
 
-    while (prog_sck >= USBASP_ISP_SCK_0_5) {
-        ispSetSCKOption(prog_sck);
+    while (sck >= USBASP_ISP_SCK_0_5) {
+        ispSetSCKOption(sck);
         uchar (*spiTx)(uchar) = ispTransmit;
         board_led_isp_activity();
 
@@ -126,15 +135,18 @@ uchar ispEnterProgrammingMode(void)
         } while (--tries);
 
         isp_spi_hw_disable();
-        if (prog_sck <= USBASP_ISP_SCK_0_5)
+        if (jumper)
+            break;
+        if (sck <= USBASP_ISP_SCK_0_5)
             break;
         if (autoslow)
-            prog_sck = isp_sck_autoslow(prog_sck);
+            sck = isp_sck_autoslow(sck);
         else
-            prog_sck--;
-        if (prog_sck < USBASP_ISP_SCK_0_5)
+            sck--;
+        if (sck < USBASP_ISP_SCK_0_5)
             break;
-        ispSetSCKOption(prog_sck);
+        prog_sck = sck;
+        ispSetSCKOption(sck);
     }
 
     return 1;

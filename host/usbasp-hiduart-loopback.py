@@ -37,30 +37,51 @@ def main() -> int:
             pass
     usb.util.claim_interface(dev, 1)
     usb.util.claim_interface(dev, 2)
-    feat = bytes([UBRR_9600 & 0xFF, UBRR_9600 >> 8, UART_8N1, 0, 0, 0, 0, 0])
-    dev.ctrl_transfer(0x21, 0x09, 0x0300, 1, feat, timeout=2000)
-    pkt = payload + bytes(7 - len(payload)) + bytes([len(payload)])
-    dev.write(0x01, pkt, timeout=2000)
-    time.sleep(0.05)
+    uart_on = False
     ok = False
-    for _ in range(8):
+    saw_in = False
+    try:
+        feat = bytes([UBRR_9600 & 0xFF, UBRR_9600 >> 8, UART_8N1, 0, 0, 0, 0, 0])
+        dev.ctrl_transfer(0x21, 0x09, 0x0300, 1, feat, timeout=2000)
         try:
-            data = bytes(dev.read(0x81, 8, timeout=400))
+            mon = bytes(dev.read(0x82, 8, timeout=800))
+            uart_on = (mon[7] & UART_STATE_ENABLED) != 0
+            print(f"monitor state={mon[7]} uart={'on' if uart_on else 'off'}")
         except usb.core.USBError as e:
-            print("EP1 IN", e, file=sys.stderr)
-            break
-        cnt = data[7]
-        chunk = data[: min(cnt, 7)]
-        print(f"IN cnt={cnt} {chunk!r}")
-        if chunk == payload:
-            ok = True
-            break
-    usb.util.release_interface(dev, 1)
-    usb.util.release_interface(dev, 2)
+            print("EP2 IN", e, file=sys.stderr)
+        pkt = payload + bytes(7 - len(payload)) + bytes([len(payload)])
+        dev.write(0x01, pkt, timeout=2000)
+        time.sleep(0.05)
+        for _ in range(8):
+            try:
+                data = bytes(dev.read(0x81, 8, timeout=400))
+            except usb.core.USBError as e:
+                print("EP1 IN", e, file=sys.stderr)
+                break
+            saw_in = True
+            cnt = data[7]
+            chunk = data[: min(cnt, 7)]
+            print(f"IN cnt={cnt} {chunk!r}")
+            if chunk == payload:
+                ok = True
+                break
+    finally:
+        for n in (1, 2):
+            try:
+                usb.util.release_interface(dev, n)
+            except usb.core.USBError:
+                pass
     if ok:
         print("LOOPBACK OK")
         return 0
-    print("LOOPBACK FAIL", file=sys.stderr)
+    if uart_on and saw_in:
+        print(
+            "LOOPBACK FAIL: UART enabled, HID IN empty. "
+            "Short ATmega8 PD0–PD1 (TQFP 30–31), not MOSI/MISO.",
+            file=sys.stderr,
+        )
+    else:
+        print("LOOPBACK FAIL", file=sys.stderr)
     return 1
 
 

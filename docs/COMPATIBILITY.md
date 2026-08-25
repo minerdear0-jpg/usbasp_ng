@@ -40,7 +40,7 @@ Preserve:
 
 - CONNECT then ENABLEPROG
 - SETISPSCK meaning (id 0 = AUTO; AUTO starts at 1.5 MHz then coarse auto-slow: 375 kHz, 93.75 kHz, 16 kHz, 500 Hz)
-- JP3/PC2 slow jumper pins `prog_sck` to 8 kHz for the whole CONNECT session (ENABLEPROG must not ramp back to 1.5 MHz)
+- JP3/PC2 applies 8 kHz software SCK on the wire (CONNECT, SETISPSCK, and idle LED) without overwriting the stored host SETISPSCK id; ENABLEPROG must not ramp back to 1.5 MHz while the jumper is closed
 - paged flash FIRST/LAST and 12-bit page size packing
 - EEPROM byte write with wait
 - SETLONGADDRESS → little-endian u32, then ignore 16-bit addresses in later commands
@@ -85,7 +85,7 @@ Measured on ATmega8 clones (no-dot programmer, yellow-dot target / USB DUT):
 - yellow NG as programmer, no-dot as target: EEPROM read 512 B (`0xFF`); SETISPSCK `-B 8` / `-B 0.5` / `-B 0.25` (3 MHz) signature OK. JP3 closed → 8 kHz software SCK, ENABLEPROG `0x01` (same SW-SCK bug).
 - GETCAPABILITIES `01 00 00 01`
 - classic L0 USB: one interface, EP0 only, no HID/BOS; HIDUART is USB 2.01 composite (not L0)
-- HIDUART yellow-dot: iSerial `YEL0`; ISP read of no-dot through composite; UART loopback PD0–PD1
+- HIDUART yellow-dot: iSerial `YEL0`; ISP read of no-dot through composite (flash 4018 B, EEPROM 512 B `0xFF`, `-B 8`/`0.5`/`0.25`); UART loopback PD0–PD1
 
 ## Capability bytes (GETCAPABILITIES)
 

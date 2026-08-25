@@ -72,6 +72,17 @@
 #   Same SW-SCK programming-enable bug as -B 22/50/250. JP3 cannot pass until
 #   software SCK works. Open jumper to restore HW SPI.
 #
+# Measured 2026-08-26 JP3 LED (HIDUART yellow USB, no avrdude required):
+#   Jumper closed: PC0 breathes (8 kHz applied immediately). Open: 1 Hz USB idle.
+#   Host SETISPSCK id is not overwritten by the jumper (open after CONNECT → 1 Hz).
+#
+# Measured 2026-08-26 (HIDUART 6894 B yellow USB programmer, no-dot ISP target):
+#   GETCAPABILITIES 01 00 00 01. Signature 1E 93 07, lfuse 0xef, hfuse 0xd9.
+#   Flash read 4018 B; EEPROM read 512 B all 0xFF. No write on no-dot.
+#   SETISPSCK AUTO / -B 8 / -B 0.5 / -B 0.25 (3 MHz): PASS (JP3 open).
+#   EEPROM rewrite SERIAL=YEL0 (10 B) as ISP target; USB iSerial YEL0 confirmed.
+#   UART loopback PD0–PD1 (TQFP 30–31, tweezers): HELLO echoed. Do not short pin 29 (RESET).
+#
 # Waveform: no scope. Third mega8 sniffer or FX2 LA — host/isp-sniffer/README.md
 #   (do not flash sniffer onto no-dot or onto yellow unless replacing NG).
 

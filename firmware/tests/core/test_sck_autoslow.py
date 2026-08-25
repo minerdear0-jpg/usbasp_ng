@@ -60,10 +60,20 @@ def test_hw_threshold():
     assert SCK_8 < SCK_93_75  # JP3 8 kHz is software SPI
 
 
+def test_connect_does_not_store_jumper_as_host_sck():
+    from pathlib import Path
+
+    text = Path(__file__).resolve().parents[2] / "src" / "vendor_isp.c"
+    src = text.read_text()
+    assert "prog_sck = USBASP_ISP_SCK_8" not in src
+    assert "board_sck_jumper_slow()" in src
+
+
 def main():
     test_autoslow_seq()
     test_sw_delay_matches_fischl_table()
     test_hw_threshold()
+    test_connect_does_not_store_jumper_as_host_sck()
     print("ok  sck_autoslow")
     return 0
 

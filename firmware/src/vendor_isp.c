@@ -25,13 +25,11 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
 
     switch (data[1]) {
     case USBASP_FUNC_CONNECT:
-        /* JP3/PC2: keep 8 kHz for ENABLEPROG auto-slow, not only the first tries. */
-        if (board_sck_jumper_slow()) {
-            prog_sck = USBASP_ISP_SCK_8;
+        /* JP3 forces 8 kHz on the wire; do not overwrite the host SETISPSCK id. */
+        if (board_sck_jumper_slow())
             ispSetSCKOption(USBASP_ISP_SCK_8);
-        } else {
+        else
             ispSetSCKOption(prog_sck);
-        }
         prog_address_newmode = 0;
         ispConnect();
         break;
@@ -99,7 +97,10 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
 
     case USBASP_FUNC_SETISPSCK:
         prog_sck = data[2];
-        ispSetSCKOption(prog_sck);
+        if (board_sck_jumper_slow())
+            ispSetSCKOption(USBASP_ISP_SCK_8);
+        else
+            ispSetSCKOption(prog_sck);
         replyBuffer[0] = 0;
         len = 1;
         break;

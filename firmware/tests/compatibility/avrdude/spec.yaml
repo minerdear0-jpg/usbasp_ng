@@ -28,7 +28,7 @@ functions:
     response_len: 0
     pre: idle
     post: isp_connected
-    notes: reset address_newmode; jumper PC2 pins prog_sck to 8 kHz for ENABLEPROG
+    notes: reset address_newmode; jumper PC2 applies 8 kHz on the wire, host SETISPSCK id kept
   DISCONNECT:
     id: 2
     dir: in
