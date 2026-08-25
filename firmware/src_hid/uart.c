@@ -95,7 +95,11 @@ static void uart_config_int(uint16_t baud, uint8_t par, uint8_t stop, uint8_t by
         break;
     }
 
+#if defined(USBASPUART_URSEL)
+    USBASPUART_UCSRC = (1 << USBASPUART_URSEL) | byte;
+#else
     USBASPUART_UCSRC = byte;
+#endif
     USBASPUART_UBRRH = (unsigned char)(baud >> 8);
     USBASPUART_UBRRL = (unsigned char)baud;
     USBASPUART_UCSRB = (1 << USBASPUART_RXCIE) | (1 << USBASPUART_RXEN) | (1 << USBASPUART_TXEN);

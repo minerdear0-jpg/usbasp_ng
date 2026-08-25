@@ -44,6 +44,8 @@ test:
 	python3 tests/core/test_writeflash_page.py
 	python3 tests/core/test_classic_isolation.py
 	python3 tests/core/test_serial_eep.py
+	python3 tests/core/test_tpi.py
+	python3 tests/core/test_hiduart_desc.py
 
 flash: hex
 	avrdude -c $(ISP) -p $(MCU) -U flash:w:$(BUILDDIR)/$(HEX_NAME).hex:i

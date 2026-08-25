@@ -30,6 +30,7 @@
 #   define USBASPUART_UCSRA     UCSRA
 #   define USBASPUART_UCSRB     UCSRB
 #   define USBASPUART_UCSRC     UCSRC
+#   define USBASPUART_URSEL     URSEL
 #   define USBASPUART_U2X       U2X
 #   define USBASPUART_UCSZ0     UCSZ0
 #   define USBASPUART_UCSZ1     UCSZ1

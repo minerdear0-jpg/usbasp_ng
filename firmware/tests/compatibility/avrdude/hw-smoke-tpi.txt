@@ -6,3 +6,4 @@
 #   avrdude -c usbasp -p t10 -U flash:r:/tmp/t10.bin:r
 #
 # Pass: zero exit. Do not write no-dot. Silicon untested as of v0.1.x.
+# Host packing / opcodes: firmware/tests/core/test_tpi.py (no tiny10).
