@@ -32,4 +32,11 @@
 #
 # no-dot programmer: usbisp-sized classic (~4018 B). JP3 on that board is not
 # sampled (HAS_SCK_JUMPER=0). Clone profile (4024+) reads PC2 for 8 kHz.
+#
+# SCK smoke (yellow NG as programmer, no-dot as ISP target, signature only):
+#   AUTO, -B 0.5 (1.5 MHz), -B 8 (93.75 kHz): PASS on both HIDUART and NG classic.
+#   -B 22 / 50 / 250 (32 / 16 / 4 kHz software SCK): FAIL ENABLEPROG 0x01 on both.
+#   Conclusion: software SCK programming-enable is a real functional bug on this
+#   pair; it is not HIDUART/composite IRQ. Root cause (SCK vs MOSI vs MISO vs RST)
+#   not scoped yet. USB stayed enumerated after FAIL on classic.
 
