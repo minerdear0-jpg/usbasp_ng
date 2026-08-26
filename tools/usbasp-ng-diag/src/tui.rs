@@ -32,6 +32,7 @@ struct Ui {
     state: AppState,
     source_label: String,
     faults_only: bool,
+    show_caps: bool,
     list_state: ListState,
     follow: bool,
     status: String,
@@ -47,9 +48,10 @@ impl Ui {
             state,
             source_label,
             faults_only: false,
+            show_caps: false,
             list_state,
             follow: true,
-            status: "q quit  f faults  j/k scroll  g/G top/bot  Space follow".into(),
+            status: "q quit  f faults  c caps  j/k scroll  g/G top/bot  Space follow".into(),
         }
     }
 
@@ -188,6 +190,9 @@ fn run_loop(
                         ui.faults_only = !ui.faults_only;
                         ui.on_new_events();
                     }
+                    KeyCode::Char('c') => {
+                        ui.show_caps = !ui.show_caps;
+                    }
                     KeyCode::Char('j') | KeyCode::Down => ui.scroll_rel(1),
                     KeyCode::Char('k') | KeyCode::Up => ui.scroll_rel(-1),
                     KeyCode::PageDown => ui.scroll_rel(10),
@@ -214,7 +219,7 @@ fn draw(f: &mut ratatui::Frame, ui: &Ui) {
         .constraints([
             Constraint::Length(3),
             Constraint::Min(5),
-            Constraint::Length(4),
+            Constraint::Length(if ui.show_caps { 12 } else { 4 }),
             Constraint::Length(2),
         ])
         .split(f.area());
@@ -237,6 +242,11 @@ fn draw(f: &mut ratatui::Frame, ui: &Ui) {
             Span::styled(" FOLLOW ", Style::default().fg(Color::Black).bg(Color::Yellow))
         } else {
             Span::raw(" paused ")
+        },
+        if ui.show_caps {
+            Span::styled(" CAPS ", Style::default().fg(Color::Black).bg(Color::Magenta))
+        } else {
+            Span::raw("")
         },
     ]))
     .block(Block::default().borders(Borders::ALL).title("watch"));
@@ -278,12 +288,31 @@ fn draw(f: &mut ratatui::Frame, ui: &Ui) {
         .highlight_symbol("▶ ");
     f.render_stateful_widget(list, chunks[1], &mut list_state);
 
-    let s = &ui.state.stats;
-    let summary = Paragraph::new(format!(
-        "ENABLEPROG PASS={} FAIL={}   SNAPSHOT FAIL={}   ERROR={}   OVERFLOW={} dropped={}",
-        s.enableprog_pass, s.enableprog_fail, s.snapshot_fail, s.errors, s.overflows, s.dropped
-    ))
-    .block(Block::default().borders(Borders::ALL).title("summary"));
+    let summary = if ui.show_caps {
+        match &ui.state.caps {
+            Some(adv) => adv.format_report("USBASP-NG DIAG v1"),
+            None => "Capabilities: (waiting for DIAG_CAPS — re-plug or use demo capabilities_yel0)"
+                .into(),
+        }
+    } else {
+        let s = &ui.state.stats;
+        let caps_line = ui
+            .state
+            .caps
+            .as_ref()
+            .map(|c| c.summary_line())
+            .unwrap_or_else(|| "caps: —".into());
+        format!(
+            "ENABLEPROG PASS={} FAIL={}   SNAPSHOT FAIL={}   ERROR={}   OVERFLOW={} dropped={}\n{caps_line}",
+            s.enableprog_pass, s.enableprog_fail, s.snapshot_fail, s.errors, s.overflows, s.dropped
+        )
+    };
+    let summary = Paragraph::new(summary)
+        .block(Block::default().borders(Borders::ALL).title(if ui.show_caps {
+            "capabilities"
+        } else {
+            "summary"
+        }));
     f.render_widget(summary, chunks[2]);
 
     let help = Paragraph::new(ui.status.as_str())

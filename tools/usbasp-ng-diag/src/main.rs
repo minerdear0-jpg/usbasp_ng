@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod caps;
 mod capture;
 mod decoder;
 mod demo;
@@ -15,8 +16,10 @@ mod state;
 mod tui;
 mod usb;
 
+use caps::CapsAdvert;
 use capture::{write_header, CaptureFile, CaptureRecord};
-use decoder::{format_frame, reassemble_enableprog, reassemble_fault_snapshot};
+use decoder::{format_frame, reassemble_caps, reassemble_enableprog, reassemble_fault_snapshot};
+use state::AppState;
 use jsonl::{
     emit_jsonl_frame, emit_jsonl_semantic, enableprog_failed, snapshot_failed, FaultStats,
 };
@@ -107,6 +110,21 @@ enum Cmd {
         serial: String,
         out: PathBuf,
     },
+    /// Print firmware + board capability map (gate on caps, not version)
+    Capabilities {
+        /// Live USB iSerial (empty = first composite)
+        #[arg(long, default_value = "")]
+        serial: String,
+        /// Load a capture.bin
+        #[arg(long, conflicts_with = "demo")]
+        file: Option<PathBuf>,
+        /// Load a demo scenario
+        #[arg(long, conflicts_with = "file")]
+        demo: Option<String>,
+        /// Seconds to wait for DIAG_CAPS on live EP2 (reconnect if drained)
+        #[arg(long, default_value = "3")]
+        timeout: u64,
+    },
 }
 
 fn out_mode(json: bool, jsonl: bool, faults: bool) -> OutMode {
@@ -173,7 +191,68 @@ fn main() -> Result<()> {
             tui::run(src)
         }
         Cmd::Record { serial, out } => cmd_record(&serial, &out),
+        Cmd::Capabilities {
+            serial,
+            file,
+            demo,
+            timeout,
+        } => cmd_capabilities(&serial, file.as_ref(), demo.as_deref(), timeout),
     }
+}
+
+fn cmd_capabilities(
+    serial: &str,
+    file: Option<&PathBuf>,
+    demo_name: Option<&str>,
+    timeout_s: u64,
+) -> Result<()> {
+    let mut st = AppState::default();
+    if let Some(path) = file {
+        let cap = CaptureFile::load(path)?;
+        st.ingest_capture(&cap);
+    } else if let Some(name) = demo_name {
+        let cap = demo::build_scenario(name)?;
+        st.ingest_capture(&cap);
+    } else {
+        let h = usb::open_composite(serial)?;
+        eprintln!(
+            "waiting up to {timeout_s}s for DIAG_CAPS on serial={:?} (re-plug if ring already drained)",
+            h.serial
+        );
+        let deadline = SystemTime::now() + Duration::from_secs(timeout_s);
+        let mut buf = [0u8; 8];
+        while SystemTime::now() < deadline && st.caps.is_none() {
+            match h
+                .handle
+                .read_interrupt(EP2_IN, &mut buf, Duration::from_millis(200))
+            {
+                Ok(n) if n >= 6 => {
+                    if let Some(f) = DiagFrame::from_report(&buf[..n]) {
+                        if f.ty != 0 {
+                            let ns = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_nanos() as u64;
+                            st.push_frame(ns, f);
+                        }
+                    }
+                }
+                Ok(_) | Err(rusb::Error::Timeout) => {}
+                Err(e) => bail!("USB read: {e}"),
+            }
+        }
+    }
+
+    let Some(adv) = st.caps else {
+        bail!("no DIAG_CAPS advertisement seen (try --demo capabilities_yel0 or re-plug)");
+    };
+    let schema = st.hello_schema.unwrap_or(SCHEMA_V1);
+    let note = format!("USBASP-NG DIAG v{schema}");
+    println!("{}", adv.format_report(&note));
+    if let Some(flags) = st.hello_flags {
+        println!("HELLO.flags=0x{flags:02x}  (legacy compact; prefer DIAG_CAPS)");
+    }
+    Ok(())
 }
 
 fn cmd_demo(
@@ -231,6 +310,7 @@ fn print_capture(
 
     let mut ep_buf: Vec<DiagFrame> = Vec::new();
     let mut snap_buf: Vec<DiagFrame> = Vec::new();
+    let mut caps_buf: Vec<DiagFrame> = Vec::new();
     let mut ep_ns: Vec<u64> = Vec::new();
     let mut snap_ns: Vec<u64> = Vec::new();
     let mut prev_ns: Option<u64> = None;
@@ -293,6 +373,7 @@ fn print_capture(
             ENABLEPROG => {
                 snap_buf.clear();
                 snap_ns.clear();
+                caps_buf.clear();
                 ep_buf.push(f);
                 ep_ns.push(rec.host_ns);
                 if ep_buf.len() == 4 {
@@ -326,6 +407,7 @@ fn print_capture(
             FAULT_SNAPSHOT => {
                 ep_buf.clear();
                 ep_ns.clear();
+                caps_buf.clear();
                 snap_buf.push(f);
                 snap_ns.push(rec.host_ns);
                 if snap_buf.len() == 4 {
@@ -358,11 +440,32 @@ fn print_capture(
                     snap_ns.clear();
                 }
             }
+            CAPS => {
+                ep_buf.clear();
+                ep_ns.clear();
+                snap_buf.clear();
+                snap_ns.clear();
+                caps_buf.push(f);
+                if caps_buf.len() == 4 {
+                    if let Some(line) = reassemble_caps(&caps_buf) {
+                        match mode {
+                            OutMode::Human => println!("{:20}>> {line}", ""),
+                            OutMode::Jsonl => {
+                                emit_jsonl_semantic(rec.host_ns, "caps", "info", &line);
+                            }
+                            _ => {}
+                        }
+                    }
+                    let _ = CapsAdvert::from_frames(&caps_buf);
+                    caps_buf.clear();
+                }
+            }
             _ => {
                 ep_buf.clear();
                 ep_ns.clear();
                 snap_buf.clear();
                 snap_ns.clear();
+                caps_buf.clear();
             }
         }
     }
@@ -382,6 +485,7 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
     let mut buf = [0u8; 8];
     let mut ep_buf = Vec::new();
     let mut snap_buf = Vec::new();
+    let mut caps_buf = Vec::new();
     loop {
         match h
             .handle
@@ -409,6 +513,7 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
                     match f.ty {
                         ENABLEPROG => {
                             snap_buf.clear();
+                            caps_buf.clear();
                             ep_buf.push(f);
                             if ep_buf.len() == 4 {
                                 if let Some(line) = reassemble_enableprog(&ep_buf) {
@@ -419,6 +524,7 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
                         }
                         FAULT_SNAPSHOT => {
                             ep_buf.clear();
+                            caps_buf.clear();
                             snap_buf.push(f);
                             if snap_buf.len() == 4 {
                                 if let Some(line) = reassemble_fault_snapshot(&snap_buf) {
@@ -427,9 +533,21 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
                                 snap_buf.clear();
                             }
                         }
+                        CAPS => {
+                            ep_buf.clear();
+                            snap_buf.clear();
+                            caps_buf.push(f);
+                            if caps_buf.len() == 4 {
+                                if let Some(line) = reassemble_caps(&caps_buf) {
+                                    println!("         >> {line}");
+                                }
+                                caps_buf.clear();
+                            }
+                        }
                         _ => {
                             ep_buf.clear();
                             snap_buf.clear();
+                            caps_buf.clear();
                         }
                     }
                 }

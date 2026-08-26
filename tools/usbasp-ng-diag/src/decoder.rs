@@ -12,6 +12,7 @@ pub fn type_name(ty: u8) -> &'static str {
         TRACE_OVERFLOW => "TRACE_OVERFLOW",
         ERROR => "ERROR",
         MEMOP => "MEMOP",
+        CAPS => "CAPS",
         _ => "UNKNOWN",
     }
 }
@@ -88,6 +89,9 @@ pub fn format_frame(f: &DiagFrame) -> String {
             } else {
                 extra = format!(" {} {mem} b={}", seq_flags(f.flags), f.b);
             }
+        }
+        CAPS => {
+            extra = format!(" {} data={:02x}{:02x}", seq_flags(f.flags), f.a, f.b);
         }
         _ => {}
     }
@@ -184,6 +188,18 @@ pub fn reassemble_fault_snapshot(frames: &[DiagFrame]) -> Option<String> {
     ))
 }
 
+/// Reassemble four DIAG_CAPS frames into one human line.
+pub fn reassemble_caps(frames: &[DiagFrame]) -> Option<String> {
+    crate::caps::CapsAdvert::from_frames(frames).map(|adv| {
+        format!(
+            "CAPS  firmware=0x{:08x}  board=0x{:08x}  ({})",
+            adv.firmware.0,
+            adv.board.0,
+            adv.summary_line()
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,5 +279,18 @@ mod tests {
         assert!(s.contains("tx=ac53"));
         assert!(s.contains("sw_delay=6"));
         assert!(s.contains("FAIL"));
+    }
+
+    #[test]
+    fn caps_reassemble() {
+        let reps = crate::caps::caps_reports(crate::caps::YEL0_FCAP, crate::caps::YEL0_BCAP, 0);
+        let frames: Vec<_> = reps
+            .iter()
+            .map(|r| DiagFrame::from_report(r).unwrap())
+            .collect();
+        let s = reassemble_caps(&frames).unwrap();
+        assert!(s.contains("firmware=0x00000007"));
+        assert!(s.contains("board=0x00000002"));
+        assert!(s.contains("TIMESTAMP"));
     }
 }

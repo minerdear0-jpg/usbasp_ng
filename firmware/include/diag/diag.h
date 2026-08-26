@@ -25,7 +25,7 @@ typedef struct {
 /* Returns false if dropped. Callers MUST NOT retry or wait. */
 bool diag_try_emit(uint8_t type, uint8_t flags, uint8_t a, uint8_t b);
 
-/* CONNECT lifecycle: HELLO, SESSION_BEGIN, SCK_CONFIG, RESET_ASSERT */
+/* CONNECT lifecycle: HELLO, CAPS×4, SESSION_BEGIN, SCK_CONFIG, RESET_ASSERT */
 void diag_on_connect(void);
 
 /* DISCONNECT: RESET_RELEASE, SESSION_END */

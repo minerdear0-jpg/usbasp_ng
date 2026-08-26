@@ -192,12 +192,32 @@ void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fa
 
 void diag_on_connect(void)
 {
+    uint32_t fcap;
+    uint32_t bcap;
+
     diag_sck_seen = 0; /* force SCK_CONFIG once per session */
     (void)diag_try_emit(
         DIAG_HELLO,
-        (uint8_t)(DIAG_CAP_SESSION | DIAG_CAP_TRANSACTION | DIAG_CAP_SNAPSHOT),
+        (uint8_t)(DIAG_CAP_SESSION | DIAG_CAP_TRANSACTION | DIAG_CAP_SNAPSHOT
+                  | DIAG_CAP_TIMESTAMP),
         DIAG_SCHEMA_V1,
         DIAG_PROFILE_COMPOSITE);
+
+    /* DIAG_CAPS: firmware u32 LE, then board u32 LE (4 frames). Not USBasp L1. */
+    fcap = DIAG_FCAP_SESSION | DIAG_FCAP_SNAPSHOT | DIAG_FCAP_TIMESTAMP;
+    bcap = 0;
+#if USBASP_HAS_SCK_JUMPER
+    bcap |= BOARD_CAP_SCK_JUMPER;
+#endif
+    (void)diag_try_emit(DIAG_CAPS, DIAG_EP_START,
+        (uint8_t)(fcap & 0xffu), (uint8_t)((fcap >> 8) & 0xffu));
+    (void)diag_try_emit(DIAG_CAPS, DIAG_EP_CONT,
+        (uint8_t)((fcap >> 16) & 0xffu), (uint8_t)((fcap >> 24) & 0xffu));
+    (void)diag_try_emit(DIAG_CAPS, DIAG_EP_CONT,
+        (uint8_t)(bcap & 0xffu), (uint8_t)((bcap >> 8) & 0xffu));
+    (void)diag_try_emit(DIAG_CAPS, DIAG_EP_END,
+        (uint8_t)((bcap >> 16) & 0xffu), (uint8_t)((bcap >> 24) & 0xffu));
+
     (void)diag_try_emit(DIAG_SESSION_BEGIN, 0, requested_sck, effective_sck);
     diag_emit_sck_config();
     diag_reset_driven = DIAG_RESET_ASSERT;

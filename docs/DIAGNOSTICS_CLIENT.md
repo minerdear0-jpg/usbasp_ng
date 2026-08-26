@@ -9,6 +9,7 @@ Release asset **`diagplane.bin`** = portable Linux x86-64 build of the same tool
 ```bash
 chmod +x diagplane.bin
 ./diagplane.bin watch --demo enableprog_fail_sw
+./diagplane.bin capabilities --demo capabilities_yel0
 ./diagplane.bin monitor YEL0          # USBasp2 / HIDUART iSerial
 ```
 
@@ -23,6 +24,7 @@ Preferred programmer for live telemetry: **[USBasp2](USBASP2.md)** (ATmega328P +
 | “RESET LOW/HIGH” | **`RESET_ASSERT` / `RESET_RELEASE`** (drive intent) |
 | ENABLEPROG packing | **Four** 6-byte frames (`START`/`CONT`/`END\|RESULT`) |
 | FAULT_SNAPSHOT | **Four** compact frames; END carries `rx[0]` + `sw_delay` + OK/FAIL |
+| DIAG_CAPS | **Four** frames: firmware `uint32` LE + board `uint32` LE; gate features on bits, not version |
 | Capture file | Optional **`USBDIAGv`** 16-byte header + `uint64_le host_ns` + 8-byte report; legacy (no header) still decodes |
 
 Ideal final function (TRIZ): *presentation works without the stick* — via `file` / `replay` / `demo` sources.

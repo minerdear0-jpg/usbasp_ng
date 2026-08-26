@@ -27,6 +27,7 @@ TYPES = {
     10: "TRACE_OVERFLOW",
     11: "ERROR",
     12: "MEMOP",
+    13: "CAPS",
 }
 
 RESET_ASSERT = 0x01
@@ -92,7 +93,7 @@ def level_for(typ: int, flags: int) -> str:
         return "error"
     if typ == 6 and (flags & EP_FAIL):
         return "error"
-    if typ in (1, 2, 3, 4, 5):
+    if typ in (1, 2, 3, 4, 5, 13):
         return "info"
     return "debug"
 
@@ -136,6 +137,8 @@ def decode_frame(data: bytes) -> str:
             extra = f" END {mem} pages={b}"
         else:
             extra = f" {_seq_flags(flags)} {mem} b={b}"
+    elif typ == 13:
+        extra = f" {_seq_flags(flags)} data={a:02x}{b:02x}"
     return f"t={ts:5d} {name:16s} flags=0x{flags:02x} a={a:02x} b={b:02x}{extra}"
 
 
@@ -195,6 +198,8 @@ def frame_fields(data: bytes) -> dict:
             ev["pagesize"] = b
         elif flags & EP_END:
             ev["pages"] = b
+    elif typ == 13:
+        ev["seq"] = _seq_flags(flags)
     return ev
 
 
@@ -292,6 +297,40 @@ def reassemble_fault_snapshot_dict(frames: list[bytes]) -> dict | None:
     }
 
 
+def reassemble_caps(frames: list[bytes]) -> str | None:
+    """Four DIAG_CAPS frames → firmware + board uint32 LE."""
+    if len(frames) != 4:
+        return None
+    parts = []
+    for fr in frames:
+        d = fr[:6] if len(fr) >= 6 else fr
+        parts.append((d[1], d[4], d[5]))
+    if not (parts[0][0] & EP_START and parts[3][0] & EP_END):
+        return None
+    fcap = parts[0][1] | (parts[0][2] << 8) | (parts[1][1] << 16) | (parts[1][2] << 24)
+    bcap = parts[2][1] | (parts[2][2] << 8) | (parts[3][1] << 16) | (parts[3][2] << 24)
+    return f"CAPS  firmware=0x{fcap:08x}  board=0x{bcap:08x}"
+
+
+def reassemble_caps_dict(frames: list[bytes]) -> dict | None:
+    line = reassemble_caps(frames)
+    if not line:
+        return None
+    parts = []
+    for fr in frames:
+        d = fr[:6] if len(fr) >= 6 else fr
+        parts.append((d[1], d[4], d[5]))
+    fcap = parts[0][1] | (parts[0][2] << 8) | (parts[1][1] << 16) | (parts[1][2] << 24)
+    bcap = parts[2][1] | (parts[2][2] << 8) | (parts[3][1] << 16) | (parts[3][2] << 24)
+    return {
+        "kind": "caps",
+        "firmware": fcap,
+        "board": bcap,
+        "level": "info",
+        "msg": line,
+    }
+
+
 def emit_jsonl(host_ns: int, data: bytes, semantic: dict | None = None) -> None:
     ts = host_ns_iso(host_ns)
     if semantic is not None:
@@ -363,6 +402,7 @@ def main() -> int:
 
     ep_buf: list[bytes] = []
     snap_buf: list[bytes] = []
+    caps_buf: list[bytes] = []
     ep_ns: list[int] = []
     snap_ns: list[int] = []
     stats = {
@@ -397,6 +437,7 @@ def main() -> int:
         if typ == 6:
             snap_buf.clear()
             snap_ns.clear()
+            caps_buf.clear()
             ep_buf.append(data)
             ep_ns.append(host_ns)
             if len(ep_buf) == 4:
@@ -421,6 +462,7 @@ def main() -> int:
         elif typ == 9:
             ep_buf.clear()
             ep_ns.clear()
+            caps_buf.clear()
             snap_buf.append(data)
             snap_ns.append(host_ns)
             if len(snap_buf) == 4:
@@ -440,11 +482,27 @@ def main() -> int:
                     print(f"{'':20}>> {line}")
                 snap_buf.clear()
                 snap_ns.clear()
+        elif typ == 13:
+            ep_buf.clear()
+            ep_ns.clear()
+            snap_buf.clear()
+            snap_ns.clear()
+            caps_buf.append(data)
+            if len(caps_buf) == 4:
+                line = reassemble_caps(caps_buf)
+                if args.jsonl:
+                    d = reassemble_caps_dict(caps_buf)
+                    if d:
+                        emit_jsonl(host_ns, data, d)
+                elif not args.faults and not args.jsonl and line:
+                    print(f"{'':20}>> {line}")
+                caps_buf.clear()
         else:
             ep_buf.clear()
             ep_ns.clear()
             snap_buf.clear()
             snap_ns.clear()
+            caps_buf.clear()
 
     if args.faults:
         print()

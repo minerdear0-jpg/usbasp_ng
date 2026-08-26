@@ -1,6 +1,9 @@
 //! L2 AppState reducer: frames → log lines + fault stats.
 
-use crate::decoder::{format_frame, reassemble_enableprog, reassemble_fault_snapshot};
+use crate::caps::CapsAdvert;
+use crate::decoder::{
+    format_frame, reassemble_caps, reassemble_enableprog, reassemble_fault_snapshot,
+};
 use crate::jsonl::{enableprog_failed, level_for, snapshot_failed, FaultStats};
 use crate::protocol::*;
 
@@ -35,8 +38,13 @@ pub struct LogEvent {
 pub struct AppState {
     pub events: Vec<LogEvent>,
     pub stats: FaultStats,
+    pub caps: Option<CapsAdvert>,
+    pub hello_schema: Option<u8>,
+    pub hello_profile: Option<u8>,
+    pub hello_flags: Option<u8>,
     ep_buf: Vec<DiagFrame>,
     snap_buf: Vec<DiagFrame>,
+    caps_buf: Vec<DiagFrame>,
     ep_ns: Vec<u64>,
     snap_ns: Vec<u64>,
 }
@@ -47,6 +55,12 @@ impl AppState {
             return;
         }
         self.stats.note_frame(&f);
+
+        if f.ty == HELLO {
+            self.hello_schema = Some(f.a);
+            self.hello_profile = Some(f.b);
+            self.hello_flags = Some(f.flags);
+        }
 
         let level = Level::from_name(level_for(&f));
         let is_fault = matches!(f.ty, ERROR | TRACE_OVERFLOW)
@@ -63,6 +77,7 @@ impl AppState {
             ENABLEPROG => {
                 self.snap_buf.clear();
                 self.snap_ns.clear();
+                self.caps_buf.clear();
                 self.ep_buf.push(f);
                 self.ep_ns.push(host_ns);
                 if self.ep_buf.len() == 4 {
@@ -83,6 +98,7 @@ impl AppState {
             FAULT_SNAPSHOT => {
                 self.ep_buf.clear();
                 self.ep_ns.clear();
+                self.caps_buf.clear();
                 self.snap_buf.push(f);
                 self.snap_ns.push(host_ns);
                 if self.snap_buf.len() == 4 {
@@ -102,11 +118,33 @@ impl AppState {
                     self.snap_ns.clear();
                 }
             }
+            CAPS => {
+                self.ep_buf.clear();
+                self.ep_ns.clear();
+                self.snap_buf.clear();
+                self.snap_ns.clear();
+                self.caps_buf.push(f);
+                if self.caps_buf.len() == 4 {
+                    if let Some(adv) = CapsAdvert::from_frames(&self.caps_buf) {
+                        self.caps = Some(adv);
+                        if let Some(line) = reassemble_caps(&self.caps_buf) {
+                            self.events.push(LogEvent {
+                                host_ns,
+                                text: format!(">> {line}"),
+                                level: Level::Info,
+                                is_fault: false,
+                            });
+                        }
+                    }
+                    self.caps_buf.clear();
+                }
+            }
             _ => {
                 self.ep_buf.clear();
                 self.ep_ns.clear();
                 self.snap_buf.clear();
                 self.snap_ns.clear();
+                self.caps_buf.clear();
             }
         }
 
@@ -130,6 +168,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::caps::{DiagCaps, YEL0_FCAP};
     use crate::demo;
 
     #[test]
@@ -139,5 +178,23 @@ mod tests {
         st.ingest_capture(&cap);
         assert!(st.stats.enableprog_fail >= 1);
         assert!(st.events.iter().any(|e| e.is_fault));
+        let caps = st.caps.expect("CAPS in demo");
+        assert_eq!(caps.firmware.0, YEL0_FCAP);
+        assert!(caps.firmware.contains(DiagCaps::TIMESTAMP));
+        assert!(!caps.firmware.contains(DiagCaps::TRACE));
+    }
+
+    #[test]
+    fn capabilities_yel0_scenario() {
+        let cap = demo::build_scenario("capabilities_yel0").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        let caps = st.caps.expect("CAPS");
+        let text = caps.format_report("USBASP2 DIAG v1");
+        assert!(text.contains("✓ SESSION"));
+        assert!(text.contains("✓ TIMESTAMP"));
+        assert!(text.contains("✗ TRACE"));
+        assert!(text.contains("sck jumper        ✓"));
+        assert!(text.contains("physical capture  ✗"));
     }
 }

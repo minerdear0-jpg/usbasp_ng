@@ -27,6 +27,7 @@ def main() -> int:
     assert d["DIAG_ENABLEPROG"] == 6
     assert d["DIAG_FAULT_SNAPSHOT"] == 9
     assert d["DIAG_MEMOP"] == 12
+    assert d["DIAG_CAPS"] == 13
     assert d["DIAG_MEM_FLASH"] == 0
     assert d["DIAG_EP_START"] == 0x01
     assert d["DIAG_EP_CONT"] == 0x02
@@ -35,16 +36,26 @@ def main() -> int:
     assert d["DIAG_EP_RESULT_FAIL"] == 0x20
     assert d["DIAG_CAP_TRANSACTION"] == 0x02
     assert d["DIAG_CAP_SNAPSHOT"] == 0x04
+    assert d["DIAG_CAP_TIMESTAMP"] == 0x20
+
+    events = EVENTS.read_text()
+    assert "DIAG_FCAP_TIMESTAMP" in events
+    assert "BOARD_CAP_PHYSICAL_CAPTURE" in events
+    assert "BOARD_CAP_SCK_JUMPER" in events
 
     diag_c = DIAG_C.read_text()
     assert "diag_emit_enableprog" in diag_c
     assert "diag_publish_snapshot" in diag_c
     assert "diag_report_enableprog" in diag_c
     assert "memcpy(&diag_fault_snapshot" in diag_c
-    assert "DIAG_CAP_SESSION | DIAG_CAP_TRANSACTION | DIAG_CAP_SNAPSHOT" in diag_c
+    assert "DIAG_CAP_TIMESTAMP" in diag_c
+    assert "DIAG_CAPS" in diag_c
+    assert "DIAG_FCAP_SESSION | DIAG_FCAP_SNAPSHOT | DIAG_FCAP_TIMESTAMP" in diag_c
+    assert "BOARD_CAP_SCK_JUMPER" in diag_c
     # Compact 4-frame FAULT_SNAPSHOT packing
     assert "sck_req << 4" in diag_c
     assert diag_c.count("DIAG_FAULT_SNAPSHOT") == 4
+    assert diag_c.count("DIAG_CAPS") >= 4
 
     assert "diag_note_enableprog_try" in diag_c
     assert "DIAG_ERR_EP_AVR" in (FW / "include" / "diag" / "diag_events.h").read_text()

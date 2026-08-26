@@ -133,15 +133,23 @@ A measuring instrument must say when it perturbs the DUT timing.
 
 ### 6. Diagnostics capabilities (beyond TPI/3 MHz)
 
-Host: `usbasp-ng-diag capabilities` → map, e.g.:
+Host: `usbasp-ng-diag capabilities` → map. Gate UI/features on **capability bits**, never `firmware >= …`.
 
-| Cap | Meaning |
-|-----|---------|
-| SESSION / SNAPSHOT | today’s semantic + fault snapshot |
-| TIMESTAMP | monotonic T in stream |
-| TRACE / PRETRIGGER / TRIGGER | L3 capture |
-| SCK_STATS / ISP_TRACE | timing / transaction |
-| **not** PHYSICAL_PIN_CAPTURE | honesty bit — we are not an FX2 |
+Two bitsets (LE `uint32`, advertised in `DIAG_CAPS` after HELLO):
+
+**Firmware (diagnostics):** `SESSION`, `SNAPSHOT`, `TIMESTAMP`, `TRACE`, `TRIGGER`, `PRETRIGGER`, `SCK_STATS`  
+**Board (physical):** `TARGET_UART`, `SCK_JUMPER`, `PHYSICAL_CAPTURE`
+
+Today (USBasp2 / YEL0): TIMESTAMP **yes**; TRACE/TRIGGER/PRETRIGGER **no**; `PHYSICAL_CAPTURE` **no** (honesty — not a logic analyzer). After TRACE lands, only the firmware mask grows; old hosts keep working by ignoring unknown bits.
+
+```text
+usbasp-ng-diag capabilities --demo capabilities_yel0
+usbasp-ng-diag capabilities --serial YEL0   # re-plug if EP2 already drained
+```
+
+### Timestamp note
+
+`timestamp` is a local Timer1 tick counter; resolution is approximately 0.67 µs at 12 MHz / ÷8. Event-to-event observed deltas include firmware overhead at `diag_now()` — not a pure physical-edge stopwatch.
 
 ### 7. Target monitor (UART) — tagged, separate source
 
@@ -195,4 +203,4 @@ So ENABLEPROG, FAULT_SNAPSHOT, TRACE, TARGET_UART, SCK_STATS can grow without ye
 1. **Do not** rewrite P0 on mega8 for this vision.  
 2. **Do** grow features behind `USBASP_HAS_DIAG` + future diag caps on **USBasp2** boards.  
 3. **Do** keep L1 USBasp sacred.  
-4. Next concrete increments: monotonic timestamp → capability bits → optional TRACE ring → trigger/pre-trigger — each with host/decode parity and replay.
+4. Next concrete increments: ~~monotonic timestamp~~ → ~~capability bits~~ → optional TRACE ring → trigger/pre-trigger — each with host/decode parity and replay.

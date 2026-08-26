@@ -107,7 +107,7 @@ Meaning: *programmer drove* RST asserted/released — **not** measured pin level
 ### C5 — HELLO once per CONNECT, not keep-alive
 
 ```text
-CONNECT → DIAG_HELLO → SESSION_BEGIN → …
+CONNECT → DIAG_HELLO → DIAG_CAPS ×4 → SESSION_BEGIN → …
 ```
 
 No idle HELLO spam. No heartbeat in P0. If needed later: separate `DIAG_HEARTBEAT`.
@@ -118,9 +118,17 @@ No idle HELLO spam. No heartbeat in P0. If needed later: separate `DIAG_HEARTBEA
 |-------|---------|
 | `a` | schema (`1`) |
 | `b` | profile / build id (`DIAG_PROFILE_COMPOSITE`, …) |
-| `flags` | `DIAG_CAP_SESSION \| TRANSACTION \| SNAPSHOT` (P0); TRACE/SCK_STATS bits when present |
+| `flags` | legacy uint8: `SESSION \| TRANSACTION \| SNAPSHOT \| TIMESTAMP` (P0/RC); TRACE/SCK_STATS when present |
+
+Full capability discovery is **`DIAG_CAPS`** (type 13): four sequence frames carrying little-endian `uint32` firmware bitset then `uint32` board bitset. Hosts **must** gate features on these masks, never on `bcdDevice` / firmware version alone. Unknown bits are ignored.
 
 **Not** USBasp `FUNC_GETCAPABILITIES` (127). Host must not guess features across hiduart generations.
+
+### Timestamp semantics (Timer1)
+
+Wire `timestamp` remains `uint16_t` (low 16 bits of the local Timer1 counter). Wrap is expected.
+
+Resolution is approximately **0.67 µs** at 12 MHz / ÷8. Observed event-to-event deltas include **firmware execution overhead** between `diag_now()` call sites — a delta of 12 ticks is not a claim that two physical edges were exactly 8 µs apart.
 
 ## Frame layout
 

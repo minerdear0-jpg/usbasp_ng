@@ -16,9 +16,11 @@ cargo build --release
 ./target/release/usbasp-ng-diag watch --file capture.bin
 ./target/release/usbasp-ng-diag watch --serial YEL0
 ./target/release/usbasp-ng-diag monitor YEL0
+./target/release/usbasp-ng-diag capabilities --demo capabilities_yel0
+./target/release/usbasp-ng-diag capabilities --serial YEL0
 ```
 
-TUI keys: `q` quit, `f` faults filter, `j`/`k` scroll, `g`/`G` top/bottom, `Space` follow.
+TUI keys: `q` quit, `f` faults filter, `c` capabilities panel, `j`/`k` scroll, `g`/`G` top/bottom, `Space` follow.
 
 Release asset: **`diagplane.bin`** (Linux x86-64, musl static) — same CLI. Build locally: `../../scripts/build-diagplane.sh`.
 
