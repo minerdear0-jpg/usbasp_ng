@@ -4,6 +4,7 @@
 
 #include "diag/diag.h"
 #include "diag/diag_ring.h"
+#include "diag/diag_clock.h"
 #include "usbasp/clock.h"
 #include "usbasp/isp.h"
 #include "usbasp/sck.h"
@@ -15,6 +16,8 @@
  * Lossy SPSC diagnostics ring. Overflow: drop + overflow_pending;
  * DIAG_TRACE_OVERFLOW is delivered from diag_poll_drain only (never
  * pushed while the ring is full).
+ *
+ * Timestamps: Timer1 monotonic diag_now(); P0/RC wire uses low 16 bits only.
  */
 
 static diag_frame_t diag_frames[DIAG_RING_SIZE];
@@ -22,8 +25,6 @@ static volatile uint8_t diag_head; /* next write */
 static volatile uint8_t diag_tail; /* next read */
 static uint8_t diag_dropped;      /* saturating 0..255 */
 static uint8_t diag_overflow_pending;
-static uint8_t diag_tick_hi;
-static uint8_t diag_tick_last;
 static uint8_t diag_reset_driven;
 static diag_snapshot_t diag_fault_snapshot;
 static uint8_t diag_sck_seen;
@@ -34,16 +35,6 @@ static uint8_t diag_mem_open;
 
 extern uchar requested_sck;
 extern uchar effective_sck;
-
-static uint16_t diag_now(void)
-{
-    uint8_t now = TIMERVALUE;
-
-    if (now < diag_tick_last)
-        diag_tick_hi++;
-    diag_tick_last = now;
-    return ((uint16_t)diag_tick_hi << 8) | now;
-}
 
 static uint8_t diag_ring_len(void)
 {
@@ -82,7 +73,7 @@ bool diag_try_emit(uint8_t type, uint8_t flags, uint8_t a, uint8_t b)
     diag_frame_t *f = &diag_frames[diag_head & (DIAG_RING_SIZE - 1)];
     f->type = type;
     f->flags = flags;
-    f->timestamp = diag_now();
+    f->timestamp = diag_now_wire16();
     f->a = a;
     f->b = b;
     diag_head++;
@@ -224,7 +215,7 @@ void diag_on_disconnect(void)
 uint8_t diag_poll_drain(uint8_t out[8])
 {
     diag_frame_t f;
-    uint16_t ts = diag_now();
+    uint16_t ts = diag_now_wire16();
 
     if (diag_ring_len() == 0) {
         if (!diag_overflow_pending)

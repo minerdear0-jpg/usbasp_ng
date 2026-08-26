@@ -12,9 +12,9 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 
-# CachyOS/Arch: avr-libc lives under /usr/lib/avr, while stock avr-gcc looks in /usr/avr.
+# CachyOS/Arch: avr-libc under /usr/lib/avr; stock avr-gcc looks in /usr/avr.
+# Include path here; per-MCU -B/-L for crt is applied in CMakeLists.txt after BOARD.
 if(EXISTS "/usr/lib/avr/include" AND NOT EXISTS "/usr/avr/include")
     include_directories(SYSTEM "/usr/lib/avr/include")
-    link_directories("/usr/lib/avr/lib" "/usr/lib/avr/lib/avr5")
-    add_link_options("-B/usr/lib/avr/lib/avr5")
+    set(USBASP_AVR_LIBC_PREFIX "/usr/lib/avr" CACHE INTERNAL "")
 endif()

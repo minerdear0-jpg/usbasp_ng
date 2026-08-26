@@ -27,6 +27,8 @@ Pipeline (iron rule):
 ISP timing → diag_try_emit() → RAM ring → hiduart_poll() → EP2 IN
 ```
 
+Timestamps come from Timer1 (`diag_clock` / `diag_now()`); P0/RC wire still carries **low 16 bits** only (`diag_now_wire16`). See [DIAGNOSTICS_PROBE.md](DIAGNOSTICS_PROBE.md).
+
 Never: `ISP timing → USB → pray`. EP1 UART bridge untouched. FUNC 1–16 / 127 unchanged. Telemetry is **not** part of the USBasp protocol.
 
 ## Three planes

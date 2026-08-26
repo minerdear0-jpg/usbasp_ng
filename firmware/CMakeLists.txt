@@ -19,6 +19,20 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD}.cmake")
 set(MCU ${USBASP_MCU})
 set(F_CPU ${USBASP_F_CPU})
 
+# Arch-specific crt/lib path when avr-libc is under /usr/lib/avr (no /usr/avr).
+if(USBASP_AVR_LIBC_PREFIX)
+    if(MCU STREQUAL "atmega328p" OR MCU STREQUAL "atmega328")
+        set(_usbasp_avr_ml "avr5")
+    else()
+        # atmega8 / atmega88 / …
+        set(_usbasp_avr_ml "avr4")
+    endif()
+    link_directories(
+        "${USBASP_AVR_LIBC_PREFIX}/lib/${_usbasp_avr_ml}"
+        "${USBASP_AVR_LIBC_PREFIX}/lib")
+    add_link_options("-B${USBASP_AVR_LIBC_PREFIX}/lib/${_usbasp_avr_ml}")
+endif()
+
 set(USBASP_SERIAL "0000" CACHE STRING "HIDUART USB iSerial, exactly 4 chars [A-Za-z0-9]")
 string(LENGTH "${USBASP_SERIAL}" _usbasp_serial_len)
 if(NOT _usbasp_serial_len EQUAL 4)
@@ -94,7 +108,7 @@ set(COMMON_SRC
     third_party/vusb/oddebug.c)
 
 if(USBASP_HAS_DIAG)
-    list(APPEND COMMON_SRC src/diag/diag.c)
+    list(APPEND COMMON_SRC src/diag/diag.c src/diag/diag_clock.c)
 endif()
 
 if(USBASP_HAS_HID_UART)

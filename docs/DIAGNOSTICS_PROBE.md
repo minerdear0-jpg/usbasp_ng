@@ -63,7 +63,9 @@ P0’s 6-byte `diag_frame` remains excellent for mega8 and for the RC wire. On U
 ```text
 semantic events (P0/RC — done)
       ↓
-monotonic timestamp (Timer1 logical time)
+monotonic timestamp (Timer1 logical time) — **module landed** (`diag_clock`)
+      ↓
+capability bits
       ↓
 event ring (always-on) + optional TRACE ring
       ↓
@@ -78,16 +80,13 @@ host record / replay
 TUI (Observe / Record / Analyze) — already started as `watch`
 ```
 
-### 1. Timestamped event engine
+### Timer1 clock (`diag_clock`) — PR-1 done
 
-Evolve beyond `t16 + a,b` toward a **monotonic 32-bit logical time** (Timer1-derived is enough; µs absolute not required). Timeline reads like a mini semantic analyzer:
-
-```text
-T=184203  RESET_ASSERT
-T=184421  SCK_CONFIG SW 32k
-T=185103  ENABLEPROG START
-T=185111  SPI TX AC …
-```
+- `diag_clock_init()` / `diag_now()` → `uint32_t` ticks; **no** Timer1 overflow ISR (lazy TOV under `cli`).
+- Prescaler `/8` @ 12 MHz → ≈0.667 µs/tick; 16-bit period ≈43.7 ms; soft epoch → ~40 min.
+- **Wire unchanged:** P0/RC still uses `diag_now_wire16()` (low 16 bits). Full T reserved for firmware / DIAG v2.
+- Must call `diag_now()` at least once per period while continuity matters (`diag_poll_drain` does).
+- Host model tests: `firmware/tests/core/test_diag_clock.py`.
 
 ### 2. Dual timestamp (firmware ↔ physical)
 

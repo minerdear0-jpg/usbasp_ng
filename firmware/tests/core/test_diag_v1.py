@@ -52,6 +52,17 @@ def main() -> int:
     assert "diag_memop_begin" in diag_c
     assert "diag_sck_seen" in diag_c
     assert "DIAG_TRANSPORT_SW" in diag_c
+    assert "diag_now_wire16" in diag_c
+    assert "diag_clock.h" in diag_c
+
+    clock_h = (FW / "include" / "diag" / "diag_clock.h").read_text()
+    assert "diag_tick_t" in clock_h
+    assert "diag_now_wire16" in clock_h
+    clock_c = (FW / "src" / "diag" / "diag_clock.c").read_text()
+    assert "TOIE1" in clock_c
+    assert "CS11" in clock_c
+    assert "SIGNAL(" not in clock_c
+    assert "ISR(" not in clock_c  # no overflow ISR vector
 
     isp = ISP.read_text()
     assert "diag_report_enableprog" in isp
