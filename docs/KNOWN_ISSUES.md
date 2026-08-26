@@ -18,7 +18,7 @@ PCs that previously used Zadig/libusbK for `16c0:05dc` may keep that association
 
 ## USBasp2 (ATmega328P programmer)
 
-**Status:** **beta.1 shipped** (`usbasp2-beta.1`). Lab default for Diagnostics Plane; board `usbasp-hiduart-atmega328p`. Dual-truth (EP2 + target UART / oracle) is a **lab method**, not a Windows ISP claim. Dual-column watch TUI is in beta.1. See [USBASP2.md](USBASP2.md), [RELEASE-USBASP2-BETA.md](RELEASE-USBASP2-BETA.md).
+**Status:** **beta.1 shipped** (`usbasp2-beta.1`). Lab default for Diagnostics Plane; board `usbasp-hiduart-atmega328p`. Dual-truth (EP2 + target UART / oracle) is a **lab method**, not a Windows ISP claim. Dual-column watch TUI is in beta.1. **mega8/88 HIDUART frozen** after beta.1 (compact only; no further USBasp2 attention). Next product packs: **classic** + **328P Diagplane**. See [USBASP2.md](USBASP2.md), [RELEASE-USBASP2-BETA.md](RELEASE-USBASP2-BETA.md).
 
 ## TPI
 

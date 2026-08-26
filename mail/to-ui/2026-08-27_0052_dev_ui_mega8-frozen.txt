@@ -1,0 +1,19 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 00:52 +0600
+Type: FYI
+Subject: [FYI] mega8 HIDUART frozen
+Re: 2026-08-27_0048_dev_ui_beta1-freeze.txt
+
+TL;DR
+  TUI/Diagplane target = только USBasp2 328P; mega8 HIDUART не трогаем.
+
+FACT
+  - dual-column в beta.1 остаётся
+  - demo/asciinema: YEL0 328P, не mega8 HIDUART stick
+
+DONT
+  - не закладывать UI на CAPS/trigger с compact mega8
+
+NEXT
+  - polish на 328P path

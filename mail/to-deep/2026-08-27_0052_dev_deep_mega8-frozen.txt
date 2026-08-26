@@ -1,0 +1,20 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:52 +0600
+Type: FYI
+Subject: [FYI] mega8 HIDUART frozen
+Re: 2026-08-27_0048_dev_deep_beta1-freeze.txt
+
+TL;DR
+  mega8 HIDUART больше не оптимизируем под USBasp2; клетка = 328P Diagplane.
+
+FACT
+  - beta.1 уже содержит compact mega8/88 HIDUART — остаётся для желающих пожать flash
+  - дальше product: classic (daily ISP) + USBasp2 328P + diagplane
+  - docs/RELEASE-USBASP2-BETA.md § ATmega8 HIDUART frozen
+
+DONT
+  - не ждать новых MEMOP/trigger grains на mega8 от dev@
+
+NEXT
+  - YEL0 / oracle / dual-truth без изменений

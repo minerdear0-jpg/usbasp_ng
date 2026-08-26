@@ -37,6 +37,18 @@ See [USBASP2.md](USBASP2.md) and [DIAGNOSTICS_PROBE.md](DIAGNOSTICS_PROBE.md).
 - Optiboot + oracle canary on the same hex / same flash ownership of `0x1E00`
 - mega8/88 HIDUART full lab grains (compact plane only; use **USBasp2 328P** for trigger / MEMOP PAGE / ISP_PINS)
 
+## Cage memory (USBasp2 → Канарейка)
+
+L1 on the ribbon is ordinary avrdude. beta.1 smoke (YEL0, `-p m8 -B 8`, **reads**):
+
+| Memory | Read | Write |
+|--------|------|-------|
+| flash (8 KiB) | yes | yes (`make flash` / hex); do not mix Optiboot + oracle canary |
+| eeprom (512 B) | yes | yes (lab: write + verify + restore PASS) |
+| lfuse / hfuse / lock | yes | possible; **do not blast** — oracle costume is `hfuse=0xC5` |
+
+Asciinema (TUI + those reads): [`docs/media/demo-diagplane-beta1.cast`](../docs/media/demo-diagplane-beta1.cast) — `asciinema play docs/media/demo-diagplane-beta1.cast`.
+
 ## Smoke checklist
 
 Lab stick serial often `YEL0` (local override); release EEPROM uses `0000`.
@@ -55,6 +67,18 @@ avrdude -c usbasp -P usb:YEL0 -p m8 -B 8 -U signature:r:-:h
 - Dual-column watch is in beta.1 (`watch --uart` / `--diag`+`--uart`); further polish may follow.
 - No bcdDevice bump beyond HIDUART 2.01; no DIAG v2 wire in this tag.
 
+## ATmega8 HIDUART — frozen after beta.1
+
+Fighting the mega8 flash/RAM wall for full Diagnostics Plane grains is **not** a USBasp2 priority.
+
+| Line | After beta.1 |
+|------|----------------|
+| **Classic** (`usbasp-atmega8-clone` / 88) | Kept — Windows / Arduino daily ISP |
+| **USBasp2 instrument** | **ATmega328P** + HIDUART + Diagplane only |
+| mega8/88 HIDUART | Shipped once in **beta.1** (compact plane); left in tree for anyone who wants to optimize; **no further product attention** |
+
+Next USBasp2-oriented packs ship **classic** + **328P Diagplane** (+ `diagplane.bin`), not mega8 HIDUART as a lab claim.
+
 ## Release assets
 
 Built with:
@@ -68,8 +92,8 @@ Built with:
 | `usbasp-ng-src-vusbasp2-beta.1.zip` | Source archive of tagged tree |
 | `usbasp-ng-classic-atmega8.hex` | Classic mega8 |
 | `usbasp-ng-classic-atmega88.hex` | Classic mega88 |
-| `usbasp-ng-hiduart-atmega8.hex` + `.eep` | mega8 HIDUART |
-| `usbasp-ng-hiduart-atmega88.hex` + `.eep` | mega88 HIDUART |
+| `usbasp-ng-hiduart-atmega8.hex` + `.eep` | mega8 HIDUART (**frozen** compact; last intentional ship) |
+| `usbasp-ng-hiduart-atmega88.hex` + `.eep` | mega88 HIDUART (**frozen** compact; last intentional ship) |
 | `usbasp-ng-hiduart-atmega328p.hex` + `.eep` | **USBasp2** lab image (`SERIAL=0000` in pack) |
 | `diagplane.bin` | Linux x86-64 host client |
 

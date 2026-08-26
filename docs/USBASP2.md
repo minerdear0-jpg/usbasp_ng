@@ -49,13 +49,17 @@ avrdude -c usbasp-clone -p m8 -U signature:r:-:h
 
 Measured 2026-08-26 (yellow **USBasp2** + **ATmega8 on Nano PCB** on ribbon): signature `-B 8` / `-B 22` PASS; fuses/flash read/EEPROM W+V+restore PASS; diag ENABLEPROG PASS; `-c usbasp` and `usbasp-clone` OK. Closes [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
 
+beta.1 recast (2026-08-27): signature `1E 93 07`, `lfuse=0xbf` `hfuse=0xc5` `lock=0xff`, eeprom 512 B read, flash 8 KiB read. TUI demo + this smoke: [`docs/media/demo-diagplane-beta1.cast`](media/demo-diagplane-beta1.cast).
+
 ## vs mega8 HIDUART
 
 | | mega8 HIDUART | **USBasp2** (328P) |
 |---|---|---|
-| Flash headroom | ~70 B left | tens of KiB free |
-| Role | legacy lab stick | preferred Diagnostics Plane stick |
-| Windows daily ISP | still use **classic** mega8 | same — classic for Windows |
+| Flash headroom | wall — compact plane only | tens of KiB free |
+| Role | **Frozen** after beta.1 (tree kept for optimizers) | **only** Diagnostics Plane instrument |
+| Windows daily ISP | use **classic** mega8 | same — classic for Windows |
+
+**Product freeze:** do not spend cycles expanding mega8 HIDUART grains for USBasp2. Post–beta.1 USBasp2 line = **classic** (daily ISP) + **328P Diagplane** (lab). See [RELEASE-USBASP2-BETA.md](RELEASE-USBASP2-BETA.md).
 
 TPI remains gated (`USBASP_HAS_TPI=0`) until tiny acceptance — extra flash does not by itself enable TPI.
 

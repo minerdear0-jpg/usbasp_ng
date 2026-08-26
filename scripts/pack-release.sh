@@ -11,7 +11,8 @@
 # Usage:
 #   ./scripts/pack-release.sh [VERSION] [--hex] [--diag]
 #   VERSION defaults to `git describe --tags --always`
-#   --hex  classic/HIDUART hex for atmega8 + atmega88 + atmega328p (USBasp2)
+#   --hex  classic (8/88) + USBasp2 328P HIDUART hex/eep
+#   --legacy-hiduart  also pack frozen mega8/88 HIDUART (beta.1-era; not roadmap)
 #   --diag portable Linux x86-64 host client → dist/diagplane.bin
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,11 +20,13 @@ cd "$ROOT"
 
 BUILD_HEX=0
 BUILD_DIAG=0
+LEGACY_HIDUART=0
 VERSION=""
 for arg in "$@"; do
   case "$arg" in
     --hex) BUILD_HEX=1 ;;
     --diag) BUILD_DIAG=1 ;;
+    --legacy-hiduart) LEGACY_HIDUART=1 ;;
     -*)
       echo "unknown option: $arg" >&2
       exit 2
@@ -66,14 +69,19 @@ echo "OK: $COUNT entries, no .git / build / object / hex junk"
 
 if [[ "$BUILD_HEX" -eq 1 ]]; then
   echo "==> firmware hex assets"
-  # Release names (stable public filenames) ← board profiles
+  # Post–beta.1 product pack: classic + USBasp2 328P Diagplane.
+  # mega8/88 HIDUART: frozen; opt-in via --legacy-hiduart.
   declare -a JOBS=(
     "usbasp-atmega8-clone|classic|usbasp|usbasp-ng-classic-atmega8.hex|"
     "usbasp-atmega88|classic|usbasp|usbasp-ng-classic-atmega88.hex|"
-    "usbasp-hiduart-atmega8|hiduart|usbasp-hiduart|usbasp-ng-hiduart-atmega8.hex|usbasp-ng-hiduart-atmega8.eep"
-    "usbasp-hiduart-atmega88|hiduart|usbasp-hiduart|usbasp-ng-hiduart-atmega88.hex|usbasp-ng-hiduart-atmega88.eep"
     "usbasp-hiduart-atmega328p|hiduart|usbasp-hiduart|usbasp-ng-hiduart-atmega328p.hex|usbasp-ng-hiduart-atmega328p.eep"
   )
+  if [[ "$LEGACY_HIDUART" -eq 1 ]]; then
+    JOBS+=(
+      "usbasp-hiduart-atmega8|hiduart|usbasp-hiduart|usbasp-ng-hiduart-atmega8.hex|usbasp-ng-hiduart-atmega8.eep"
+      "usbasp-hiduart-atmega88|hiduart|usbasp-hiduart|usbasp-ng-hiduart-atmega88.hex|usbasp-ng-hiduart-atmega88.eep"
+    )
+  fi
   for job in "${JOBS[@]}"; do
     IFS='|' read -r BOARD PROFILE HEX_STEM OUT_HEX OUT_EEP <<<"$job"
     SERIAL=0000
