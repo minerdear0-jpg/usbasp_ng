@@ -24,7 +24,7 @@ Details for the Arduino 6.3 failure: [ARDUINO.md](ARDUINO.md), [KNOWN_ISSUES.md]
 ## Acceptance (Win10/11 x64)
 
 1. Prefer a PC without a leftover libusb0/libusbK binding for `16c0:05dc` (or uninstall that OEM INF first).
-2. Flash **classic** (`usbasp.hex` from [releases](https://github.com/minerdear0-jpg/usbasp_ng/releases)), plug in.
+2. Flash **classic** (`usbasp-ng-classic-atmega8.hex` from [releases](https://github.com/minerdear0-jpg/usbasp_ng/releases); packaging: [RELEASE.md](RELEASE.md)), plug in.
 3. Device Manager: no unknown device; publisher **Microsoft**, driver **WinUSB**.
 4. `bcdDevice` **2.02** (2.00 = pre-WinUSB classic; HIDUART uses **2.01** — same VID/PID, separate Windows hardware ID by design).
 5. Modern avrdude: `avrdude -c usbasp -p atmega328p` (or `-c usbasp-clone`).
