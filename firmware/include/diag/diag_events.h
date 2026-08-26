@@ -18,6 +18,8 @@
 #define DIAG_ERROR                  11
 #define DIAG_MEMOP                  12  /* flash/eeprom/read block markers */
 #define DIAG_CAPS                   13  /* firmware + board capability bitsets */
+#define DIAG_TRACE_BEGIN            14  /* capture metadata: arm / slots */
+#define DIAG_TRACE_END              15  /* capture metadata: valid / overflow */
 
 /* DIAG_ERROR flags — ENABLEPROG attempt note (B8/B22 forensics) */
 #define DIAG_ERR_EP_AVR             0x01  /* check after AC 53 00 00 (expect 0x53) */

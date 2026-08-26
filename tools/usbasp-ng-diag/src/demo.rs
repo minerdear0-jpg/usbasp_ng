@@ -30,6 +30,34 @@ fn push_hello_caps(recs: &mut Vec<CaptureRecord>, ns: &mut u64, tick: u16) {
     for rep in caps_reports(YEL0_FCAP, YEL0_BCAP, tick + 1) {
         push(recs, ns, rep);
     }
+    // TRACE_BEGIN: slots=64, frame_size=6, state=ARMED, ts_mode=0
+    push(
+        recs,
+        ns,
+        report(TRACE_BEGIN, 0x01, tick + 5, 64, 6),
+    );
+}
+
+fn push_trace_end(
+    recs: &mut Vec<CaptureRecord>,
+    ns: &mut u64,
+    tick: u16,
+    valid: u16,
+    write_index: u16,
+    overflow: bool,
+) {
+    let vb = valid.to_le_bytes();
+    let wb = write_index.to_le_bytes();
+    push(
+        recs,
+        ns,
+        report(TRACE_END, EP_START, tick, vb[0], vb[1]),
+    );
+    let mut fl = EP_END;
+    if overflow {
+        fl |= 0x80;
+    }
+    push(recs, ns, report(TRACE_END, fl, tick + 1, wb[0], wb[1]));
 }
 
 pub fn list_scenarios() -> &'static [&'static str] {
@@ -101,7 +129,8 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(RESET, RESET_RELEASE, 150, 0, 0),
             );
-            push(&mut records, &mut ns, report(SESSION_END, 0, 151, 0, 0));
+            push_trace_end(&mut records, &mut ns, 151, 20, 24, false);
+            push(&mut records, &mut ns, report(SESSION_END, 0, 153, 0, 0));
         }
         "memop_flash" => {
             push_hello_caps(&mut records, &mut ns, 10);
@@ -145,7 +174,8 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(RESET, RESET_RELEASE, 50, 0, 0),
             );
-            push(&mut records, &mut ns, report(SESSION_END, 0, 51, 0, 0));
+            push_trace_end(&mut records, &mut ns, 51, 18, 22, false);
+            push(&mut records, &mut ns, report(SESSION_END, 0, 53, 0, 0));
         }
         "overflow" => {
             push_hello_caps(&mut records, &mut ns, 1);
@@ -155,7 +185,8 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(TRACE_OVERFLOW, 0, 11, 20, 0),
             );
-            push(&mut records, &mut ns, report(SESSION_END, 0, 12, 0, 0));
+            push_trace_end(&mut records, &mut ns, 12, 64, 90, true);
+            push(&mut records, &mut ns, report(SESSION_END, 0, 14, 0, 0));
         }
         "session_hw_pass" => {
             push_hello_caps(&mut records, &mut ns, 50);
@@ -187,7 +218,8 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(RESET, RESET_RELEASE, 80, 0, 0),
             );
-            push(&mut records, &mut ns, report(SESSION_END, 0, 81, 0, 0));
+            push_trace_end(&mut records, &mut ns, 81, 16, 20, false);
+            push(&mut records, &mut ns, report(SESSION_END, 0, 83, 0, 0));
         }
         "capabilities_yel0" => {
             push_hello_caps(&mut records, &mut ns, 1);
@@ -203,7 +235,8 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(RESET, RESET_RELEASE, 13, 0, 0),
             );
-            push(&mut records, &mut ns, report(SESSION_END, 0, 14, 0, 0));
+            push_trace_end(&mut records, &mut ns, 14, 12, 14, false);
+            push(&mut records, &mut ns, report(SESSION_END, 0, 16, 0, 0));
         }
         other => anyhow::bail!(
             "unknown scenario {other:?}; try: {}",

@@ -35,7 +35,8 @@ pub fn level_for(f: &DiagFrame) -> &'static str {
         TRACE_OVERFLOW => "warning",
         ERROR => "error",
         ENABLEPROG | FAULT_SNAPSHOT if f.flags & EP_FAIL != 0 => "error",
-        HELLO | SESSION_BEGIN | SESSION_END | RESET | SCK_CONFIG | CAPS => "info",
+        HELLO | SESSION_BEGIN | SESSION_END | RESET | SCK_CONFIG | CAPS | TRACE_BEGIN
+        | TRACE_END => "info",
         _ => "debug",
     }
 }

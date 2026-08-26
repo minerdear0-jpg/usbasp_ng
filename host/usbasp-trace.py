@@ -28,6 +28,8 @@ TYPES = {
     11: "ERROR",
     12: "MEMOP",
     13: "CAPS",
+    14: "TRACE_BEGIN",
+    15: "TRACE_END",
 }
 
 RESET_ASSERT = 0x01
@@ -138,6 +140,10 @@ def decode_frame(data: bytes) -> str:
         else:
             extra = f" {_seq_flags(flags)} {mem} b={b}"
     elif typ == 13:
+        extra = f" {_seq_flags(flags)} data={a:02x}{b:02x}"
+    elif typ == 14:
+        extra = f" slots={a} frame_size={b} state={flags & 0x0f}"
+    elif typ == 15:
         extra = f" {_seq_flags(flags)} data={a:02x}{b:02x}"
     return f"t={ts:5d} {name:16s} flags=0x{flags:02x} a={a:02x} b={b:02x}{extra}"
 

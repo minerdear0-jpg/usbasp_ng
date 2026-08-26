@@ -28,6 +28,8 @@ def main() -> int:
     assert d["DIAG_FAULT_SNAPSHOT"] == 9
     assert d["DIAG_MEMOP"] == 12
     assert d["DIAG_CAPS"] == 13
+    assert d["DIAG_TRACE_BEGIN"] == 14
+    assert d["DIAG_TRACE_END"] == 15
     assert d["DIAG_MEM_FLASH"] == 0
     assert d["DIAG_EP_START"] == 0x01
     assert d["DIAG_EP_CONT"] == 0x02
@@ -37,11 +39,19 @@ def main() -> int:
     assert d["DIAG_CAP_TRANSACTION"] == 0x02
     assert d["DIAG_CAP_SNAPSHOT"] == 0x04
     assert d["DIAG_CAP_TIMESTAMP"] == 0x20
+    assert d["DIAG_CAP_TRACE"] == 0x08
 
     events = EVENTS.read_text()
     assert "DIAG_FCAP_TIMESTAMP" in events
+    assert "DIAG_FCAP_TRACE" in events
     assert "BOARD_CAP_PHYSICAL_CAPTURE" in events
     assert "BOARD_CAP_SCK_JUMPER" in events
+
+    ring_h = (FW / "include" / "diag" / "diag_ring.h").read_text()
+    assert "USBASP_DIAG_TRACE_SLOTS" in ring_h
+    assert "diag_trace_push" in ring_h
+    assert "DIAG_CAP_STATE_ARMED" in ring_h
+    assert "diag_capture_meta_t" in ring_h
 
     diag_c = DIAG_C.read_text()
     assert "diag_emit_enableprog" in diag_c
@@ -50,7 +60,10 @@ def main() -> int:
     assert "memcpy(&diag_fault_snapshot" in diag_c
     assert "DIAG_CAP_TIMESTAMP" in diag_c
     assert "DIAG_CAPS" in diag_c
-    assert "DIAG_FCAP_SESSION | DIAG_FCAP_SNAPSHOT | DIAG_FCAP_TIMESTAMP" in diag_c
+    assert "DIAG_FCAP_TRACE" in diag_c
+    assert "DIAG_TRACE_BEGIN" in diag_c
+    assert "DIAG_TRACE_END" in diag_c
+    assert "diag_trace_arm" in diag_c
     assert "BOARD_CAP_SCK_JUMPER" in diag_c
     # Compact 4-frame FAULT_SNAPSHOT packing
     assert "sck_req << 4" in diag_c
@@ -59,12 +72,17 @@ def main() -> int:
 
     assert "diag_note_enableprog_try" in diag_c
     assert "DIAG_ERR_EP_AVR" in (FW / "include" / "diag" / "diag_events.h").read_text()
-    assert "DIAG_RING_SIZE 32" in (FW / "include" / "diag" / "diag_ring.h").read_text()
     assert "diag_memop_begin" in diag_c
     assert "diag_sck_seen" in diag_c
     assert "DIAG_TRANSPORT_SW" in diag_c
     assert "diag_now_wire16" in diag_c
     assert "diag_clock.h" in diag_c
+
+    trace_c = (FW / "src" / "diag" / "diag_trace.c").read_text()
+    assert "trace_overwrite_oldest" in trace_c
+    assert "DIAG_TRACE_OVERFLOW" in trace_c
+    assert "cli()" not in trace_c
+    assert "SIGNAL(" not in trace_c
 
     clock_h = (FW / "include" / "diag" / "diag_clock.h").read_text()
     assert "diag_tick_t" in clock_h

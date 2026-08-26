@@ -1,17 +1,40 @@
 #ifndef USBASP_DIAG_RING_H_
 #define USBASP_DIAG_RING_H_
 
+#include "usbasp_config.h"
+
 #include <stdint.h>
+#include <stdbool.h>
 
 /*
- * SPSC ring:
- *   producer = ISP / foreground vendor_isp context only
- *   consumer = diag_poll_drain() from main/poll loop
- *   no ISR producer in P0
+ * Unified lossy TRACE ring (one physical buffer).
+ *
+ * Execution ownership (P0 / RC):
+ *   producer = ISP / vendor_isp / diag_* in main context
+ *   consumer = diag_poll_drain() via hiduart_poll() in main context
+ *   neither side runs from a USB ISR — no cli() around the hot path.
+ *
+ * Policy: overwrite oldest when full; never block ISP/USB.
+ * TRACE_OVERFLOW is deferred until the next push that has space
+ * (never jammed into a full ring as an extra eviction).
  */
 
-/* Power of two. 32 absorbs ENABLEPROG+snapshot after last-try notes. */
-#define DIAG_RING_SIZE 32
+#ifndef USBASP_DIAG_TRACE_SLOTS
+#define USBASP_DIAG_TRACE_SLOTS 64
+#endif
+
+/* Power of two required (index mask). */
+#define DIAG_RING_SIZE USBASP_DIAG_TRACE_SLOTS
+
+#define DIAG_FRAME_WIRE_SIZE 6
+
+/* Capture lifecycle — trigger PR adds POST → FROZEN; this PR stays ARMED. */
+#define DIAG_CAP_STATE_IDLE    0
+#define DIAG_CAP_STATE_ARMED   1
+#define DIAG_CAP_STATE_POST    2 /* reserved */
+#define DIAG_CAP_STATE_FROZEN  3 /* reserved */
+
+#define DIAG_TS_MODE_TIMER1_WIRE16 0
 
 typedef struct {
     uint8_t type;
@@ -20,5 +43,27 @@ typedef struct {
     uint8_t a;
     uint8_t b;
 } diag_frame_t;
+
+typedef struct {
+    uint16_t slots;
+    uint16_t valid;
+    uint16_t write_index; /* cumulative pushes (wraps) */
+    uint8_t overflow;     /* sticky until TRACE_END reports it */
+    uint8_t state;
+} diag_capture_meta_t;
+
+#if USBASP_HAS_DIAG
+
+void diag_trace_init(void);
+void diag_trace_arm(void);   /* IDLE → ARMED, clear ring */
+void diag_trace_idle(void);  /* → IDLE after TRACE_END */
+
+bool diag_trace_push(const diag_frame_t *frame);
+void diag_trace_snapshot(diag_capture_meta_t *meta);
+
+/* Consumer for HID EP2 — same ownership as push (main). */
+uint8_t diag_trace_drain(uint8_t out[8]);
+
+#endif
 
 #endif

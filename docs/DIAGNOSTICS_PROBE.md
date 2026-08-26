@@ -63,30 +63,65 @@ P0’s 6-byte `diag_frame` remains excellent for mega8 and for the RC wire. On U
 ```text
 semantic events (P0/RC — done)
       ↓
-monotonic timestamp (Timer1 logical time) — **module landed** (`diag_clock`)
+monotonic timestamp (Timer1 logical time) — done (`diag_clock`)
       ↓
-capability bits
+capability bits — done (live YEL0 acceptance passed)
       ↓
-event ring (always-on) + optional TRACE ring
+unified TRACE ring + capture metadata — **this PR** (no trigger predicate)
       ↓
-trigger engine (e.g. ENABLEPROG_FAIL ∧ transport==SW)
+trigger engine (predicate only — ring already holds history)
       ↓
-pre/post freeze around trigger
+HID EP2 stream (versioned wire as needed)
       ↓
-HID EP2 stream (versioned wire)
-      ↓
-host record / replay
-      ↓
-TUI (Observe / Record / Analyze) — already started as `watch`
+host record / replay / TUI
 ```
 
-### Timer1 clock (`diag_clock`) — PR-1 done
+### Responsibility split (freeze)
+
+| Layer | Owns |
+|-------|------|
+| clock | time (`diag_now`) |
+| ring | history (one circular buffer) |
+| trigger | condition only (later) |
+| capture | lifecycle ARMED → POST → FROZEN |
+| HID | transport |
+| host | interpretation |
+| TUI | presentation |
+
+### Timer1 clock (`diag_clock`) — done
 
 - `diag_clock_init()` / `diag_now()` → `uint32_t` ticks; **no** Timer1 overflow ISR (lazy TOV under `cli`).
 - Prescaler `/8` @ 12 MHz → ≈0.667 µs/tick; 16-bit period ≈43.7 ms; soft epoch → ~40 min.
 - **Wire unchanged:** P0/RC still uses `diag_now_wire16()` (low 16 bits). Full T reserved for firmware / DIAG v2.
 - Must call `diag_now()` at least once per period while continuity matters (`diag_poll_drain` does).
 - Host model tests: `firmware/tests/core/test_diag_clock.py`.
+
+### Capabilities — done (gate TRACE on live check)
+
+Firmware advertises `DIAG_CAPS` (4 frames) after `HELLO`. Hosts gate features on bitsets, never `bcdDevice`.
+
+**Live acceptance (YEL0 after flash + replug)** — demo/golden is not enough:
+
+```bash
+SERIAL=YEL0 make -C firmware BOARD=usbasp-hiduart-atmega328p flash   # via no-dot / other USBasp
+# replug YEL0
+cargo run -p usbasp-ng-diag -- capabilities --serial YEL0
+```
+
+Expect strictly:
+
+| Field | Value |
+|-------|-------|
+| firmware | `0x00000007` |
+| board | `0x00000002` |
+| SESSION / SNAPSHOT / TIMESTAMP | ✓ |
+| TRACE / TRIGGER / PRETRIGGER / SCK_STATS | ✗ |
+| SCK_JUMPER | ✓ |
+| TARGET_UART / PHYSICAL_CAPTURE | ✗ |
+
+Also: old HELLO parsers must ignore the four unknown `DIAG_CAPS` frames without breaking CONNECT lifecycle.
+
+Do **not** start TRACE until this live row is green. *(Closed: firmware `0x07` → then TRACE PR advances mask to `0x0F`.)*
 
 ### 2. Dual timestamp (firmware ↔ physical)
 
@@ -99,27 +134,36 @@ FX2      SCK edge    T=123459   → Δ ≈ 2.7 µs
 
 That is engineering diagnosis, not printf.
 
-### 3. Dual rings + pre-trigger
+### 3. Unified TRACE ring — landed (no trigger predicate)
 
-Suggested SRAM split (illustrative, not a freeze):
+**One** circular buffer (`USBASP_DIAG_TRACE_SLOTS`, default **64**). Semantic P0 events and future raw ISP types share `diag_trace_push()` — not twin rings.
 
 ```text
-EVENT RING   ~256 semantic frames   always-on
-TRACE RING   ~512 B raw ISP         opt-in, circular
+diag_try_emit / trace_event  →  TRACE RING  →  diag_trace_drain  →  HID EP2
 ```
 
-On failure: **freeze**, keep N events **before** + M **after** trigger. First killer use-case historically: SW SCK ENABLEPROG (gate closed on USBasp2 for signature PASS; still the template for capture-mode science).
+- **Lossy:** overwrite oldest when full; never block ISP/USB.
+- **OVERFLOW:** sticky flag + deferred `TRACE_OVERFLOW` marker on the next roomy push (never jammed into a full ring as a self-eviction).
+- **Lifecycle:** `IDLE` ↔ `ARMED` only; `POST`/`FROZEN` reserved for trigger PR (ARMED never auto-freezes).
+- **Metadata:** `TRACE_BEGIN` (slots, frame_size, state) / `TRACE_END` (valid, write_index, overflow).
+- **Ownership:** producer and consumer both main-context (`hiduart_poll`); no `cli()` on the hot path.
+- Host: decode/replay keep `overflow=YES`; TUI shows TRACE slots + overflow.
 
-### 4. Trigger engine
+### 4. Trigger engine (after TRACE ring)
 
-Not `TRACE=everything`. Conditions such as:
+Not `TRACE=everything`. Predicate only; storage already exists:
 
 - `event == ENABLEPROG && result == FAIL`
 - `transport == SW`
 - `SCK_ID == 7` (`-B 22`)
 - combinations
 
-Probe becomes a **condition-triggered recorder**.
+```text
+TRACE RING (always running)
+     └── trigger predicate → capture lifecycle → FROZEN (pre-N / post-N)
+```
+
+First killer use-case historically: SW SCK ENABLEPROG (gate closed on USBasp2 for signature PASS; still the template for capture-mode science).
 
 ### 5. Raw ISP capture (bounded)
 
@@ -140,12 +184,14 @@ Two bitsets (LE `uint32`, advertised in `DIAG_CAPS` after HELLO):
 **Firmware (diagnostics):** `SESSION`, `SNAPSHOT`, `TIMESTAMP`, `TRACE`, `TRIGGER`, `PRETRIGGER`, `SCK_STATS`  
 **Board (physical):** `TARGET_UART`, `SCK_JUMPER`, `PHYSICAL_CAPTURE`
 
-Today (USBasp2 / YEL0): TIMESTAMP **yes**; TRACE/TRIGGER/PRETRIGGER **no**; `PHYSICAL_CAPTURE` **no** (honesty — not a logic analyzer). After TRACE lands, only the firmware mask grows; old hosts keep working by ignoring unknown bits.
+Today (USBasp2 / YEL0): TIMESTAMP **yes**; TRACE **yes** (ring + metadata); TRIGGER/PRETRIGGER **no**; `PHYSICAL_CAPTURE` **no**.
 
 ```text
 usbasp-ng-diag capabilities --demo capabilities_yel0
 usbasp-ng-diag capabilities --serial YEL0   # re-plug if EP2 already drained
 ```
+
+Expect after TRACE PR: firmware `0x0000000F`, TRACE ✓, TRIGGER ✗.
 
 ### Timestamp note
 
@@ -201,6 +247,7 @@ So ENABLEPROG, FAULT_SNAPSHOT, TRACE, TARGET_UART, SCK_STATS can grow without ye
 ## Immediate discipline
 
 1. **Do not** rewrite P0 on mega8 for this vision.  
-2. **Do** grow features behind `USBASP_HAS_DIAG` + future diag caps on **USBasp2** boards.  
+2. **Do** grow features behind `USBASP_HAS_DIAG` + diag caps on **USBasp2** boards.  
 3. **Do** keep L1 USBasp sacred.  
-4. Next concrete increments: ~~monotonic timestamp~~ → ~~capability bits~~ → optional TRACE ring → trigger/pre-trigger — each with host/decode parity and replay.
+4. **Do** pass live YEL0 `capabilities` acceptance before TRACE code. *(done)*  
+5. Next: **trigger predicate** only — ring + metadata already exist.

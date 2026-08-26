@@ -13,33 +13,21 @@
 #include <string.h>
 
 /*
- * Lossy SPSC diagnostics ring. Overflow: drop + overflow_pending;
- * DIAG_TRACE_OVERFLOW is delivered from diag_poll_drain only (never
- * pushed while the ring is full).
- *
- * Timestamps: Timer1 monotonic diag_now(); P0/RC wire uses low 16 bits only.
+ * Diagnostics plane on the unified TRACE ring.
+ * Timestamps: Timer1 via diag_now(); wire uses low 16 bits.
  */
 
-static diag_frame_t diag_frames[DIAG_RING_SIZE];
-static volatile uint8_t diag_head; /* next write */
-static volatile uint8_t diag_tail; /* next read */
-static uint8_t diag_dropped;      /* saturating 0..255 */
-static uint8_t diag_overflow_pending;
 static uint8_t diag_reset_driven;
 static diag_snapshot_t diag_fault_snapshot;
 static uint8_t diag_sck_seen;
 static uint8_t diag_sck_last;
 static uint8_t diag_tr_last;
-static uint8_t diag_mem_pages; /* saturating page-flush count for MEMOP END */
+static uint8_t diag_mem_pages;
 static uint8_t diag_mem_open;
+static uint8_t diag_trace_inited;
 
 extern uchar requested_sck;
 extern uchar effective_sck;
-
-static uint8_t diag_ring_len(void)
-{
-    return (uint8_t)(diag_head - diag_tail);
-}
 
 static uint8_t diag_transport(void)
 {
@@ -48,36 +36,51 @@ static uint8_t diag_transport(void)
         : (uint8_t)DIAG_TRANSPORT_HW;
 }
 
-static void diag_pack(uint8_t out[8], uint8_t type, uint8_t flags,
-                      uint16_t ts, uint8_t a, uint8_t b)
+static void diag_ensure_trace(void)
 {
-    out[0] = type;
-    out[1] = flags;
-    out[2] = (uint8_t)(ts & 0xff);
-    out[3] = (uint8_t)(ts >> 8);
-    out[4] = a;
-    out[5] = b;
-    out[6] = 0;
-    out[7] = prog_state;
+    if (diag_trace_inited)
+        return;
+    diag_trace_init();
+    diag_trace_inited = 1;
 }
 
 bool diag_try_emit(uint8_t type, uint8_t flags, uint8_t a, uint8_t b)
 {
-    if (diag_ring_len() >= DIAG_RING_SIZE) {
-        if (diag_dropped < 255)
-            diag_dropped++;
-        diag_overflow_pending = 1;
-        return false;
-    }
+    diag_frame_t f;
 
-    diag_frame_t *f = &diag_frames[diag_head & (DIAG_RING_SIZE - 1)];
-    f->type = type;
-    f->flags = flags;
-    f->timestamp = diag_now_wire16();
-    f->a = a;
-    f->b = b;
-    diag_head++;
-    return true;
+    diag_ensure_trace();
+    f.type = type;
+    f.flags = flags;
+    f.timestamp = diag_now_wire16();
+    f.a = a;
+    f.b = b;
+    return diag_trace_push(&f);
+}
+
+static void diag_emit_trace_begin(void)
+{
+    /* a=slots (u8 sat), b=wire frame size; flags=state|ts_mode<<4 */
+    uint8_t slots = (uint8_t)USBASP_DIAG_TRACE_SLOTS;
+    uint8_t fl = (uint8_t)(DIAG_CAP_STATE_ARMED
+        | ((uint8_t)DIAG_TS_MODE_TIMER1_WIRE16 << 4));
+
+    (void)diag_try_emit(DIAG_TRACE_BEGIN, fl, slots, DIAG_FRAME_WIRE_SIZE);
+}
+
+static void diag_emit_trace_end(void)
+{
+    diag_capture_meta_t meta;
+    uint8_t end_fl;
+
+    diag_trace_snapshot(&meta);
+    /* START: valid LE; END: write_index LE; overflow in bit7 (not state — avoids EP_START clash). */
+    (void)diag_try_emit(DIAG_TRACE_END, DIAG_EP_START,
+        (uint8_t)(meta.valid & 0xffu),
+        (uint8_t)((meta.valid >> 8) & 0xffu));
+    end_fl = (uint8_t)(DIAG_EP_END | (meta.overflow ? 0x80u : 0u));
+    (void)diag_try_emit(DIAG_TRACE_END, end_fl,
+        (uint8_t)(meta.write_index & 0xffu),
+        (uint8_t)((meta.write_index >> 8) & 0xffu));
 }
 
 void diag_emit_sck_config(void)
@@ -105,23 +108,17 @@ void diag_emit_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail
 
 void diag_publish_snapshot(const diag_snapshot_t *s)
 {
-    /* C3: copy immediately; never retain caller pointer.
-     * Compact 4-frame wire. Full TX/RX also on ENABLEPROG. */
     uint8_t end;
     memcpy(&diag_fault_snapshot, s, sizeof(diag_fault_snapshot));
 
-    /* F1: sck_req[7:4]|effective_sck[3:0], transport */
     (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_START,
         (uint8_t)((diag_fault_snapshot.sck_req << 4)
                   | (diag_fault_snapshot.effective_sck & 0x0fu)),
         diag_fault_snapshot.transport);
-    /* F2: RESET drive + FSM state */
     (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
         diag_fault_snapshot.reset_driven, diag_fault_snapshot.state);
-    /* F3: TX[0..1] (TX[2..3] usually 00 00 for ENABLEPROG) */
     (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
         diag_fault_snapshot.tx[0], diag_fault_snapshot.tx[1]);
-    /* F4: RX[0] + sw_delay; result in END|OK/FAIL */
     end = (uint8_t)(DIAG_EP_END
         | (diag_fault_snapshot.result ? DIAG_EP_RESULT_FAIL
                                       : DIAG_EP_RESULT_OK));
@@ -131,7 +128,6 @@ void diag_publish_snapshot(const diag_snapshot_t *s)
 
 void diag_note_enableprog_try(uint8_t path_flags, uint8_t check)
 {
-    /* SW forensics only — HW last-try notes fill the ring before PASS. */
     if (diag_transport() != DIAG_TRANSPORT_SW)
         return;
     (void)diag_try_emit(DIAG_ERROR, path_flags, check, sck_sw_delay);
@@ -139,7 +135,6 @@ void diag_note_enableprog_try(uint8_t path_flags, uint8_t check)
 
 void diag_memop_begin(uint8_t mem, uint8_t pagesize)
 {
-    /* avrdude often sets FIRST on every page; one START per open write. */
     if (diag_mem_open)
         return;
     diag_mem_open = 1;
@@ -151,7 +146,6 @@ void diag_memop_page(void)
 {
     if (diag_mem_pages < 255)
         diag_mem_pages++;
-    /* Emit per flush — LAST flag is unreliable across avrdude versions. */
     if (diag_mem_open) {
         (void)diag_try_emit(DIAG_MEMOP,
             (uint8_t)(DIAG_EP_END | DIAG_EP_RESULT_OK),
@@ -195,16 +189,19 @@ void diag_on_connect(void)
     uint32_t fcap;
     uint32_t bcap;
 
-    diag_sck_seen = 0; /* force SCK_CONFIG once per session */
+    diag_ensure_trace();
+    diag_trace_arm();
+
+    diag_sck_seen = 0;
     (void)diag_try_emit(
         DIAG_HELLO,
         (uint8_t)(DIAG_CAP_SESSION | DIAG_CAP_TRANSACTION | DIAG_CAP_SNAPSHOT
-                  | DIAG_CAP_TIMESTAMP),
+                  | DIAG_CAP_TIMESTAMP | DIAG_CAP_TRACE),
         DIAG_SCHEMA_V1,
         DIAG_PROFILE_COMPOSITE);
 
-    /* DIAG_CAPS: firmware u32 LE, then board u32 LE (4 frames). Not USBasp L1. */
-    fcap = DIAG_FCAP_SESSION | DIAG_FCAP_SNAPSHOT | DIAG_FCAP_TIMESTAMP;
+    fcap = DIAG_FCAP_SESSION | DIAG_FCAP_SNAPSHOT | DIAG_FCAP_TIMESTAMP
+        | DIAG_FCAP_TRACE;
     bcap = 0;
 #if USBASP_HAS_SCK_JUMPER
     bcap |= BOARD_CAP_SCK_JUMPER;
@@ -218,6 +215,8 @@ void diag_on_connect(void)
     (void)diag_try_emit(DIAG_CAPS, DIAG_EP_END,
         (uint8_t)((bcap >> 16) & 0xffu), (uint8_t)((bcap >> 24) & 0xffu));
 
+    diag_emit_trace_begin();
+
     (void)diag_try_emit(DIAG_SESSION_BEGIN, 0, requested_sck, effective_sck);
     diag_emit_sck_config();
     diag_reset_driven = DIAG_RESET_ASSERT;
@@ -226,30 +225,18 @@ void diag_on_connect(void)
 
 void diag_on_disconnect(void)
 {
-    diag_memop_end(DIAG_MEM_FLASH); /* close open write if LAST was missing */
+    diag_memop_end(DIAG_MEM_FLASH);
     diag_reset_driven = DIAG_RESET_RELEASE;
     (void)diag_try_emit(DIAG_RESET, DIAG_RESET_RELEASE, 0, 0);
+    diag_emit_trace_end();
     (void)diag_try_emit(DIAG_SESSION_END, 0, 0, 0);
+    diag_trace_idle();
 }
 
 uint8_t diag_poll_drain(uint8_t out[8])
 {
-    diag_frame_t f;
-    uint16_t ts = diag_now_wire16();
-
-    if (diag_ring_len() == 0) {
-        if (!diag_overflow_pending)
-            return 0;
-        diag_pack(out, DIAG_TRACE_OVERFLOW, 0, ts, diag_dropped, 0);
-        diag_dropped = 0;
-        diag_overflow_pending = 0;
-        return 1;
-    }
-
-    f = diag_frames[diag_tail & (DIAG_RING_SIZE - 1)];
-    diag_tail++;
-    diag_pack(out, f.type, f.flags, f.timestamp, f.a, f.b);
-    return 1;
+    diag_ensure_trace();
+    return diag_trace_drain(out);
 }
 
 #endif /* USBASP_HAS_DIAG */

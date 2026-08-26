@@ -3,6 +3,7 @@
 use crate::caps::CapsAdvert;
 use crate::decoder::{
     format_frame, reassemble_caps, reassemble_enableprog, reassemble_fault_snapshot,
+    reassemble_trace_end,
 };
 use crate::jsonl::{enableprog_failed, level_for, snapshot_failed, FaultStats};
 use crate::protocol::*;
@@ -42,9 +43,13 @@ pub struct AppState {
     pub hello_schema: Option<u8>,
     pub hello_profile: Option<u8>,
     pub hello_flags: Option<u8>,
+    pub trace_slots: Option<u8>,
+    pub trace_overflow: bool,
+    pub trace_end_line: Option<String>,
     ep_buf: Vec<DiagFrame>,
     snap_buf: Vec<DiagFrame>,
     caps_buf: Vec<DiagFrame>,
+    trace_end_buf: Vec<DiagFrame>,
     ep_ns: Vec<u64>,
     snap_ns: Vec<u64>,
 }
@@ -66,6 +71,13 @@ impl AppState {
         let is_fault = matches!(f.ty, ERROR | TRACE_OVERFLOW)
             || ((f.ty == ENABLEPROG || f.ty == FAULT_SNAPSHOT) && f.flags & EP_FAIL != 0);
 
+        if f.ty == TRACE_OVERFLOW {
+            self.trace_overflow = true;
+        }
+        if f.ty == TRACE_BEGIN {
+            self.trace_slots = Some(f.a);
+        }
+
         self.events.push(LogEvent {
             host_ns,
             text: format_frame(&f),
@@ -78,6 +90,7 @@ impl AppState {
                 self.snap_buf.clear();
                 self.snap_ns.clear();
                 self.caps_buf.clear();
+                self.trace_end_buf.clear();
                 self.ep_buf.push(f);
                 self.ep_ns.push(host_ns);
                 if self.ep_buf.len() == 4 {
@@ -99,6 +112,7 @@ impl AppState {
                 self.ep_buf.clear();
                 self.ep_ns.clear();
                 self.caps_buf.clear();
+                self.trace_end_buf.clear();
                 self.snap_buf.push(f);
                 self.snap_ns.push(host_ns);
                 if self.snap_buf.len() == 4 {
@@ -123,6 +137,7 @@ impl AppState {
                 self.ep_ns.clear();
                 self.snap_buf.clear();
                 self.snap_ns.clear();
+                self.trace_end_buf.clear();
                 self.caps_buf.push(f);
                 if self.caps_buf.len() == 4 {
                     if let Some(adv) = CapsAdvert::from_frames(&self.caps_buf) {
@@ -139,12 +154,40 @@ impl AppState {
                     self.caps_buf.clear();
                 }
             }
+            TRACE_END => {
+                self.ep_buf.clear();
+                self.ep_ns.clear();
+                self.snap_buf.clear();
+                self.snap_ns.clear();
+                self.caps_buf.clear();
+                self.trace_end_buf.push(f);
+                if self.trace_end_buf.len() == 2 {
+                    if let Some(line) = reassemble_trace_end(&self.trace_end_buf) {
+                        if self.trace_end_buf[1].flags & 0x80 != 0 {
+                            self.trace_overflow = true;
+                        }
+                        self.trace_end_line = Some(line.clone());
+                        self.events.push(LogEvent {
+                            host_ns,
+                            text: format!(">> {line}"),
+                            level: if self.trace_overflow {
+                                Level::Warn
+                            } else {
+                                Level::Info
+                            },
+                            is_fault: false,
+                        });
+                    }
+                    self.trace_end_buf.clear();
+                }
+            }
             _ => {
                 self.ep_buf.clear();
                 self.ep_ns.clear();
                 self.snap_buf.clear();
                 self.snap_ns.clear();
                 self.caps_buf.clear();
+                self.trace_end_buf.clear();
             }
         }
 
@@ -181,7 +224,8 @@ mod tests {
         let caps = st.caps.expect("CAPS in demo");
         assert_eq!(caps.firmware.0, YEL0_FCAP);
         assert!(caps.firmware.contains(DiagCaps::TIMESTAMP));
-        assert!(!caps.firmware.contains(DiagCaps::TRACE));
+        assert!(caps.firmware.contains(DiagCaps::TRACE));
+        assert!(!caps.firmware.contains(DiagCaps::TRIGGER));
     }
 
     #[test]
@@ -193,8 +237,29 @@ mod tests {
         let text = caps.format_report("USBASP2 DIAG v1");
         assert!(text.contains("✓ SESSION"));
         assert!(text.contains("✓ TIMESTAMP"));
-        assert!(text.contains("✗ TRACE"));
+        assert!(text.contains("✓ TRACE"));
+        assert!(text.contains("✗ TRIGGER"));
         assert!(text.contains("sck jumper        ✓"));
         assert!(text.contains("physical capture  ✗"));
+    }
+
+    #[test]
+    fn session_records_trace_meta() {
+        let cap = demo::build_scenario("session_hw_pass").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        assert_eq!(st.trace_slots, Some(64));
+        assert!(!st.trace_overflow);
+        let end = st.trace_end_line.expect("TRACE_END");
+        assert!(end.contains("overflow=no"));
+    }
+
+    #[test]
+    fn overflow_scenario_keeps_loss() {
+        let cap = demo::build_scenario("overflow").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        assert!(st.trace_overflow);
+        assert!(st.events.iter().any(|e| e.text.contains("TRACE_OVERFLOW")));
     }
 }

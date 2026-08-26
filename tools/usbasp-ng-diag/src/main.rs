@@ -18,7 +18,10 @@ mod usb;
 
 use caps::CapsAdvert;
 use capture::{write_header, CaptureFile, CaptureRecord};
-use decoder::{format_frame, reassemble_caps, reassemble_enableprog, reassemble_fault_snapshot};
+use decoder::{
+    format_frame, reassemble_caps, reassemble_enableprog, reassemble_fault_snapshot,
+    reassemble_trace_end,
+};
 use state::AppState;
 use jsonl::{
     emit_jsonl_frame, emit_jsonl_semantic, enableprog_failed, snapshot_failed, FaultStats,
@@ -311,6 +314,7 @@ fn print_capture(
     let mut ep_buf: Vec<DiagFrame> = Vec::new();
     let mut snap_buf: Vec<DiagFrame> = Vec::new();
     let mut caps_buf: Vec<DiagFrame> = Vec::new();
+    let mut te_buf: Vec<DiagFrame> = Vec::new();
     let mut ep_ns: Vec<u64> = Vec::new();
     let mut snap_ns: Vec<u64> = Vec::new();
     let mut prev_ns: Option<u64> = None;
@@ -374,6 +378,7 @@ fn print_capture(
                 snap_buf.clear();
                 snap_ns.clear();
                 caps_buf.clear();
+                te_buf.clear();
                 ep_buf.push(f);
                 ep_ns.push(rec.host_ns);
                 if ep_buf.len() == 4 {
@@ -408,6 +413,7 @@ fn print_capture(
                 ep_buf.clear();
                 ep_ns.clear();
                 caps_buf.clear();
+                te_buf.clear();
                 snap_buf.push(f);
                 snap_ns.push(rec.host_ns);
                 if snap_buf.len() == 4 {
@@ -445,6 +451,7 @@ fn print_capture(
                 ep_ns.clear();
                 snap_buf.clear();
                 snap_ns.clear();
+                te_buf.clear();
                 caps_buf.push(f);
                 if caps_buf.len() == 4 {
                     if let Some(line) = reassemble_caps(&caps_buf) {
@@ -460,12 +467,41 @@ fn print_capture(
                     caps_buf.clear();
                 }
             }
+            TRACE_END => {
+                ep_buf.clear();
+                ep_ns.clear();
+                snap_buf.clear();
+                snap_ns.clear();
+                caps_buf.clear();
+                te_buf.push(f);
+                if te_buf.len() == 2 {
+                    if let Some(line) = reassemble_trace_end(&te_buf) {
+                        match mode {
+                            OutMode::Human => println!("{:20}>> {line}", ""),
+                            OutMode::Jsonl => {
+                                let level = if te_buf[1].flags & 0x80 != 0 {
+                                    "warning"
+                                } else {
+                                    "info"
+                                };
+                                emit_jsonl_semantic(rec.host_ns, "trace_end", level, &line);
+                            }
+                            OutMode::Faults if te_buf[1].flags & 0x80 != 0 => {
+                                println!("{:20}>> {line}", "");
+                            }
+                            _ => {}
+                        }
+                    }
+                    te_buf.clear();
+                }
+            }
             _ => {
                 ep_buf.clear();
                 ep_ns.clear();
                 snap_buf.clear();
                 snap_ns.clear();
                 caps_buf.clear();
+                te_buf.clear();
             }
         }
     }
@@ -486,6 +522,7 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
     let mut ep_buf = Vec::new();
     let mut snap_buf = Vec::new();
     let mut caps_buf = Vec::new();
+    let mut te_buf = Vec::new();
     loop {
         match h
             .handle
@@ -514,6 +551,7 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
                         ENABLEPROG => {
                             snap_buf.clear();
                             caps_buf.clear();
+                            te_buf.clear();
                             ep_buf.push(f);
                             if ep_buf.len() == 4 {
                                 if let Some(line) = reassemble_enableprog(&ep_buf) {
@@ -525,6 +563,7 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
                         FAULT_SNAPSHOT => {
                             ep_buf.clear();
                             caps_buf.clear();
+                            te_buf.clear();
                             snap_buf.push(f);
                             if snap_buf.len() == 4 {
                                 if let Some(line) = reassemble_fault_snapshot(&snap_buf) {
@@ -536,6 +575,7 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
                         CAPS => {
                             ep_buf.clear();
                             snap_buf.clear();
+                            te_buf.clear();
                             caps_buf.push(f);
                             if caps_buf.len() == 4 {
                                 if let Some(line) = reassemble_caps(&caps_buf) {
@@ -544,10 +584,23 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
                                 caps_buf.clear();
                             }
                         }
+                        TRACE_END => {
+                            ep_buf.clear();
+                            snap_buf.clear();
+                            caps_buf.clear();
+                            te_buf.push(f);
+                            if te_buf.len() == 2 {
+                                if let Some(line) = reassemble_trace_end(&te_buf) {
+                                    println!("         >> {line}");
+                                }
+                                te_buf.clear();
+                            }
+                        }
                         _ => {
                             ep_buf.clear();
                             snap_buf.clear();
                             caps_buf.clear();
+                            te_buf.clear();
                         }
                     }
                 }

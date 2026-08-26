@@ -302,8 +302,14 @@ fn draw(f: &mut ratatui::Frame, ui: &Ui) {
             .as_ref()
             .map(|c| c.summary_line())
             .unwrap_or_else(|| "caps: —".into());
+        let slots = ui
+            .state
+            .trace_slots
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "—".into());
+        let ov = if ui.state.trace_overflow { "YES" } else { "no" };
         format!(
-            "ENABLEPROG PASS={} FAIL={}   SNAPSHOT FAIL={}   ERROR={}   OVERFLOW={} dropped={}\n{caps_line}",
+            "ENABLEPROG PASS={} FAIL={}   SNAPSHOT FAIL={}   ERROR={}   OVERFLOW={} dropped={}\n{caps_line}\nTRACE slots={slots}  overflow={ov}",
             s.enableprog_pass, s.enableprog_fail, s.snapshot_fail, s.errors, s.overflows, s.dropped
         )
     };

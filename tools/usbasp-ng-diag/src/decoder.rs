@@ -13,6 +13,8 @@ pub fn type_name(ty: u8) -> &'static str {
         ERROR => "ERROR",
         MEMOP => "MEMOP",
         CAPS => "CAPS",
+        TRACE_BEGIN => "TRACE_BEGIN",
+        TRACE_END => "TRACE_END",
         _ => "UNKNOWN",
     }
 }
@@ -92,6 +94,26 @@ pub fn format_frame(f: &DiagFrame) -> String {
         }
         CAPS => {
             extra = format!(" {} data={:02x}{:02x}", seq_flags(f.flags), f.a, f.b);
+        }
+        TRACE_BEGIN => {
+            let state = f.flags & 0x0f;
+            let ts_mode = f.flags >> 4;
+            extra = format!(
+                " slots={} frame_size={} state={} ts_mode={}",
+                f.a, f.b, state, ts_mode
+            );
+        }
+        TRACE_END => {
+            if f.flags & EP_END != 0 {
+                let wi = u16::from_le_bytes([f.a, f.b]);
+                let ov = if f.flags & 0x80 != 0 { "YES" } else { "no" };
+                extra = format!(" END write_index={wi} overflow={ov}");
+            } else if f.flags & EP_START != 0 {
+                let valid = u16::from_le_bytes([f.a, f.b]);
+                extra = format!(" START valid={valid}");
+            } else {
+                extra = format!(" {} data={:02x}{:02x}", seq_flags(f.flags), f.a, f.b);
+            }
         }
         _ => {}
     }
@@ -185,6 +207,23 @@ pub fn reassemble_fault_snapshot(frames: &[DiagFrame]) -> Option<String> {
         frames[2].b,
         frames[3].a,
         frames[3].b
+    ))
+}
+
+/// Reassemble TRACE_END pair into one human line.
+pub fn reassemble_trace_end(frames: &[DiagFrame]) -> Option<String> {
+    if frames.len() != 2 {
+        return None;
+    }
+    if frames[0].flags & EP_START == 0 || frames[1].flags & EP_END == 0 {
+        return None;
+    }
+    let valid = u16::from_le_bytes([frames[0].a, frames[0].b]);
+    let wi = u16::from_le_bytes([frames[1].a, frames[1].b]);
+    let ov = frames[1].flags & 0x80 != 0;
+    Some(format!(
+        "TRACE_END  valid={valid}  write_index={wi}  overflow={}",
+        if ov { "YES" } else { "no" }
     ))
 }
 
@@ -289,8 +328,8 @@ mod tests {
             .map(|r| DiagFrame::from_report(r).unwrap())
             .collect();
         let s = reassemble_caps(&frames).unwrap();
-        assert!(s.contains("firmware=0x00000007"));
+        assert!(s.contains("firmware=0x0000000f"));
         assert!(s.contains("board=0x00000002"));
-        assert!(s.contains("TIMESTAMP"));
+        assert!(s.contains("TRACE"));
     }
 }

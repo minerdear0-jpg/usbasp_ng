@@ -15,6 +15,8 @@ pub const TRACE_OVERFLOW: u8 = 10;
 pub const ERROR: u8 = 11;
 pub const MEMOP: u8 = 12;
 pub const CAPS: u8 = 13;
+pub const TRACE_BEGIN: u8 = 14;
+pub const TRACE_END: u8 = 15;
 
 pub const RESET_ASSERT: u8 = 0x01;
 pub const RESET_RELEASE: u8 = 0x02;
@@ -43,9 +45,12 @@ pub const HELLO_CAP_TRACE: u8 = 0x08;
 pub const HELLO_CAP_SCK_STATS: u8 = 0x10;
 pub const HELLO_CAP_TIMESTAMP: u8 = 0x20;
 
-/// HELLO flags for today's USBasp2 (SESSION|TRANSACTION|SNAPSHOT|TIMESTAMP).
-pub const HELLO_CAPS_YEL0: u8 =
-    HELLO_CAP_SESSION | HELLO_CAP_TRANSACTION | HELLO_CAP_SNAPSHOT | HELLO_CAP_TIMESTAMP;
+/// HELLO flags for today's USBasp2 (SESSION|TRANSACTION|SNAPSHOT|TIMESTAMP|TRACE).
+pub const HELLO_CAPS_YEL0: u8 = HELLO_CAP_SESSION
+    | HELLO_CAP_TRANSACTION
+    | HELLO_CAP_SNAPSHOT
+    | HELLO_CAP_TIMESTAMP
+    | HELLO_CAP_TRACE;
 
 pub const VID: u16 = 0x16c0;
 pub const PID: u16 = 0x05dc;

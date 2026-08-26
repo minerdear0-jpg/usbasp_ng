@@ -108,7 +108,7 @@ set(COMMON_SRC
     third_party/vusb/oddebug.c)
 
 if(USBASP_HAS_DIAG)
-    list(APPEND COMMON_SRC src/diag/diag.c src/diag/diag_clock.c)
+    list(APPEND COMMON_SRC src/diag/diag.c src/diag/diag_clock.c src/diag/diag_trace.c)
 endif()
 
 if(USBASP_HAS_HID_UART)

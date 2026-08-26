@@ -25,6 +25,7 @@ Preferred programmer for live telemetry: **[USBasp2](USBASP2.md)** (ATmega328P +
 | ENABLEPROG packing | **Four** 6-byte frames (`START`/`CONT`/`END\|RESULT`) |
 | FAULT_SNAPSHOT | **Four** compact frames; END carries `rx[0]` + `sw_delay` + OK/FAIL |
 | DIAG_CAPS | **Four** frames: firmware `uint32` LE + board `uint32` LE; gate features on bits, not version |
+| TRACE ring | One lossy overwrite buffer (`USBASP_DIAG_TRACE_SLOTS`); `TRACE_BEGIN`/`TRACE_END` metadata; no trigger yet |
 | Capture file | Optional **`USBDIAGv`** 16-byte header + `uint64_le host_ns` + 8-byte report; legacy (no header) still decodes |
 
 Ideal final function (TRIZ): *presentation works without the stick* — via `file` / `replay` / `demo` sources.
