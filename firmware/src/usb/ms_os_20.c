@@ -1,19 +1,29 @@
 /*
  * Classic USB device descriptor (bcdUSB 2.01 so Windows asks for BOS)
  * plus BOS + MS OS 2.0 WinUSB binding. One vendor interface, EP0 only.
- * Not the composite descriptor set.
+ *
+ * MS OS 2.0 for non-composite WinUSB: Set → Configuration subset →
+ * Function subset (IF0) → Compatible ID WINUSB → DeviceInterfaceGUID.
+ * See Microsoft OS 2.0 descriptors; Adafruit/WebUSB use the same nesting.
  */
 
 #include "usbasp/ms_os_20.h"
+#include "usbasp/usb_strings.h"
 
 #define USBDESCR_DEVICE_CAPABILITY_TYPE 0x10
 #define USBDESCR_DEVICE_CAPABILITY_PLATFORM 0x05
 #define MS_OS_20_SET_HEADER_DESCRIPTOR 0x00, 0x00
+#define MS_OS_20_SUBSET_HEADER_CONFIGURATION 0x01, 0x00
+#define MS_OS_20_SUBSET_HEADER_FUNCTION 0x02, 0x00
 #define MS_OS_20_FEATURE_COMPATIBLE_ID 0x03, 0x00
 #define MS_OS_20_FEATURE_REG_PROPERTY 0x04, 0x00
 #define MS_OS_20_REG_PROPERTY_REG_SZ 0x01, 0x00
 
-/* V-USB uses this when USB_CFG_DESCR_PROPS_DEVICE is USB_PROP_LENGTH(18). */
+/*
+ * Custom device descriptor (bcdUSB 2.01). String indices are USB_STR_*,
+ * not USB_CFG_DESCR_PROPS_STRING_* (those are V-USB property flags).
+ * Content still comes from USB_CFG_VENDOR_NAME / USB_CFG_DEVICE_NAME.
+ */
 PROGMEM const char usbDescriptorDevice[] = {
     18,
     USBDESCR_DEVICE,
@@ -25,9 +35,9 @@ PROGMEM const char usbDescriptorDevice[] = {
     (char)USB_CFG_VENDOR_ID,
     (char)USB_CFG_DEVICE_ID,
     USB_CFG_DEVICE_VERSION, /* bcdDevice 2.02 */
-    USB_CFG_DESCR_PROPS_STRING_VENDOR != 0 ? 1 : 0,
-    USB_CFG_DESCR_PROPS_STRING_PRODUCT != 0 ? 2 : 0,
-    0, /* iSerial none */
+    USB_STR_MANUFACTURER,
+    USB_STR_PRODUCT,
+    USB_STR_NONE, /* iSerial — classic has none */
     1,
 };
 
@@ -43,23 +53,44 @@ PROGMEM const char usbasp_bos_descriptor[USBASP_BOS_LEN] = {
     0xDF, 0x60, 0xDD, 0xD8, 0x89, 0x45, 0xC7, 0x4C,
     0x9C, 0xD2, 0x65, 0x9D, 0x9E, 0x64, 0x8A, 0x9F,
     0x00, 0x00, 0x03, 0x06,
-    0x9E, 0x00,
+    0xAE, 0x00, /* MS OS 2.0 set size */
     USBASP_MS_OS_VENDOR_CODE,
     0x00,
 };
 
-/* Device-level WINUSB + DeviceInterfaceGUID. wTotalLength 0x9E. */
+/*
+ * wTotalLength 0xAE =
+ *   0x0A set + 0x08 config + 0x08 function + 0x14 compat + 0x80 GUID
+ * config subset 0xA4, function subset 0x9C (IF0).
+ */
 PROGMEM const char usbasp_ms_os_20_set[USBASP_MS_OS_20_SET_LEN] = {
+    /* Set header */
     0x0A, 0x00,
     MS_OS_20_SET_HEADER_DESCRIPTOR,
     0x00, 0x00, 0x03, 0x06,
-    0x9E, 0x00,
+    0xAE, 0x00,
 
+    /* Configuration subset (index 0) */
+    0x08, 0x00,
+    MS_OS_20_SUBSET_HEADER_CONFIGURATION,
+    0x00,
+    0x00,
+    0xA4, 0x00,
+
+    /* Function subset — vendor IF0 */
+    0x08, 0x00,
+    MS_OS_20_SUBSET_HEADER_FUNCTION,
+    0x00,
+    0x00,
+    0x9C, 0x00,
+
+    /* Compatible ID */
     0x14, 0x00,
     MS_OS_20_FEATURE_COMPATIBLE_ID,
     'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 
+    /* DeviceInterfaceGUID REG_SZ */
     0x80, 0x00,
     MS_OS_20_FEATURE_REG_PROPERTY,
     MS_OS_20_REG_PROPERTY_REG_SZ,

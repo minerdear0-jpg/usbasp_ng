@@ -9,11 +9,27 @@
 
 uchar isp_hiaddr;
 
+/* Default: software transport. isp_bus_select_* keeps the triple consistent. */
 struct isp_transport isp_bus = {
     .transfer = ispTransmit_sw,
     .enable = isp_spi_hw_disable,
     .disable = isp_spi_hw_disable,
 };
+
+void isp_bus_select_hw(void)
+{
+    isp_bus.transfer = ispTransmit_hw;
+    isp_bus.enable = isp_spi_hw_enable;
+    isp_bus.disable = isp_spi_hw_disable;
+}
+
+void isp_bus_select_sw(void)
+{
+    /* enable == disable: ensure SPE off when entering SW bitbang. */
+    isp_bus.transfer = ispTransmit_sw;
+    isp_bus.enable = isp_spi_hw_disable;
+    isp_bus.disable = isp_spi_hw_disable;
+}
 
 void isp_out_set_bit(uchar bit)
 {

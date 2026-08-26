@@ -2,11 +2,17 @@
 
 Tracked for release notes. Compatibility contract remains [`COMPATIBILITY.md`](COMPATIBILITY.md).
 
+## Existing libusbK / libusb0 bindings (Windows)
+
+**Status:** host OS / driver-store behavior.
+
+PCs that previously used Zadig/libusbK for `16c0:05dc` may keep that association after flashing classic NG. Uninstall the device in Device Manager (delete driver if offered), remove the OEM INF if needed, then replug. Clean first-plug WinUSB does not guarantee migration on every machine.
+
 ## Classic WinUSB + Arduino IDE 1.8.19 (Windows)
 
 **Status:** host-tool limitation, not a firmware bug.
 
-Classic NG binds **Microsoft WinUSB** (BOS / MS OS 2.0). AVRDUDESS and avrdude **7.x / 8.x MSVC** work.
+Classic NG binds **Microsoft WinUSB** (BOS / MS OS 2.0: config → function IF0 → WINUSB). AVRDUDESS and avrdude **7.x / 8.x MSVC** work.
 
 Arduino IDE **1.8.19** still ships **avrdude 6.3-20190619**, which cannot open WinUSB:
 

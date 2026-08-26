@@ -26,9 +26,11 @@ Details for the Arduino 6.3 failure: [ARDUINO.md](ARDUINO.md), [KNOWN_ISSUES.md]
 1. Prefer a PC without a leftover libusb0/libusbK binding for `16c0:05dc` (or uninstall that OEM INF first).
 2. Flash **classic** (`usbasp.hex` from [releases](https://github.com/minerdear0-jpg/usbasp_ng/releases)), plug in.
 3. Device Manager: no unknown device; publisher **Microsoft**, driver **WinUSB**.
-4. `bcdDevice` **2.02** (2.00 = pre-WinUSB classic).
+4. `bcdDevice` **2.02** (2.00 = pre-WinUSB classic; HIDUART uses **2.01** — same VID/PID, separate Windows hardware ID by design).
 5. Modern avrdude: `avrdude -c usbasp -p atmega328p` (or `-c usbasp-clone`).
 6. Arduino: only after step 5’s avrdude is new enough — Tools → Programmer → **USBasp** → Burn Bootloader / Upload Using Programmer.
+
+**First-plug WinUSB** on a clean machine is not proof that every PC with an old USBasp OEM INF will migrate automatically. Existing libusbK/libusb0 associations for `16c0:05dc` may stick until the device (and optionally the OEM INF) is removed. That is Windows driver-store behavior, not an NG bug.
 
 Device Manager may still show the generic label **“WinUSB Device”**. That is Microsoft’s class name. USB product string remains `USBasp` (Bus reported device description). A custom INF just to rename the node is intentionally out of scope.
 

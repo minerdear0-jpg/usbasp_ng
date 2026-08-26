@@ -8,7 +8,7 @@
 #define USBDESCR_BOS 0x0F
 
 #define USBASP_BOS_LEN 0x21
-#define USBASP_MS_OS_20_SET_LEN 0x9E
+#define USBASP_MS_OS_20_SET_LEN 0xAE
 
 extern const char usbasp_bos_descriptor[USBASP_BOS_LEN] PROGMEM;
 extern const char usbasp_ms_os_20_set[USBASP_MS_OS_20_SET_LEN] PROGMEM;

@@ -35,6 +35,10 @@ struct isp_transport {
 
 extern struct isp_transport isp_bus;
 
+/* Keep transfer/enable/disable as one transport. SW enable clears HW SPI. */
+void isp_bus_select_hw(void);
+void isp_bus_select_sw(void);
+
 /* Hot path: same as 2011 function-pointer call sites. */
 #define ispTransmit (isp_bus.transfer)
 

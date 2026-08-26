@@ -49,6 +49,7 @@ test:
 	python3 tests/core/test_hiduart_desc.py
 	python3 tests/core/test_reference_not_built.py
 	python3 tests/core/test_classic_msos20.py
+	python3 tests/core/test_classic_device_strings.py
 	python3 tests/core/test_usb_descriptor_golden.py
 	python3 tests/core/test_board_fuses.py
 	python3 tests/core/test_requested_sck_writes.py
