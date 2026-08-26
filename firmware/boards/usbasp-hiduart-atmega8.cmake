@@ -1,4 +1,5 @@
-# Separate product: composite WCID + HID UART. Not an L0 topology match.
+# Separate product: composite WCID + HID. Research/dev image with Diagnostics Plane
+# (USBASP_HAS_DIAG). Not the Windows/Arduino default — use classic for that.
 set(USBASP_MCU atmega8)
 set(USBASP_F_CPU 12000000)
 set(USBASP_PROFILE hiduart)

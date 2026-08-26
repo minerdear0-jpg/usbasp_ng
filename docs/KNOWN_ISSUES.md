@@ -34,15 +34,11 @@ Composite device: prefer MinGW/libusb avrdude, or use **classic** for Arduino / 
 
 **Status:** product limit of the common PCB, not a firmware bug.
 
-Typical USBasp clone breakouts are **ISP 6-pin only** (MOSI/MISO/SCK/RST/VCC/GND). MCU USART **PD0/PD1** (TQFP 30–31) are **not** on that header. So:
+Typical USBasp clone breakouts are **ISP 6-pin only** (MOSI/MISO/SCK/RST/VCC/GND). MCU USART **PD0/PD1** (TQFP 30–31) are **not** on that header. So target-console wiring needs flying leads or a custom board.
 
-- HIDUART is a **USB↔USART bridge on the stick MCU pins**, not “serial over the ISP ribbon”.
-- Wiring a target’s `printf` UART to the stick needs flying leads to the TQFP (or a custom board). Loopback tests in this repo do the same (PD0–PD1 on the package).
-- Firmware may still use HIDUART for iSerial, Linux/macOS ISP, and optional stick-side diagnostics; it does **not** turn a stock clone into a plug-and-play target console.
+**HIDUART’s primary product goal is the Diagnostics Plane** (EP2 binary telemetry: SESSION / SCK / RESET / ENABLEPROG / fault snapshots) — independent of PD0/PD1 and of the USBasp wire protocol. See [DIAGNOSTICS.md](DIAGNOSTICS.md). USART bridge remains optional secondary hardware.
 
-Release default remains **classic**. SW SCK (`-B 22` / ~32 kHz ENABLEPROG) stays the open functional gate: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
-
-Future HIDUART research feature (not classic, not printf-on-AVR): binary **Diagnostics Plane** — [DIAGNOSTICS.md](DIAGNOSTICS.md). Independent of target UART bridge.
+Release default remains **classic**. SW SCK (`-B 22`) is target-dependent (Nano PASS / mega8 FAIL on the bench); capture still wanted: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
 
 ## USB execution model
 

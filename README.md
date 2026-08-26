@@ -12,23 +12,32 @@ Two separate firmware products. Same ISP/TPI wire protocol (L1/L2). Different US
 
 ```
 firmware
-   ├─ usbasp          classic — one vendor interface + WinUSB metadata, avrdude `-c usbasp`
-   └─ usbasp-hiduart  USBHID  — composite vendor + HID UART + WCID
+   ├─ usbasp          classic — drop-in programmer (WinUSB / Arduino)
+   └─ usbasp-hiduart  USBHID  — research/dev programmer + Diagnostics Plane
 ```
 
 | | Classic (`usbasp`) | USBHID (`usbasp-hiduart`) |
 |---|---|---|
-| USB shape | Vendor class `0xFF`, EP0 only, no serial; BOS + MS OS 2.0 → WinUSB | Composite: WinUSB vendor IF0 + HID UART (interrupt IN/OUT) |
+| USB shape | Vendor class `0xFF`, EP0 only, no serial; BOS + MS OS 2.0 → WinUSB | Composite: WinUSB vendor IF0 + HID (EP1 UART optional, **EP2 diagnostics**) |
 | Host programmer | Stock avrdude `-c usbasp` (libusb / WinUSB). Arduino IDE programmer **USBasp** | Same FUNC 1–16 / 127. Windows MSVC avrdude may not open composite — MinGW/libusb or use classic |
-| Extra function | Programmer only | HID↔USART on **PD0/PD1** (TQFP 30–31); 4-char iSerial in EEPROM. Stock clones do **not** bring those pins to the ISP header — target console needs flying wires or a custom PCB ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)) |
-| Size (ATmega8) | ~5358 B | ~6816 B |
-| Role | Default image: Windows 10/11 x64 without Zadig; Linux/macOS libusb | Same stick ISP + optional USART bridge when pins are accessible |
+| **Primary goal** | Reliable everyday ISP (zero telemetry cost) | **Diagnostics Plane** — binary programmer telemetry (SESSION, SCK HW/SW, RESET drive intent, ENABLEPROG TX/RX, fault snapshots) on EP2 without changing the USBasp protocol |
+| Secondary | — | iSerial in EEPROM; optional HID↔USART on PD0/PD1 (TQFP 30–31 — **not** on the stock ISP header; [KNOWN_ISSUES](docs/KNOWN_ISSUES.md)) |
+| Size (ATmega8) | ~5610 B | ~7886 B (`USBASP_HAS_DIAG=1`) |
+| Role | **Default release** for Windows 10/11 x64 + Arduino | Linux/macOS ISP + **instrumented** stick for SW-SCK / ENABLEPROG investigation |
 
-**Windows / Arduino:** flash **classic**. WinUSB + full ISP burn recorded in [`docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md`](docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md). Matrix: [`docs/WINDOWS.md`](docs/WINDOWS.md). Arduino notes: [`docs/ARDUINO.md`](docs/ARDUINO.md). Open: software SCK sweep [`docs/acceptance/ACCEPTANCE-SCK-SWEEP-001.md`](docs/acceptance/ACCEPTANCE-SCK-SWEEP-001.md). ARM64 is best-effort.
+**Windows / Arduino:** flash **classic**. WinUSB + full ISP burn: [`docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md`](docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md). Matrix: [`docs/WINDOWS.md`](docs/WINDOWS.md). Arduino: [`docs/ARDUINO.md`](docs/ARDUINO.md). Open gate: software SCK on some targets ([`ACCEPTANCE-SCK-SWEEP-001`](docs/acceptance/ACCEPTANCE-SCK-SWEEP-001.md)).
 
-USBHID adds HID UART; it is not required for Arduino. Classic must not grow HID, interrupt endpoints, or EEPROM serial. BOS/MS OS 2.0 on classic is host-driver metadata only ([`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)).
+Classic must not grow HID, interrupt endpoints, EEPROM serial, or diagnostics. BOS/MS OS 2.0 on classic is host-driver metadata only ([`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)).
 
-Use classic as the drop-in programmer. Use USBHID when you need HID UART / iSerial and can reach PD0/PD1. Release gate after RC1 protocol work: software SCK (~32 kHz / `-B 22`).
+**HIDUART purpose:** turn the stick into a **debuggable programmer** — firmware truth beside a scope/FX2 — not a target `printf` console on cheap clones. Design: [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md). Host lab tools: `host/usbasp-hidraw-log.py`, `host/usbasp-trace.py`, `host/usbasp-diag-monitor.py` (Rust client planned: [`docs/DIAGNOSTICS_CLIENT.md`](docs/DIAGNOSTICS_CLIENT.md)).
+
+```text
+# live ENABLEPROG / SCK / RESET stream (yellow HIDUART in USB)
+python3 host/usbasp-diag-monitor.py YEL0
+# other terminal:
+avrdude -c usbasp -p m328p -B 8  -U signature:r:-:h
+avrdude -c usbasp -p atmega8 -B 22 -U signature:r:-:h   # compare SW path
+```
 
 ## Build
 
@@ -94,7 +103,7 @@ Checklist: [`firmware/tests/compatibility/avrdude/hw-smoke-atmega8.txt`](firmwar
 avrdude -c usbasp -p atmega328p -U flash:w:firmware.hex:i
 ```
 
-From `firmware/`: `make flash` writes the hex onto a USBasp (J2 closed) using another USBasp. HIDUART `make flash` then writes EEPROM `SERIAL` in the same recipe — avrdude chip-erase wipes EEPROM on clones without EESAVE (`hfuse 0xd9`). Do not run `flash` and `eeprom` in parallel. Linux udev: [`host/udev/70-usbasp.rules`](host/udev/70-usbasp.rules) (`usb` for avrdude plus `hidraw` for HIDUART). Inspect: [`host/usb-inspect-usbasp.sh`](host/usb-inspect-usbasp.sh), [`host/usbaspctl.py`](host/usbaspctl.py) (`info`), [`host/usbasp-getcaps.py`](host/usbasp-getcaps.py). HIDUART status (hidraw, kernel stays on HID): [`host/usbasp-hiduart-status.py`](host/usbasp-hiduart-status.py). Loopback: [`host/usbasp-hiduart-loopback.py`](host/usbasp-hiduart-loopback.py) (TQFP pins 30–31).
+From `firmware/`: `make flash` writes the hex onto a USBasp (J2 closed) using another USBasp. HIDUART `make flash` then writes EEPROM `SERIAL` in the same recipe — avrdude chip-erase wipes EEPROM on clones without EESAVE (`hfuse 0xd9`). Do not run `flash` and `eeprom` in parallel. Linux udev: [`host/udev/70-usbasp.rules`](host/udev/70-usbasp.rules) (`usb` for avrdude plus `hidraw` for HIDUART). Inspect: [`host/usb-inspect-usbasp.sh`](host/usb-inspect-usbasp.sh), [`host/usbaspctl.py`](host/usbaspctl.py) (`info`), [`host/usbasp-getcaps.py`](host/usbasp-getcaps.py). Diagnostics (HIDUART EP2): [`host/usbasp-diag-monitor.py`](host/usbasp-diag-monitor.py), [`host/usbasp-hidraw-log.py`](host/usbasp-hidraw-log.py), [`host/usbasp-trace.py`](host/usbasp-trace.py). HIDUART status: [`host/usbasp-hiduart-status.py`](host/usbasp-hiduart-status.py). Optional USART loopback: [`host/usbasp-hiduart-loopback.py`](host/usbasp-hiduart-loopback.py) (TQFP 30–31).
 
 HIDUART image: on Windows use a **MinGW/libusb** avrdude, not the MSVC/libwinusb build.
 
@@ -108,7 +117,7 @@ See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md), [docs/KNOWN_ISSUES.md](docs/
 - GETCAPABILITIES = TPI + 3 MHz bit, **not** dioannidis clock bytes
 - Default SCK 1.5 MHz with auto-slowdown (same SETISPSCK wire)
 
-**Known issues:** [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Arduino notes; SW SCK wait-for-capture = release gate; HIDUART USART not on clone ISP header; TPI off). Protocol/FSM RC1: [docs/acceptance/RC1-PROTOCOL-FSM.md](docs/acceptance/RC1-PROTOCOL-FSM.md). Diagnostics plane: [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md), client: [docs/DIAGNOSTICS_CLIENT.md](docs/DIAGNOSTICS_CLIENT.md).
+**Known issues:** [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Arduino notes; SW SCK target-dependent — wait-for-capture; HIDUART USART not on clone ISP header; TPI off). Protocol/FSM RC1: [docs/acceptance/RC1-PROTOCOL-FSM.md](docs/acceptance/RC1-PROTOCOL-FSM.md). **HIDUART diagnostics:** [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md), client: [docs/DIAGNOSTICS_CLIENT.md](docs/DIAGNOSTICS_CLIENT.md).
 
 Hex for ATmega8 clone and HIDUART: [Releases](https://github.com/minerdear0-jpg/usbasp_ng/releases). Packaging rules: [`docs/RELEASE.md`](docs/RELEASE.md) (`./scripts/pack-release.sh VERSION --hex`).
 
