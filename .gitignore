@@ -4,5 +4,7 @@ build/
 *.eep
 *.map
 *.o
+__pycache__/
+*.pyc
 /dioannidis/
 /usbasp.2011-05-28/

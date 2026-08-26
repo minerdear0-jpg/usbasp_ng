@@ -22,12 +22,10 @@ This is **not** “needs Fischl 2011 firmware”. NG already has those USB strin
 ### Fixes (pick one)
 
 1. **Preferred:** use AVRDUDESS / standalone **avrdude 7.x or 8.x MSVC** for ISP (already proven on this bench).
-2. **Keep IDE 1.8:** replace the IDE’s avrdude with a modern MSVC build:
-   - Download [avrdude Windows x64](https://github.com/avrdudes/avrdude/releases) (`avrdude-v8.*-windows-x64.zip`).
-   - Backup, then overwrite:
-     - `C:\Program Files (x86)\Arduino\hardware\tools\avr\bin\avrdude.exe`
-     - and matching `avrdude.conf` under `...\avr\etc\` if the release ships one.
-   - Re-run Burn Bootloader with verbose upload enabled.
+2. **Keep IDE 1.8:** replace the IDE’s avrdude with a modern MSVC build using
+   [`arduino/replace-avrdude.ps1`](../arduino/replace-avrdude.ps1) (see [`arduino/README.md`](../arduino/README.md)),
+   or manually overwrite `hardware/tools/avr/bin/avrdude.exe` (+ `etc/avrdude.conf`) from
+   [avrdude Windows x64](https://github.com/avrdudes/avrdude/releases).
 3. **IDE 2.x:** nicer UI, but still check verbose for the **bundled** avrdude version. If it is still 6.3-era, apply the same replace or use AVRDUDESS.
 
 `-c usbasp-clone` only skips the Fischl string check. It does **not** make avrdude 6.3 speak WinUSB.

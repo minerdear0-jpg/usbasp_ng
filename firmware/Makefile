@@ -53,6 +53,7 @@ test:
 	python3 tests/core/test_board_fuses.py
 	python3 tests/core/test_requested_sck_writes.py
 	python3 tests/core/test_ms_os_vendor_code.py
+	python3 tests/core/test_has_tpi_gate.py
 	python3 ../host/test_usbaspctl_profile.py
 
 flash: hex

@@ -6,6 +6,7 @@
 
 #define USBASP_HAS_SCK_JUMPER @USBASP_HAS_SCK_JUMPER@
 #define USBASP_HAS_3MHZ       @USBASP_HAS_3MHZ@
+#define USBASP_HAS_TPI        @USBASP_HAS_TPI@
 #define USBASP_LED_STYLE      @USBASP_LED_STYLE@
 #define USBASP_HAS_HID_UART   @USBASP_HAS_HID_UART@
 /* Stringify board profile: "classic" or "hiduart" */

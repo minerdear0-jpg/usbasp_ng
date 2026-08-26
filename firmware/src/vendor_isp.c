@@ -150,7 +150,11 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         break;
 
     case USBASP_FUNC_GETCAPABILITIES:
+#if USBASP_HAS_TPI
         replyBuffer[0] = USBASP_CAP_TPI;
+#else
+        replyBuffer[0] = 0;
+#endif
         replyBuffer[1] = 0;
         replyBuffer[2] = 0;
 #if USBASP_HAS_3MHZ

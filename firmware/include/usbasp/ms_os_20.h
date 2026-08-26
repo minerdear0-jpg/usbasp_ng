@@ -3,10 +3,8 @@
 
 #include <avr/pgmspace.h>
 #include "usbdrv.h"
+#include "usbasp/ms_os_vendor.h"
 
-/* Microsoft OS 2.0 vendor bRequest. Not a USBasp FUNC (1–16 / 127). */
-#define USBASP_MS_OS_VENDOR_CODE 0x5D
-#define MS_OS_2_0_DESCRIPTOR_INDEX 0x07
 #define USBDESCR_BOS 0x0F
 
 #define USBASP_BOS_LEN 0x21

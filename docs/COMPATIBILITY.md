@@ -117,7 +117,7 @@ Classic:
 
 No dioannidis clock-id bits in byte 1. No HID flags in the avrdude bitmap.
 
-TPI (FUNC 11–16) is compiled and advertised (`USBASP_CAP_TPI`). It is **not** exercised on silicon in this repo yet (no tiny4/5/10 on the bench).
+TPI (FUNC 11–16) is compiled. GETCAPABILITIES advertises `USBASP_CAP_TPI` when the board profile sets `USBASP_HAS_TPI=1` (current boards). It is **not** exercised on silicon in this repo yet (no tiny4/5/10 on the bench). Flip `USBASP_HAS_TPI` to `0` only after a compatibility review if you must ship without the capability bit.
 
 ## What classic must not grow
 

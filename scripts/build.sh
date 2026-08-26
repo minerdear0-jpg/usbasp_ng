@@ -1,5 +1,7 @@
 #!/bin/sh
-# One-shot firmware build from the repo root. No Ninja required.
+# One-shot firmware build from the repo root.
+# Canonical build: CMake (firmware/CMakeLists.txt). This script and
+# firmware/Makefile are convenience wrappers only — do not diverge flags.
 # Full workflow (tests, flash, all boards): firmware/Makefile
 set -eu
 

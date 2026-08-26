@@ -1,15 +1,29 @@
-# Arduino IDE integration
+# Replace Arduino IDE avrdude with a WinUSB-capable build (Windows x64)
 
-USBasp NG is not an Arduino core. Use stock programmer **USBasp** and flash **classic** (`usbasp.hex`), not HIDUART.
+Arduino IDE 1.8.19 ships avrdude 6.3, which cannot open Microsoft WinUSB.
+USBasp NG classic needs avrdude 7+ / 8.x MSVC (or AVRDUDESS).
 
-See [docs/ARDUINO.md](../docs/ARDUINO.md) and [docs/WINDOWS.md](../docs/WINDOWS.md).
+## Quick path
 
-## Windows + WinUSB (classic)
+1. Download `avrdude-v8.*-windows-x64.zip` from
+   https://github.com/avrdudes/avrdude/releases
+2. Run PowerShell **as Administrator** (Program Files is protected):
 
-Device Manager should show Microsoft **WinUSB**. That is correct.
+```powershell
+cd path\to\usbasp_NG\arduino
+.\replace-avrdude.ps1 -ZipPath "$env:USERPROFILE\Downloads\avrdude-v8.0-windows-x64.zip"
+```
 
-Arduino IDE **1.8.19** ships **avrdude 6.3**, which cannot open WinUSB. Burn Bootloader then fails with `cannot query manufacturer` even though AVRDUDESS works. Fix the **IDE avrdude**, not the firmware — details in [docs/ARDUINO.md](../docs/ARDUINO.md) and [docs/KNOWN_ISSUES.md](../docs/KNOWN_ISSUES.md).
+3. Restart Arduino IDE. Enable verbose upload. Burn Bootloader / Upload Using Programmer.
+4. Confirm the log shows avrdude **7.x or 8.x**, not `6.3-20190619`.
 
-## Tools → Port
+Default IDE tools dir:
+`C:\Program Files (x86)\Arduino\hardware\tools\avr`
 
-Grayed out / no COM port is normal. Use **Upload Using Programmer** or **Burn Bootloader**, not the normal Upload button.
+Override with `-ArduinoAvrRoot "D:\Arduino\hardware\tools\avr"` if needed.
+
+The script backs up `bin\avrdude.exe` and `etc\avrdude.conf` to `*.bak-usbasp-ng` once.
+
+## Prefer not to touch Program Files?
+
+Use [AVRDUDESS](https://github.com/ZakKemble/AVRDUDESS) / standalone avrdude for ISP, and keep Arduino for editing only.

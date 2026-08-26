@@ -15,6 +15,7 @@
 #include <avr/eeprom.h>
 #include <avr/pgmspace.h>
 #include "usbasp_config.h"
+#include "usbasp/ms_os_vendor.h"
 
 #ifndef __HIDUART__
 #define __HIDUART__
@@ -22,7 +23,7 @@
 
 #define U162ARR(U16) {(U16) & 0xFF, (U16) >> 8}
 
-#define VENDOR_CODE                                    0x5D        /* Can be anything (0 - 255) */
+#define VENDOR_CODE USBASP_MS_OS_VENDOR_CODE
 
 #define USBDESCR_BOS                                   0x0F
 
@@ -31,7 +32,7 @@
 #define USBDESCR_DEVICE_CAPABILITY_CONTAINER_ID        0x04
 #define USBDESCR_DEVICE_CAPABILITY_PLATFORM            0x05
 
-#define MS_OS_2_0_DESCRIPTOR_INDEX                     0x07
+/* MS_OS_2_0_DESCRIPTOR_INDEX from usbasp/ms_os_vendor.h */
 #define MS_OS_20_SET_ALT_ENUMERATION                   0x08
 
 #define MS_OS_20_SET_HEADER_DESCRIPTOR                 0x00, 0x00

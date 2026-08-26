@@ -24,7 +24,7 @@ firmware
 | Size (ATmega8) | ~5358 B | ~6816 B |
 | Role | Default image: Windows 10/11 x64 without Zadig; Linux/macOS libusb | UART console on the same stick |
 
-**Windows / Arduino:** flash **classic**. Goal is Device Manager → Microsoft WinUSB, then `avrdude -c usbasp` and Arduino **USBasp** / Burn Bootloader — no Zadig, no libusbK, no INF. Details: [`docs/WINDOWS.md`](docs/WINDOWS.md), [`docs/ARDUINO.md`](docs/ARDUINO.md). ARM64 is best-effort.
+**Windows / Arduino:** flash **classic**. Goal is Device Manager → Microsoft WinUSB, then modern avrdude / AVRDUDESS, then Arduino **USBasp**. Matrix and troubleshooting: [`docs/WINDOWS.md`](docs/WINDOWS.md). Arduino 1.8 + avrdude 6.3: [`arduino/replace-avrdude.ps1`](arduino/replace-avrdude.ps1). ARM64 is best-effort.
 
 USBHID adds HID UART; it is not required for Arduino. Classic must not grow HID, interrupt endpoints, or EEPROM serial. BOS/MS OS 2.0 on classic is host-driver metadata only ([`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)).
 

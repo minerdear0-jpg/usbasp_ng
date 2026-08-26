@@ -19,7 +19,7 @@ avrdude: error: could not find USB device with vid=0x16c0 pid=0x5dc
 
 USB strings are already Fischl (`www.fischl.de` / `USBasp`). Do **not** roll back to pre-WinUSB classic or reinstall libusbK for this.
 
-**Workaround:** AVRDUDESS / standalone modern avrdude, or replace the IDE’s `hardware/tools/avr` avrdude with an 8.x MSVC build. See [`ARDUINO.md`](ARDUINO.md), [`WINDOWS.md`](WINDOWS.md).
+**Workaround:** AVRDUDESS / standalone modern avrdude, or run [`arduino/replace-avrdude.ps1`](../arduino/replace-avrdude.ps1). See [`ARDUINO.md`](ARDUINO.md), [`WINDOWS.md`](WINDOWS.md).
 
 ## Software SCK ENABLEPROG (`-B 22` / slow ids)
 
