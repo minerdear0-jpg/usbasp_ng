@@ -31,11 +31,10 @@ host/golden/diag/                    same fixtures (parity test)
 ```bash
 cd tools/usbasp-ng-diag && cargo build --release
 ./target/release/usbasp-ng-diag demo --list
-./target/release/usbasp-ng-diag demo enableprog_fail_sw
-./target/release/usbasp-ng-diag demo memop_flash --out /tmp/m.bin
-./target/release/usbasp-ng-diag replay /tmp/m.bin --speed 10
-./target/release/usbasp-ng-diag replay /tmp/m.bin --step
-./target/release/usbasp-ng-diag decode capture.bin
+./target/release/usbasp-ng-diag demo enableprog_fail_sw --faults
+./target/release/usbasp-ng-diag demo enableprog_fail_sw --jsonl | lnav
+./target/release/usbasp-ng-diag decode capture.bin --jsonl > capture.jsonl
+./target/release/usbasp-ng-diag decode capture.bin --faults
 ```
 
 ### Capture header (`USBDIAGv`)
@@ -51,13 +50,23 @@ cd tools/usbasp-ng-diag && cargo build --release
 
 `record` / `hidraw-log` write the header on new files. Decoders accept header or legacy.
 
-### lnav
+### lnav (direct)
 
 ```bash
-python3 host/usbasp-trace.py capture.bin --jsonl > capture.jsonl
-lnav -i tools/usbasp-ng-diag/lnav/usbasp_ng_diag.json
-lnav capture.jsonl
+# no intermediate file required
+cargo run --manifest-path tools/usbasp-ng-diag/Cargo.toml -- \
+  demo enableprog_fail_sw --jsonl | lnav
+
+# or from a capture
+cargo run --manifest-path tools/usbasp-ng-diag/Cargo.toml -- \
+  decode capture.bin --jsonl | lnav
 ```
+
+`--faults` shows ERROR / OVERFLOW / FAIL sequences + summary (human, not lnav).
+
+### Capture header note
+
+Python lab: `python3 host/usbasp-trace.py capture.bin --jsonl` or `--faults`.
 
 ## Layers L0–L3
 
@@ -74,7 +83,7 @@ L3 Presentation  stdout / JSON / TUI
 |------|--------|
 | Firmware PR1–PR3 + MEMOP | done |
 | Client P0 record/decode/monitor | done |
-| Client P1 replay/demo + header | done |
+| Client P1 replay/demo + header + `--jsonl`/`--faults` | done |
 | Golden parity Python↔Rust | `host/golden/diag/` |
 | Client P2 TUI | open |
 | FX2 physical oracle | open ([SOFTWARE_SCK.md](SOFTWARE_SCK.md)) |

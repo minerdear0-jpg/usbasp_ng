@@ -10,11 +10,23 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 mod capture;
 mod decoder;
 mod demo;
+mod jsonl;
 mod protocol;
 
 use capture::{write_header, CaptureFile, CaptureRecord};
 use decoder::{format_frame, reassemble_enableprog, reassemble_fault_snapshot};
+use jsonl::{
+    emit_jsonl_frame, emit_jsonl_semantic, enableprog_failed, snapshot_failed, FaultStats,
+};
 use protocol::*;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutMode {
+    Human,
+    Json,
+    Jsonl,
+    Faults,
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "usbasp-ng-diag", about = "USBasp NG Diagnostics Plane (DIAG v1)")]
@@ -28,30 +40,44 @@ enum Cmd {
     /// Decode a capture (.bin with optional USBDIAGv header)
     Decode {
         file: PathBuf,
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["jsonl", "faults"])]
         json: bool,
+        /// JSON Lines for lnav (pipe or redirect)
+        #[arg(long, conflicts_with_all = ["json", "faults"])]
+        jsonl: bool,
+        /// Fault-oriented human view + summary
+        #[arg(long, conflicts_with_all = ["json", "jsonl"])]
+        faults: bool,
     },
-    /// Replay a capture with timing (--speed / --step); no hardware
+    /// Replay a capture with timing; no hardware
     Replay {
         file: PathBuf,
-        /// Playback rate (1.0 = realtime host_ns deltas; 0 = as fast as possible)
         #[arg(long, default_value = "1.0")]
         speed: f64,
-        /// Wait for Enter between records
         #[arg(long)]
         step: bool,
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["jsonl", "faults"])]
         json: bool,
+        #[arg(long, conflicts_with_all = ["json", "faults"])]
+        jsonl: bool,
+        #[arg(long, conflicts_with_all = ["json", "jsonl"])]
+        faults: bool,
     },
     /// Synthetic scenarios (no stick)
     Demo {
-        /// Scenario name; omit with --list
         scenario: Option<String>,
         #[arg(long)]
         list: bool,
-        /// Write capture.bin (with header) instead of printing
+        /// Write capture.bin (USBDIAGv header)
         #[arg(long)]
         out: Option<PathBuf>,
+        #[arg(long, conflicts_with_all = ["jsonl", "faults"])]
+        json: bool,
+        /// Emit JSONL to stdout (lnav-ready): demo X --jsonl | lnav
+        #[arg(long, conflicts_with_all = ["json", "faults"])]
+        jsonl: bool,
+        #[arg(long, conflicts_with_all = ["json", "jsonl"])]
+        faults: bool,
     },
     /// Live EP2 → stdout
     Monitor {
@@ -68,39 +94,73 @@ enum Cmd {
     },
 }
 
+fn out_mode(json: bool, jsonl: bool, faults: bool) -> OutMode {
+    if jsonl {
+        OutMode::Jsonl
+    } else if faults {
+        OutMode::Faults
+    } else if json {
+        OutMode::Json
+    } else {
+        OutMode::Human
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
-        Cmd::Decode { file, json } => {
+        Cmd::Decode {
+            file,
+            json,
+            jsonl,
+            faults,
+        } => {
             let cap = CaptureFile::load(&file)?;
-            print_capture(&cap, json, None, false)
+            print_capture(&cap, out_mode(json, jsonl, faults), None, false)
         }
         Cmd::Replay {
             file,
             speed,
             step,
             json,
+            jsonl,
+            faults,
         } => {
             let cap = CaptureFile::load(&file)?;
-            print_capture(&cap, json, Some(speed), step)
+            print_capture(&cap, out_mode(json, jsonl, faults), Some(speed), step)
         }
         Cmd::Demo {
             scenario,
             list,
             out,
-        } => cmd_demo(scenario.as_deref(), list, out.as_ref()),
+            json,
+            jsonl,
+            faults,
+        } => cmd_demo(
+            scenario.as_deref(),
+            list,
+            out.as_ref(),
+            out_mode(json, jsonl, faults),
+        ),
         Cmd::Monitor { serial, json } => cmd_monitor(&serial, json),
         Cmd::Record { serial, out } => cmd_record(&serial, &out),
     }
 }
 
-fn cmd_demo(scenario: Option<&str>, list: bool, out: Option<&PathBuf>) -> Result<()> {
+fn cmd_demo(
+    scenario: Option<&str>,
+    list: bool,
+    out: Option<&PathBuf>,
+    mode: OutMode,
+) -> Result<()> {
     if list || scenario.is_none() && out.is_none() {
         for s in demo::list_scenarios() {
             println!("{s}");
         }
         if scenario.is_none() && !list {
-            eprintln!("usage: demo <scenario> [--out file.bin] | demo --list");
+            eprintln!(
+                "usage: demo <scenario> [--out file.bin] [--jsonl|--faults] | demo --list"
+            );
         }
         return Ok(());
     }
@@ -112,31 +172,40 @@ fn cmd_demo(scenario: Option<&str>, list: bool, out: Option<&PathBuf>) -> Result
             "wrote {path:?} ({} records, USBDIAGv header)",
             cap.records.len()
         );
-        return Ok(());
+        if mode == OutMode::Human {
+            return Ok(());
+        }
+        // allow --out together with --jsonl/--faults (print after write)
     }
-    print_capture(&cap, false, None, false)
+    print_capture(&cap, mode, None, false)
 }
 
 fn print_capture(
     cap: &CaptureFile,
-    json: bool,
+    mode: OutMode,
     speed: Option<f64>,
     step: bool,
 ) -> Result<()> {
-    if let Some(h) = &cap.header {
-        if !json {
+    if mode == OutMode::Human || mode == OutMode::Faults {
+        if let Some(h) = &cap.header {
             eprintln!(
                 "capture header: format={} schema={} record={}",
                 h.format_version, h.diag_schema, h.record_size
             );
+        } else {
+            eprintln!("capture header: (legacy, no USBDIAGv)");
         }
-    } else if !json {
-        eprintln!("capture header: (legacy, no USBDIAGv)");
+    }
+    if mode == OutMode::Faults {
+        println!("=== FAULT VIEW ===");
     }
 
-    let mut ep_buf = Vec::new();
-    let mut snap_buf = Vec::new();
+    let mut ep_buf: Vec<DiagFrame> = Vec::new();
+    let mut snap_buf: Vec<DiagFrame> = Vec::new();
+    let mut ep_ns: Vec<u64> = Vec::new();
+    let mut snap_ns: Vec<u64> = Vec::new();
     let mut prev_ns: Option<u64> = None;
+    let mut stats = FaultStats::default();
 
     for rec in &cap.records {
         if let Some(rate) = speed {
@@ -164,50 +233,114 @@ fn print_capture(
             continue;
         }
 
-        if json {
-            let v = serde_json::json!({
-                "host_ns": rec.host_ns,
-                "t_tick": f.timestamp,
-                "type": type_name_owned(f.ty),
-                "flags": f.flags,
-                "a": f.a,
-                "b": f.b,
-            });
-            println!("{v}");
-        } else {
-            println!("{}  {}", rec.host_ns, format_frame(&f));
+        stats.note_frame(&f);
+
+        match mode {
+            OutMode::Json => {
+                let v = serde_json::json!({
+                    "host_ns": rec.host_ns,
+                    "t_tick": f.timestamp,
+                    "type": type_name_owned(f.ty),
+                    "flags": f.flags,
+                    "a": f.a,
+                    "b": f.b,
+                });
+                println!("{v}");
+            }
+            OutMode::Jsonl => {
+                emit_jsonl_frame(rec.host_ns, &f);
+            }
+            OutMode::Human => {
+                println!("{}  {}", rec.host_ns, format_frame(&f));
+            }
+            OutMode::Faults => {
+                if matches!(f.ty, ERROR | TRACE_OVERFLOW) {
+                    println!("{}  {}", rec.host_ns, format_frame(&f));
+                }
+            }
         }
 
         match f.ty {
             ENABLEPROG => {
                 snap_buf.clear();
+                snap_ns.clear();
                 ep_buf.push(f);
+                ep_ns.push(rec.host_ns);
                 if ep_buf.len() == 4 {
+                    let fail = enableprog_failed(&ep_buf);
+                    stats.note_enableprog(fail);
                     if let Some(line) = reassemble_enableprog(&ep_buf) {
-                        if !json {
-                            println!("{:20}>> {line}", "");
+                        match mode {
+                            OutMode::Human => println!("{:20}>> {line}", ""),
+                            OutMode::Jsonl => {
+                                let level = if fail { "error" } else { "info" };
+                                emit_jsonl_semantic(
+                                    *ep_ns.last().unwrap_or(&rec.host_ns),
+                                    "enableprog",
+                                    level,
+                                    &line,
+                                );
+                            }
+                            OutMode::Faults if fail => {
+                                for (ns, fr) in ep_ns.iter().zip(ep_buf.iter()) {
+                                    println!("{ns}  {}", format_frame(fr));
+                                }
+                                println!("{:20}>> {line}", "");
+                            }
+                            _ => {}
                         }
                     }
                     ep_buf.clear();
+                    ep_ns.clear();
                 }
             }
             FAULT_SNAPSHOT => {
                 ep_buf.clear();
+                ep_ns.clear();
                 snap_buf.push(f);
+                snap_ns.push(rec.host_ns);
                 if snap_buf.len() == 4 {
+                    let fail = snapshot_failed(&snap_buf);
+                    if fail {
+                        stats.note_snapshot_fail();
+                    }
                     if let Some(line) = reassemble_fault_snapshot(&snap_buf) {
-                        if !json {
-                            println!("{:20}>> {line}", "");
+                        match mode {
+                            OutMode::Human => println!("{:20}>> {line}", ""),
+                            OutMode::Jsonl => {
+                                let level = if fail { "error" } else { "info" };
+                                emit_jsonl_semantic(
+                                    *snap_ns.last().unwrap_or(&rec.host_ns),
+                                    "fault_snapshot",
+                                    level,
+                                    &line,
+                                );
+                            }
+                            OutMode::Faults if fail => {
+                                for (ns, fr) in snap_ns.iter().zip(snap_buf.iter()) {
+                                    println!("{ns}  {}", format_frame(fr));
+                                }
+                                println!("{:20}>> {line}", "");
+                            }
+                            _ => {}
                         }
                     }
                     snap_buf.clear();
+                    snap_ns.clear();
                 }
             }
             _ => {
                 ep_buf.clear();
+                ep_ns.clear();
                 snap_buf.clear();
+                snap_ns.clear();
             }
         }
+    }
+
+    if mode == OutMode::Faults {
+        println!();
+        stats.print_summary();
     }
     Ok(())
 }

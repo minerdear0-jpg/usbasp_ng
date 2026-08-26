@@ -329,7 +329,15 @@ def main() -> int:
         action="store_true",
         help="with --jsonl: only ENABLEPROG / FAULT_SNAPSHOT summaries",
     )
+    ap.add_argument(
+        "--faults",
+        action="store_true",
+        help="fault-oriented view: ERROR/OVERFLOW/FAIL + summary",
+    )
     args = ap.parse_args()
+    if args.faults and args.jsonl:
+        print("error: use either --faults or --jsonl", file=sys.stderr)
+        return 2
 
     blob = args.capture.read_bytes()
     try:
@@ -350,46 +358,111 @@ def main() -> int:
     if len(blob) % rec != 0:
         print(f"warning: trailing {len(blob) % rec} bytes", file=sys.stderr)
 
+    if args.faults:
+        print("=== FAULT VIEW ===")
+
     ep_buf: list[bytes] = []
     snap_buf: list[bytes] = []
+    ep_ns: list[int] = []
+    snap_ns: list[int] = []
+    stats = {
+        "ep_pass": 0,
+        "ep_fail": 0,
+        "snap_fail": 0,
+        "errors": 0,
+        "overflows": 0,
+        "dropped": 0,
+    }
+
     for i in range(0, len(blob) - rec + 1, rec):
         (host_ns,) = struct.unpack_from("<Q", blob, i)
         data = blob[i + 8 : i + 16]
+        typ, flags = data[0], data[1]
+
+        if typ == 11:
+            stats["errors"] += 1
+        elif typ == 10:
+            stats["overflows"] += 1
+            stats["dropped"] += data[4]
+
         if args.jsonl:
             if not args.semantic_only:
                 emit_jsonl(host_ns, data)
+        elif args.faults:
+            if typ in (10, 11):
+                print(f"{host_ns}  {decode_frame(data)}")
         else:
             print(f"{host_ns}  {decode_frame(data)}")
 
-        if data[0] == 6:
+        if typ == 6:
             snap_buf.clear()
+            snap_ns.clear()
             ep_buf.append(data)
+            ep_ns.append(host_ns)
             if len(ep_buf) == 4:
+                line = reassemble_enableprog(ep_buf)
+                fail = bool(line and "FAIL" in line)
+                if fail:
+                    stats["ep_fail"] += 1
+                else:
+                    stats["ep_pass"] += 1
                 if args.jsonl:
                     d = reassemble_enableprog_dict(ep_buf)
                     if d:
                         emit_jsonl(host_ns, data, d)
-                else:
-                    line = reassemble_enableprog(ep_buf)
-                    if line:
-                        print(f"{'':20}>> {line}")
+                elif args.faults and fail and line:
+                    for ns, fr in zip(ep_ns, ep_buf):
+                        print(f"{ns}  {decode_frame(fr)}")
+                    print(f"{'':20}>> {line}")
+                elif not args.faults and not args.jsonl and line:
+                    print(f"{'':20}>> {line}")
                 ep_buf.clear()
-        elif data[0] == 9:
+                ep_ns.clear()
+        elif typ == 9:
             ep_buf.clear()
+            ep_ns.clear()
             snap_buf.append(data)
+            snap_ns.append(host_ns)
             if len(snap_buf) == 4:
+                line = reassemble_fault_snapshot(snap_buf)
+                fail = bool(line and "FAIL" in line)
+                if fail:
+                    stats["snap_fail"] += 1
                 if args.jsonl:
                     d = reassemble_fault_snapshot_dict(snap_buf)
                     if d:
                         emit_jsonl(host_ns, data, d)
-                else:
-                    line = reassemble_fault_snapshot(snap_buf)
-                    if line:
-                        print(f"{'':20}>> {line}")
+                elif args.faults and fail and line:
+                    for ns, fr in zip(snap_ns, snap_buf):
+                        print(f"{ns}  {decode_frame(fr)}")
+                    print(f"{'':20}>> {line}")
+                elif not args.faults and not args.jsonl and line:
+                    print(f"{'':20}>> {line}")
                 snap_buf.clear()
+                snap_ns.clear()
         else:
             ep_buf.clear()
+            ep_ns.clear()
             snap_buf.clear()
+            snap_ns.clear()
+
+    if args.faults:
+        print()
+        print("=== FAULT SUMMARY ===")
+        print(f"ENABLEPROG  PASS={stats['ep_pass']}  FAIL={stats['ep_fail']}")
+        print(f"FAULT_SNAPSHOT FAIL={stats['snap_fail']}")
+        print(f"ERROR notes={stats['errors']}")
+        print(
+            f"TRACE_OVERFLOW count={stats['overflows']}  "
+            f"dropped_sum={stats['dropped']}"
+        )
+        if (
+            stats["ep_fail"] == 0
+            and stats["snap_fail"] == 0
+            and stats["errors"] == 0
+            and stats["overflows"] == 0
+        ):
+            print("(no faults)")
     return 0
 
 
