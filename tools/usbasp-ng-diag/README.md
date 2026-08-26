@@ -17,10 +17,14 @@ cargo build --release
 ./target/release/usbasp-ng-diag watch --serial YEL0
 ./target/release/usbasp-ng-diag monitor YEL0
 ./target/release/usbasp-ng-diag capabilities --demo capabilities_yel0
-./target/release/usbasp-ng-diag capabilities --serial YEL0
+# live CAPS = ISP CONNECT (start this, then avrdude)
+./target/release/usbasp-ng-diag capabilities --serial YEL0 --timeout 30
 ```
 
 TUI keys: `q` quit, `f` faults filter, `c` capabilities panel, `j`/`k` scroll, `g`/`G` top/bottom, `Space` follow.
+
+Live `capabilities`: device on USB alone is not a diag session — see [ACCEPTANCE-DIAG-TRIGGER-001](../../docs/acceptance/ACCEPTANCE-DIAG-TRIGGER-001.md).
+
 
 Release asset: **`diagplane.bin`** (Linux x86-64, musl static) — same CLI. Build locally: `../../scripts/build-diagplane.sh`.
 

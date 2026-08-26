@@ -8,10 +8,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod caps;
 mod capture;
+mod correlate;
 mod decoder;
 mod demo;
 mod jsonl;
 mod protocol;
+mod scene;
 mod state;
 mod tui;
 mod usb;
@@ -95,17 +97,23 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
-    /// TUI watch: file / demo / live EP2
+    /// TUI watch: file / demo / live EP2 / JSONL
     Watch {
         /// Live USB iSerial (empty = first composite)
         #[arg(long, default_value = "")]
         serial: String,
         /// Load a capture.bin
-        #[arg(long, conflicts_with = "demo")]
+        #[arg(long, conflicts_with_all = ["demo", "diag"])]
         file: Option<PathBuf>,
         /// Load a demo scenario
-        #[arg(long, conflicts_with = "file")]
+        #[arg(long, conflicts_with_all = ["file", "diag"])]
         demo: Option<String>,
+        /// Programmer JSONL (`decode FILE --jsonl`)
+        #[arg(long, conflicts_with_all = ["file", "demo"])]
+        diag: Option<PathBuf>,
+        /// Target UART log — dual-column (RESET RELEASE ↔ READY)
+        #[arg(long)]
+        uart: Option<PathBuf>,
     },
     /// Record EP2 → .bin (writes USBDIAGv header)
     Record {
@@ -124,9 +132,21 @@ enum Cmd {
         /// Load a demo scenario
         #[arg(long, conflicts_with = "file")]
         demo: Option<String>,
-        /// Seconds to wait for DIAG_CAPS on live EP2 (reconnect if drained)
-        #[arg(long, default_value = "3")]
+        /// Seconds to wait for ISP CONNECT → DIAG_CAPS (not USB plug-in)
+        #[arg(long, default_value = "30")]
         timeout: u64,
+    },
+    /// Dual-truth timeline: EP2 JSONL ↔ oracle UART log (Timer1 path; no FX2 yet)
+    Correlate {
+        /// Programmer capture as JSONL (`decode FILE --jsonl`)
+        #[arg(long)]
+        diag: PathBuf,
+        /// Target UART log (`@TTTTTTTT EVENT,...` lines)
+        #[arg(long)]
+        uart: PathBuf,
+        /// JSON Lines instead of human table
+        #[arg(long)]
+        jsonl: bool,
     },
 }
 
@@ -183,15 +203,19 @@ fn main() -> Result<()> {
             serial,
             file,
             demo,
+            diag,
+            uart,
         } => {
-            let src = if let Some(path) = file {
+            let src = if let Some(path) = diag {
+                WatchSource::Jsonl(path)
+            } else if let Some(path) = file {
                 WatchSource::File(path)
             } else if let Some(name) = demo {
                 WatchSource::Demo(name)
             } else {
                 WatchSource::Live { serial }
             };
-            tui::run(src)
+            tui::run(src, uart)
         }
         Cmd::Record { serial, out } => cmd_record(&serial, &out),
         Cmd::Capabilities {
@@ -200,6 +224,15 @@ fn main() -> Result<()> {
             demo,
             timeout,
         } => cmd_capabilities(&serial, file.as_ref(), demo.as_deref(), timeout),
+        Cmd::Correlate { diag, uart, jsonl } => {
+            let events = correlate::correlate_files(&diag, &uart)?;
+            if jsonl {
+                correlate::emit_jsonl(&events);
+            } else {
+                correlate::emit_human(&events);
+            }
+            Ok(())
+        }
     }
 }
 
@@ -210,20 +243,31 @@ fn cmd_capabilities(
     timeout_s: u64,
 ) -> Result<()> {
     let mut st = AppState::default();
+    let device_label;
     if let Some(path) = file {
         let cap = CaptureFile::load(path)?;
         st.ingest_capture(&cap);
+        device_label = format!("file:{}", path.display());
     } else if let Some(name) = demo_name {
         let cap = demo::build_scenario(name)?;
         st.ingest_capture(&cap);
+        device_label = format!("demo:{name}");
     } else {
         let h = usb::open_composite(serial)?;
-        eprintln!(
-            "waiting up to {timeout_s}s for DIAG_CAPS on serial={:?} (re-plug if ring already drained)",
-            h.serial
-        );
+        device_label = h.serial.clone();
+        eprintln!("USBASP-NG DIAG v1");
+        eprintln!();
+        eprintln!("device:    {device_label}");
+        eprintln!("transport: HIDUART (EP2)");
+        eprintln!();
+        eprintln!("waiting for ISP session…");
+        eprintln!("  (DIAG_CAPS is emitted on avrdude CONNECT, not on USB plug-in)");
+        eprintln!("  start ISP within {timeout_s}s, e.g.:");
+        eprintln!("    avrdude -c usbasp -P usb:{device_label} -p m8 -B 8");
+        eprintln!();
         let deadline = SystemTime::now() + Duration::from_secs(timeout_s);
         let mut buf = [0u8; 8];
+        let mut saw_frame = false;
         while SystemTime::now() < deadline && st.caps.is_none() {
             match h
                 .handle
@@ -232,11 +276,19 @@ fn cmd_capabilities(
                 Ok(n) if n >= 6 => {
                     if let Some(f) = DiagFrame::from_report(&buf[..n]) {
                         if f.ty != 0 {
+                            saw_frame = true;
+                            if f.ty == HELLO {
+                                eprintln!("CONNECT / HELLO");
+                            }
                             let ns = SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
                                 .unwrap_or_default()
                                 .as_nanos() as u64;
                             st.push_frame(ns, f);
+                            if st.caps.is_some() {
+                                eprintln!("CAPABILITIES received");
+                                eprintln!();
+                            }
                         }
                     }
                 }
@@ -244,15 +296,71 @@ fn cmd_capabilities(
                 Err(e) => bail!("USB read: {e}"),
             }
         }
+        if st.caps.is_none() {
+            eprintln!("NO DIAG SESSION");
+            eprintln!("device present, ISP CONNECT not observed");
+            if saw_frame {
+                eprintln!("(saw other EP2 frames, but no DIAG_CAPS advertisement)");
+            }
+            eprintln!();
+            eprintln!("hint: keep this command running, then start avrdude;");
+            eprintln!("      or: --demo capabilities_yel0");
+            bail!("no DIAG_CAPS (no ISP diagnostic session)");
+        }
     }
 
     let Some(adv) = st.caps else {
-        bail!("no DIAG_CAPS advertisement seen (try --demo capabilities_yel0 or re-plug)");
+        bail!("no DIAG_CAPS advertisement seen");
     };
     let schema = st.hello_schema.unwrap_or(SCHEMA_V1);
-    let note = format!("USBASP-NG DIAG v{schema}");
-    println!("{}", adv.format_report(&note));
+    println!("USBASP-NG DIAG v{schema}");
+    if !device_label.is_empty() {
+        println!();
+        println!("device: {device_label}");
+    }
+    println!();
+    println!("CAPABILITIES");
+    println!("  firmware: 0x{:08x}", adv.firmware.0);
+    println!("  board:    0x{:08x}", adv.board.0);
+    println!();
+    // Checklist view (gate on bits, never version)
+    let f = adv.firmware;
+    let mark = |b: bool| if b { "✓" } else { "✗" };
+    println!("  TRACE       {}", mark(f.contains(caps::DiagCaps::TRACE)));
+    println!("  TRIGGER     {}", mark(f.contains(caps::DiagCaps::TRIGGER)));
+    println!(
+        "  PRETRIGGER  {}",
+        mark(f.contains(caps::DiagCaps::PRETRIGGER))
+    );
+    println!(
+        "  TIMESTAMP   {}",
+        mark(f.contains(caps::DiagCaps::TIMESTAMP))
+    );
+    println!(
+        "  SESSION     {}",
+        mark(f.contains(caps::DiagCaps::SESSION))
+    );
+    println!(
+        "  SNAPSHOT    {}",
+        mark(f.contains(caps::DiagCaps::SNAPSHOT))
+    );
+    println!();
+    let b = adv.board;
+    println!("BOARD");
+    println!(
+        "  target UART       {}",
+        mark(b.contains(caps::BoardCaps::TARGET_UART))
+    );
+    println!(
+        "  sck jumper        {}",
+        mark(b.contains(caps::BoardCaps::SCK_JUMPER))
+    );
+    println!(
+        "  physical capture  {}",
+        mark(b.contains(caps::BoardCaps::PHYSICAL_CAPTURE))
+    );
     if let Some(flags) = st.hello_flags {
+        println!();
         println!("HELLO.flags=0x{flags:02x}  (legacy compact; prefer DIAG_CAPS)");
     }
     Ok(())
@@ -474,19 +582,24 @@ fn print_capture(
                 snap_ns.clear();
                 caps_buf.clear();
                 te_buf.push(f);
-                if te_buf.len() == 2 {
+                if te_buf.len() == 4 {
                     if let Some(line) = reassemble_trace_end(&te_buf) {
                         match mode {
                             OutMode::Human => println!("{:20}>> {line}", ""),
                             OutMode::Jsonl => {
-                                let level = if te_buf[1].flags & 0x80 != 0 {
+                                let level = if te_buf[1].flags & 0x80 != 0
+                                    || te_buf[2].flags & 0x80 != 0
+                                {
                                     "warning"
                                 } else {
                                     "info"
                                 };
                                 emit_jsonl_semantic(rec.host_ns, "trace_end", level, &line);
                             }
-                            OutMode::Faults if te_buf[1].flags & 0x80 != 0 => {
+                            OutMode::Faults
+                                if te_buf[1].flags & 0x80 != 0
+                                    || te_buf[2].flags & 0x80 != 0 =>
+                            {
                                 println!("{:20}>> {line}", "");
                             }
                             _ => {}
@@ -589,7 +702,7 @@ fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
                             snap_buf.clear();
                             caps_buf.clear();
                             te_buf.push(f);
-                            if te_buf.len() == 2 {
+                            if te_buf.len() == 4 {
                                 if let Some(line) = reassemble_trace_end(&te_buf) {
                                     println!("         >> {line}");
                                 }

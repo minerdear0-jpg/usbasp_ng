@@ -308,8 +308,9 @@ fn draw(f: &mut ratatui::Frame, ui: &Ui) {
             .map(|s| s.to_string())
             .unwrap_or_else(|| "—".into());
         let ov = if ui.state.trace_overflow { "YES" } else { "no" };
+        let trig = if ui.state.trace_triggered { "YES" } else { "no" };
         format!(
-            "ENABLEPROG PASS={} FAIL={}   SNAPSHOT FAIL={}   ERROR={}   OVERFLOW={} dropped={}\n{caps_line}\nTRACE slots={slots}  overflow={ov}",
+            "ENABLEPROG PASS={} FAIL={}   SNAPSHOT FAIL={}   ERROR={}   OVERFLOW={} dropped={}\n{caps_line}\nTRACE slots={slots}  overflow={ov}  triggered={trig}",
             s.enableprog_pass, s.enableprog_fail, s.snapshot_fail, s.errors, s.overflows, s.dropped
         )
     };

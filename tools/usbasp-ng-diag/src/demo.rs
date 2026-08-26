@@ -45,19 +45,39 @@ fn push_trace_end(
     valid: u16,
     write_index: u16,
     overflow: bool,
+    triggered: bool,
+    trigger_kind: u8,
+    post_count: u8,
+    trigger_index: u16,
+    trigger_t: u16,
 ) {
     let vb = valid.to_le_bytes();
     let wb = write_index.to_le_bytes();
+    let ib = trigger_index.to_le_bytes();
     push(
         recs,
         ns,
         report(TRACE_END, EP_START, tick, vb[0], vb[1]),
     );
-    let mut fl = EP_END;
+    let mut fl1 = EP_CONT;
     if overflow {
-        fl |= 0x80;
+        fl1 |= 0x80;
     }
-    push(recs, ns, report(TRACE_END, fl, tick + 1, wb[0], wb[1]));
+    push(recs, ns, report(TRACE_END, fl1, tick + 1, wb[0], wb[1]));
+    let mut fl2 = EP_CONT;
+    if triggered {
+        fl2 |= 0x80;
+    }
+    push(
+        recs,
+        ns,
+        report(TRACE_END, fl2, tick + 2, trigger_kind, post_count),
+    );
+    push(
+        recs,
+        ns,
+        report(TRACE_END, EP_END, trigger_t, ib[0], ib[1]),
+    );
 }
 
 pub fn list_scenarios() -> &'static [&'static str] {
@@ -129,8 +149,20 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(RESET, RESET_RELEASE, 150, 0, 0),
             );
-            push_trace_end(&mut records, &mut ns, 151, 20, 24, false);
-            push(&mut records, &mut ns, report(SESSION_END, 0, 153, 0, 0));
+            push_trace_end(
+                &mut records,
+                &mut ns,
+                151,
+                20,
+                24,
+                false,
+                true,
+                3,
+                8,
+                18,
+                133,
+            );
+            push(&mut records, &mut ns, report(SESSION_END, 0, 160, 0, 0));
         }
         "memop_flash" => {
             push_hello_caps(&mut records, &mut ns, 10);
@@ -162,20 +194,74 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(MEMOP, EP_START, 40, MEM_FLASH, 128),
             );
-            for p in 1u8..=4 {
+            for p in 0u8..4 {
+                let addr = (p as u16) * 128;
                 push(
                     &mut records,
                     &mut ns,
-                    report(MEMOP, EP_END | EP_OK, 40 + p as u16, MEM_FLASH, p),
+                    report(
+                        MEMOP,
+                        EP_CONT | EP_OK,
+                        41 + p as u16,
+                        (addr >> 8) as u8,
+                        (addr & 0xff) as u8,
+                    ),
                 );
             }
             push(
                 &mut records,
                 &mut ns,
-                report(RESET, RESET_RELEASE, 50, 0, 0),
+                report(MEMOP, EP_END | EP_OK, 45, MEM_FLASH, 4),
             );
-            push_trace_end(&mut records, &mut ns, 51, 18, 22, false);
-            push(&mut records, &mut ns, report(SESSION_END, 0, 53, 0, 0));
+            /* Verify reads (coalesced READFLASH) — closes dangling write in firmware. */
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_START, 46, MEM_READFLASH, 128),
+            );
+            for p in 0u8..4 {
+                let addr = (p as u16) * 128;
+                push(
+                    &mut records,
+                    &mut ns,
+                    report(
+                        MEMOP,
+                        EP_CONT | EP_OK,
+                        47 + p as u16,
+                        (addr >> 8) as u8,
+                        (addr & 0xff) as u8,
+                    ),
+                );
+            }
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_END | EP_OK, 51, MEM_READFLASH, 4),
+            );
+            push_trace_end(
+                &mut records,
+                &mut ns,
+                52,
+                18,
+                22,
+                false,
+                false,
+                0,
+                0,
+                0,
+                0,
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(RESET, RESET_RELEASE, 56, 0, 0),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(ISP_PINS, PINS_AFTER_DISC | EP_OK, 57, 0x00, 0x00),
+            );
+            push(&mut records, &mut ns, report(SESSION_END, 0, 60, 0, 0));
         }
         "overflow" => {
             push_hello_caps(&mut records, &mut ns, 1);
@@ -185,7 +271,19 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(TRACE_OVERFLOW, 0, 11, 20, 0),
             );
-            push_trace_end(&mut records, &mut ns, 12, 64, 90, true);
+            push_trace_end(
+                &mut records,
+                &mut ns,
+                12,
+                64,
+                90,
+                true,
+                false,
+                0,
+                0,
+                0,
+                0,
+            );
             push(&mut records, &mut ns, report(SESSION_END, 0, 14, 0, 0));
         }
         "session_hw_pass" => {
@@ -218,7 +316,19 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(RESET, RESET_RELEASE, 80, 0, 0),
             );
-            push_trace_end(&mut records, &mut ns, 81, 16, 20, false);
+            push_trace_end(
+                &mut records,
+                &mut ns,
+                81,
+                16,
+                20,
+                false,
+                false,
+                0,
+                0,
+                0,
+                0,
+            );
             push(&mut records, &mut ns, report(SESSION_END, 0, 83, 0, 0));
         }
         "capabilities_yel0" => {
@@ -235,7 +345,19 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut ns,
                 report(RESET, RESET_RELEASE, 13, 0, 0),
             );
-            push_trace_end(&mut records, &mut ns, 14, 12, 14, false);
+            push_trace_end(
+                &mut records,
+                &mut ns,
+                14,
+                12,
+                14,
+                false,
+                false,
+                0,
+                0,
+                0,
+                0,
+            );
             push(&mut records, &mut ns, report(SESSION_END, 0, 16, 0, 0));
         }
         other => anyhow::bail!(

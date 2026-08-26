@@ -178,9 +178,13 @@ impl CapsAdvert {
     }
 }
 
-/// Current USBasp2 / YEL0 advertisement (TRACE ring on; no trigger yet).
-pub const YEL0_FCAP: u32 =
-    DiagCaps::SESSION | DiagCaps::SNAPSHOT | DiagCaps::TIMESTAMP | DiagCaps::TRACE;
+/// Current USBasp2 / YEL0 advertisement (TRACE + trigger/pretrigger; no SCK_STATS).
+pub const YEL0_FCAP: u32 = DiagCaps::SESSION
+    | DiagCaps::SNAPSHOT
+    | DiagCaps::TIMESTAMP
+    | DiagCaps::TRACE
+    | DiagCaps::TRIGGER
+    | DiagCaps::PRETRIGGER;
 pub const YEL0_BCAP: u32 = BoardCaps::SCK_JUMPER;
 
 /// Pack four DIAG_CAPS report payloads (8 bytes each) for demos / goldens.
@@ -241,15 +245,16 @@ mod tests {
             firmware: DiagCaps(YEL0_FCAP),
             board: BoardCaps(YEL0_BCAP),
         };
-        assert!(adv.firmware.contains(DiagCaps::TIMESTAMP));
         assert!(adv.firmware.contains(DiagCaps::TRACE));
-        assert!(!adv.firmware.contains(DiagCaps::TRIGGER));
+        assert!(adv.firmware.contains(DiagCaps::TRIGGER));
+        assert!(adv.firmware.contains(DiagCaps::PRETRIGGER));
+        assert!(!adv.firmware.contains(DiagCaps::SCK_STATS));
         assert!(adv.board.contains(BoardCaps::SCK_JUMPER));
         assert!(!adv.board.contains(BoardCaps::PHYSICAL_CAPTURE));
         let text = adv.format_report("USBASP2 DIAG v1");
         assert!(text.contains("✓ TIMESTAMP"));
         assert!(text.contains("✓ TRACE"));
-        assert!(text.contains("✗ TRIGGER"));
+        assert!(text.contains("✓ TRIGGER"));
         assert!(text.contains("physical capture  ✗"));
     }
 

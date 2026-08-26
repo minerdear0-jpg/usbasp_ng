@@ -15,6 +15,7 @@ pub fn type_name(ty: u8) -> &'static str {
         CAPS => "CAPS",
         TRACE_BEGIN => "TRACE_BEGIN",
         TRACE_END => "TRACE_END",
+        ISP_PINS => "ISP_PINS",
         _ => "UNKNOWN",
     }
 }
@@ -84,10 +85,21 @@ pub fn format_frame(f: &DiagFrame) -> String {
                 MEM_READFLASH => "READFLASH",
                 _ => "?",
             };
+            let res = if f.flags & EP_FAIL != 0 {
+                "FAIL"
+            } else if f.flags & EP_OK != 0 {
+                "OK"
+            } else {
+                ""
+            };
             if f.flags & EP_START != 0 {
                 extra = format!(" START {mem} pagesize={}", f.b);
+            } else if f.flags & EP_CONT != 0 {
+                /* CONT: a:b = page base address (low 16), not mem kind */
+                let addr = (u16::from(f.a) << 8) | u16::from(f.b);
+                extra = format!(" PAGE @0x{addr:04x} {res}");
             } else if f.flags & EP_END != 0 {
-                extra = format!(" END {mem} pages={}", f.b);
+                extra = format!(" END {mem} pages={} {res}", f.b);
             } else {
                 extra = format!(" {} {mem} b={}", seq_flags(f.flags), f.b);
             }
@@ -105,15 +117,48 @@ pub fn format_frame(f: &DiagFrame) -> String {
         }
         TRACE_END => {
             if f.flags & EP_END != 0 {
-                let wi = u16::from_le_bytes([f.a, f.b]);
-                let ov = if f.flags & 0x80 != 0 { "YES" } else { "no" };
-                extra = format!(" END write_index={wi} overflow={ov}");
+                let idx = u16::from_le_bytes([f.a, f.b]);
+                extra = format!(" END trigger_index={idx} trigger_t={}", f.timestamp);
             } else if f.flags & EP_START != 0 {
                 let valid = u16::from_le_bytes([f.a, f.b]);
                 extra = format!(" START valid={valid}");
+            } else if f.flags & EP_CONT != 0 {
+                extra = format!(
+                    " CONT data={:02x}{:02x} bit7={}",
+                    f.a,
+                    f.b,
+                    if f.flags & 0x80 != 0 { 1 } else { 0 }
+                );
             } else {
                 extra = format!(" {} data={:02x}{:02x}", seq_flags(f.flags), f.a, f.b);
             }
+        }
+        ISP_PINS => {
+            let res = if f.flags & EP_FAIL != 0 {
+                "FAIL"
+            } else if f.flags & EP_OK != 0 {
+                "OK"
+            } else {
+                "?"
+            };
+            let when = if f.flags & PINS_AFTER_DISC != 0 {
+                "after_disc"
+            } else {
+                "?"
+            };
+            /* a=DDR mask, b=PIN mask — PB2 RST, PB3 MOSI, PB4 MISO, PB5 SCK */
+            let bit = |v: u8, n: u8| if v & (1 << n) != 0 { '1' } else { '0' };
+            extra = format!(
+                " {when} {res} ddr=0x{:02x} pin=0x{:02x} rst_ddr={} mosi_ddr={} sck_ddr={} mosi={} miso={} sck={}",
+                f.a,
+                f.b,
+                bit(f.a, 2),
+                bit(f.a, 3),
+                bit(f.a, 5),
+                bit(f.b, 3),
+                bit(f.b, 4),
+                bit(f.b, 5),
+            );
         }
         _ => {}
     }
@@ -210,20 +255,34 @@ pub fn reassemble_fault_snapshot(frames: &[DiagFrame]) -> Option<String> {
     ))
 }
 
-/// Reassemble TRACE_END pair into one human line.
+/// Reassemble TRACE_END quartet into one human line.
 pub fn reassemble_trace_end(frames: &[DiagFrame]) -> Option<String> {
-    if frames.len() != 2 {
+    if frames.len() != 4 {
         return None;
     }
-    if frames[0].flags & EP_START == 0 || frames[1].flags & EP_END == 0 {
+    if frames[0].flags & EP_START == 0 || frames[3].flags & EP_END == 0 {
         return None;
     }
     let valid = u16::from_le_bytes([frames[0].a, frames[0].b]);
     let wi = u16::from_le_bytes([frames[1].a, frames[1].b]);
     let ov = frames[1].flags & 0x80 != 0;
+    let fired = frames[2].flags & 0x80 != 0;
+    let kind = frames[2].a;
+    let post = frames[2].b;
+    let tidx = u16::from_le_bytes([frames[3].a, frames[3].b]);
+    let tts = frames[3].timestamp;
+    let kind_name = match kind {
+        0 => "NONE",
+        1 => "EVENT_TYPE",
+        2 => "EVENT_TYPE_FLAGS",
+        3 => "ENABLEPROG_FAIL",
+        4 => "TRACE_OVERFLOW",
+        _ => "?",
+    };
     Some(format!(
-        "TRACE_END  valid={valid}  write_index={wi}  overflow={}",
-        if ov { "YES" } else { "no" }
+        "TRACE_END  valid={valid}  write_index={wi}  overflow={}  triggered={}  kind={kind_name}  trigger_index={tidx}  trigger_t={tts}  post={post}",
+        if ov { "YES" } else { "no" },
+        if fired { "YES" } else { "no" },
     ))
 }
 
@@ -328,8 +387,8 @@ mod tests {
             .map(|r| DiagFrame::from_report(r).unwrap())
             .collect();
         let s = reassemble_caps(&frames).unwrap();
-        assert!(s.contains("firmware=0x0000000f"));
+        assert!(s.contains("firmware=0x0000003f"));
         assert!(s.contains("board=0x00000002"));
-        assert!(s.contains("TRACE"));
+        assert!(s.contains("TRIGGER"));
     }
 }
