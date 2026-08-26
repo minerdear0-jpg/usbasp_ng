@@ -8,7 +8,12 @@
 #include "usbasp/board.h"
 
 uchar isp_hiaddr;
-uchar (*ispTransmit)(uchar) = ispTransmit_sw;
+
+struct isp_transport isp_bus = {
+    .transfer = ispTransmit_sw,
+    .enable = isp_spi_hw_disable,
+    .disable = isp_spi_hw_disable,
+};
 
 void isp_out_set_bit(uchar bit)
 {
@@ -115,11 +120,9 @@ uchar ispEnterProgrammingMode(void)
 
     while (sck >= USBASP_ISP_SCK_0_5) {
         ispSetSCKOption(sck);
-        uchar (*spiTx)(uchar) = ispTransmit;
+        uchar (*spiTx)(uchar) = isp_bus.transfer;
         board_led_isp_activity();
-
-        if (ispTransmit == ispTransmit_hw)
-            isp_spi_hw_enable();
+        isp_bus.enable();
 
         uchar tries = 3;
         do {
@@ -147,7 +150,7 @@ uchar ispEnterProgrammingMode(void)
                 return 0;
         } while (--tries);
 
-        isp_spi_hw_disable();
+        isp_bus.disable();
         if (jumper)
             break;
         if (sck <= USBASP_ISP_SCK_0_5)

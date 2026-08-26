@@ -1,3 +1,4 @@
+# Compatibility shim: CMake is canonical (see firmware/CMakeLists.txt).
 # Convenience wrapper: one board profile per configure.
 #   make BOARD=usbasp-atmega8-clone
 #   make BOARD=usbasp-hiduart-atmega8
@@ -46,6 +47,7 @@ test:
 	python3 tests/core/test_serial_eep.py
 	python3 tests/core/test_tpi.py
 	python3 tests/core/test_hiduart_desc.py
+	python3 tests/core/test_reference_not_built.py
 
 flash: hex
 	avrdude -c $(ISP) -p $(MCU) -U flash:w:$(BUILDDIR)/$(HEX_NAME).hex:i

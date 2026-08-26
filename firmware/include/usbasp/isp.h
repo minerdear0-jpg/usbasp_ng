@@ -23,6 +23,19 @@ uchar ispWriteFlash(unsigned long address, uchar data, uchar pollmode);
 uchar ispFlushPage(unsigned long address, uchar pollvalue);
 uchar ispReadFlash(unsigned long address);
 uchar ispWriteEEPROM(unsigned int address, uchar data);
-extern uchar (*ispTransmit)(uchar);
+
+typedef uchar (*isp_transfer_fn)(uchar);
+
+/* HW SPI vs software bitbang. Session code uses enable/disable, not SPCR. */
+struct isp_transport {
+    isp_transfer_fn transfer;
+    void (*enable)(void);
+    void (*disable)(void);
+};
+
+extern struct isp_transport isp_bus;
+
+/* Hot path: same as 2011 function-pointer call sites. */
+#define ispTransmit (isp_bus.transfer)
 
 #endif

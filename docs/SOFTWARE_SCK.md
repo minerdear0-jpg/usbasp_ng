@@ -2,7 +2,7 @@
 
 **Status:** RST PORTB RMW is `cli`/`SREG` (same as MOSI/SCK). **Bench 2026-08-26:** wrap did **not** change the symptom. Programmer yellow-dot HIDUART `YEL0`, target no-dot `1E 93 07`, JP3 open. `-B 8` / `-B 0.5` PASS; `-B 22` / `-B 50` still ENABLEPROG `0x01`. Bitbang algorithm unchanged. Next: waveform, not more IRQ wrapping.
 
-**Wanted:** a capture (FX2 `fx2lafw` / PulseView, or a third mega8 sniffer) of the same pair at **PASS `-B 8`** vs **FAIL `-B 22`**, if the RST wrap does not change the result. Attach it to issue #1 or open a PR.
+**Wanted:** a capture (FX2 `fx2lafw` / PulseView, or Nano 328P sniffer) of **PASS `-B 8`** vs **FAIL `-B 22`**. Attach to [issue #1](https://github.com/minerdear0-jpg/usbasp_ng/issues/1) or a PR.
 
 Review notes: [`reports/2026-08-26-master-review-2-rst-rmw.md`](../reports/2026-08-26-master-review-2-rst-rmw.md). Sample-MISO-before-SCK-rise matches Fischl 2011; that is not the bug to chase.
 
@@ -69,7 +69,7 @@ When the traces exist, score them (do not stop at “FAIL confirmed”):
 
 Checklist copy: [`reports/2026-08-26-sw-sck-capture-plan.md`](../reports/2026-08-26-sw-sck-capture-plan.md).
 
-Third mega8 sniffer in this tree: [`host/isp-sniffer/`](../host/isp-sniffer/README.md) (`plot_capture.py`). Do not flash the sniffer onto the two bench clones unless replacing NG.
+Third mega8 sniffer in this tree: [`host/isp-sniffer/`](../host/isp-sniffer/README.md) (`plot_capture.py`). Arduino Nano 328P is the intended third chip (keep its USB plugged). Do not flash the sniffer onto the two bench clones unless replacing NG.
 
 Cheap LA: sigrok `fx2lafw` + PulseView.
 

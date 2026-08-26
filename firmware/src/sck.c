@@ -52,7 +52,9 @@ void ispSetSCKOption(uchar option)
 #endif
 
     if (option >= USBASP_ISP_SCK_93_75) {
-        ispTransmit = ispTransmit_hw;
+        isp_bus.transfer = ispTransmit_hw;
+        isp_bus.enable = isp_spi_hw_enable;
+        isp_bus.disable = isp_spi_hw_disable;
         SPSR = 0;
         sck_sw_delay = 1;
 
@@ -81,7 +83,9 @@ void ispSetSCKOption(uchar option)
         }
     } else {
         SPCR = 0;
-        ispTransmit = ispTransmit_sw;
+        isp_bus.transfer = ispTransmit_sw;
+        isp_bus.enable = isp_spi_hw_disable;
+        isp_bus.disable = isp_spi_hw_disable;
         ISP_OUT &= ~(1 << ISP_SCK);
         sck_sw_delay = (uchar)(3u << (USBASP_ISP_SCK_32 - option));
     }
@@ -98,6 +102,6 @@ void isp_apply_host_sck(void)
 
 int isp_sck_is_8khz(void)
 {
-    return (ispTransmit == ispTransmit_sw)
+    return (isp_bus.transfer == ispTransmit_sw)
         && (sck_sw_delay == (uchar)(3u << (USBASP_ISP_SCK_32 - USBASP_ISP_SCK_8)));
 }

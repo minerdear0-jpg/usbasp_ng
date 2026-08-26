@@ -99,6 +99,8 @@ def test_enableprog_does_not_store_effective_as_requested():
     assert "isp_apply_host_sck" in sck
     assert "effective_sck = option" in sck
     assert "board_led_isp_activity" not in isp.split("ispTransmit_hw", 1)[1].split("ispEnterProgrammingMode", 1)[0]
+    assert "isp_bus.enable()" in isp
+    assert "if (ispTransmit == ispTransmit_hw)" not in isp
 
 
 def main():

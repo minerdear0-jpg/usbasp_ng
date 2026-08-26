@@ -40,4 +40,4 @@ avrdude -c usbasp -p atmega8 -B 8  -U signature:r:-:h    # PASS
 avrdude -c usbasp -p atmega8 -B 22 -U signature:r:-:h    # FAIL
 ```
 
-Need a third mega8 sniffer or FX2/`fx2lafw`. Do not flash the sniffer onto no-dot or yellow unless replacing NG.
+Need a third mega8 sniffer, **Arduino Nano 328P**, or FX2/`fx2lafw`. Do not flash the sniffer onto no-dot or yellow unless replacing NG.
