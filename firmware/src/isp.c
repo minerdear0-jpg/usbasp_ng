@@ -109,7 +109,7 @@ uchar ispEnterProgrammingMode(void)
     uchar check;
     uchar autoslow = 0;
     uchar jumper = (uchar)board_sck_jumper_slow();
-    uchar sck = prog_sck;
+    uchar sck = requested_sck;
 
     if (jumper) {
         sck = USBASP_ISP_SCK_8;

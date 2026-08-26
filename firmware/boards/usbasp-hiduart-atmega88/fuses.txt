@@ -1,0 +1,2 @@
+hfuse=0xdd
+lfuse=0xff

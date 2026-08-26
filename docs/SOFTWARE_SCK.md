@@ -29,7 +29,7 @@ Programmer = yellow-dot NG (classic or HIDUART). Target = no-dot mega8, J2 close
 
 Same FAIL on **classic L0** and **HIDUART**. It is not composite HID IRQ.
 
-JP3 applies 8 kHz on the **wire** without storing that id as the host SETISPSCK value (`prog_sck` requested vs `effective_sck` on the pins). Avrdude may still print 1.5 MHz after `-B 0.5` while the pins run ~8 kHz.
+JP3 applies 8 kHz on the **wire** without storing that id as the host SETISPSCK value (`requested_sck` vs `effective_sck` on the pins). Avrdude may still print 1.5 MHz after `-B 0.5` while the pins run ~8 kHz.
 
 ## What we already ruled out
 

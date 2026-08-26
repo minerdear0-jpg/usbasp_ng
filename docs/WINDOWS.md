@@ -44,4 +44,4 @@ Unchanged: libusb. BOS is ignored.
 
 ## Later
 
-A host `usbaspctl info` tool (VID/PID, profile, WinUSB vs composite) is useful for Windows support; it is not required for Arduino.
+A host `usbaspctl info` tool: [`host/usbaspctl.py`](../host/usbaspctl.py) (VID/PID, profile, WinUSB vs composite, GETCAPABILITIES).

@@ -7,9 +7,15 @@
 #include "usbasp/board.h"
 
 uchar sck_sw_delay;
+/*
+ * SCK ownership:
+ *   requested_sck  — last SETISPSCK from the host (AUTO allowed)
+ *   effective_sck  — id actually applied to the wire (after jumper / AUTO / autoslow)
+ * CONNECT / SETISPSCK / DISCONNECT must not write jumper or autoslow into requested_sck.
+ */
 uchar effective_sck = USBASP_ISP_SCK_1500;
 
-extern uchar prog_sck;
+extern uchar requested_sck;
 
 void isp_spi_hw_enable(void)
 {
@@ -97,7 +103,7 @@ void isp_apply_host_sck(void)
     if (board_sck_jumper_slow())
         ispSetSCKOption(USBASP_ISP_SCK_8);
     else
-        ispSetSCKOption(prog_sck);
+        ispSetSCKOption(requested_sck);
 }
 
 int isp_sck_is_8khz(void)

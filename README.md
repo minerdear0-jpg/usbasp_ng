@@ -94,7 +94,7 @@ Checklist: [`firmware/tests/compatibility/avrdude/hw-smoke-atmega8.txt`](firmwar
 avrdude -c usbasp -p atmega328p -U flash:w:firmware.hex:i
 ```
 
-From `firmware/`: `make flash` writes the hex onto a USBasp (J2 closed) using another USBasp. HIDUART `make flash` then writes EEPROM `SERIAL` in the same recipe — avrdude chip-erase wipes EEPROM on clones without EESAVE (`hfuse 0xd9`). Do not run `flash` and `eeprom` in parallel. Linux udev: [`host/udev/70-usbasp.rules`](host/udev/70-usbasp.rules) (`usb` for avrdude plus `hidraw` for HIDUART). Inspect: [`host/usb-inspect-usbasp.sh`](host/usb-inspect-usbasp.sh), [`host/usbasp-getcaps.py`](host/usbasp-getcaps.py). HIDUART status (hidraw, kernel stays on HID): [`host/usbasp-hiduart-status.py`](host/usbasp-hiduart-status.py). Loopback: [`host/usbasp-hiduart-loopback.py`](host/usbasp-hiduart-loopback.py) (TQFP pins 30–31).
+From `firmware/`: `make flash` writes the hex onto a USBasp (J2 closed) using another USBasp. HIDUART `make flash` then writes EEPROM `SERIAL` in the same recipe — avrdude chip-erase wipes EEPROM on clones without EESAVE (`hfuse 0xd9`). Do not run `flash` and `eeprom` in parallel. Linux udev: [`host/udev/70-usbasp.rules`](host/udev/70-usbasp.rules) (`usb` for avrdude plus `hidraw` for HIDUART). Inspect: [`host/usb-inspect-usbasp.sh`](host/usb-inspect-usbasp.sh), [`host/usbaspctl.py`](host/usbaspctl.py) (`info`), [`host/usbasp-getcaps.py`](host/usbasp-getcaps.py). HIDUART status (hidraw, kernel stays on HID): [`host/usbasp-hiduart-status.py`](host/usbasp-hiduart-status.py). Loopback: [`host/usbasp-hiduart-loopback.py`](host/usbasp-hiduart-loopback.py) (TQFP pins 30–31).
 
 HIDUART image: on Windows use a **MinGW/libusb** avrdude, not the MSVC/libwinusb build.
 
@@ -102,7 +102,7 @@ HIDUART USB serial is 4 characters in EEPROM (`make BOARD=usbasp-hiduart-atmega8
 
 ## Compatibility
 
-See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) and [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md). Short version:
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md), [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), and [docs/USB_DESCRIPTORS.md](docs/USB_DESCRIPTORS.md). Short version:
 
 - VID/PID `16c0:05dc`, FUNC 1–16 and 127
 - GETCAPABILITIES = TPI + 3 MHz bit, **not** dioannidis clock bytes

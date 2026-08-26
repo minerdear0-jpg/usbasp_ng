@@ -1,0 +1,4 @@
+# Documented fuse bytes for this board profile (make fuses CONFIRM_FUSES=1).
+# Bench clones often already have hfuse=0xd9 — do not blast blindly.
+hfuse=0xc9
+lfuse=0xef

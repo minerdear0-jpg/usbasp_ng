@@ -8,7 +8,7 @@ extern uchar sck_sw_delay;
 extern uchar effective_sck;
 
 void ispSetSCKOption(uchar option);
-/* Jumper 8 kHz else host SETISPSCK id (`prog_sck`). Does not write `prog_sck`. */
+/* Jumper 8 kHz else host SETISPSCK id (`requested_sck`). Does not write `requested_sck`. */
 void isp_apply_host_sck(void);
 void isp_spi_hw_enable(void);
 void isp_spi_hw_disable(void);

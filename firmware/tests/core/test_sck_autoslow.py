@@ -65,6 +65,7 @@ def test_connect_does_not_store_jumper_as_host_sck():
 
     text = Path(__file__).resolve().parents[2] / "src" / "vendor_isp.c"
     src = text.read_text()
+    assert "requested_sck = USBASP_ISP_SCK_8" not in src
     assert "prog_sck = USBASP_ISP_SCK_8" not in src
     assert "isp_apply_host_sck()" in src
 
@@ -96,8 +97,11 @@ def test_enableprog_does_not_store_effective_as_requested():
     isp = (root / "src" / "isp.c").read_text()
     sck = (root / "src" / "sck.c").read_text()
     assert "prog_sck = sck" not in isp
+    assert "requested_sck = sck" not in isp
     assert "isp_apply_host_sck" in sck
     assert "effective_sck = option" in sck
+    assert "requested_sck" in (root / "include" / "usbasp" / "prog_state.h").read_text()
+    assert "extern uchar prog_sck" not in (root / "include" / "usbasp" / "prog_state.h").read_text()
     assert "board_led_isp_activity" not in isp.split("ispTransmit_hw", 1)[1].split("ispEnterProgrammingMode", 1)[0]
     assert "isp_bus.enable()" in isp
     assert "if (ispTransmit == ispTransmit_hw)" not in isp

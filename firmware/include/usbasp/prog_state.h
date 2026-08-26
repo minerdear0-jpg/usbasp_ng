@@ -4,7 +4,7 @@
 #include "usbasp/protocol.h"
 #include "usbdrv.h"
 
-extern uchar prog_sck;
+extern uchar requested_sck;
 extern uchar prog_state;
 extern uchar prog_address_newmode;
 extern unsigned long prog_address;

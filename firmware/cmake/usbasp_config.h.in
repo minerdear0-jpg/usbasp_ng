@@ -8,6 +8,8 @@
 #define USBASP_HAS_3MHZ       @USBASP_HAS_3MHZ@
 #define USBASP_LED_STYLE      @USBASP_LED_STYLE@
 #define USBASP_HAS_HID_UART   @USBASP_HAS_HID_UART@
+/* Stringify board profile: "classic" or "hiduart" */
+#define USBASP_PROFILE_STR    "@USBASP_PROFILE@"
 
 #define USBASP_SERIAL_CH0 '@USBASP_SERIAL_CH0@'
 #define USBASP_SERIAL_CH1 '@USBASP_SERIAL_CH1@'

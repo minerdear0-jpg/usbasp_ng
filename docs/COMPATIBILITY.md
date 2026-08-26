@@ -61,7 +61,7 @@ NG-internal improvements that stay on the same wire:
 - board layer for LED polarity and optional PC2 jumper
 - LEDs: PC0 1 Hz on USB/ISP traffic; idle PC0 breathes only when 8 kHz software SCK is applied (JP3 or SETISPSCK); otherwise idle 1 Hz while configured (USB host). PC1 ISP ~10 Hz
 - software SCK: cycle-count **minimum** half-period (INT0 may stretch, must not shorten); LED stays out of `ispTransmit_sw` and `ispTransmit_hw`
-- SETISPSCK stores **requested** id (`prog_sck`); jumper / AUTO slowdown only change **effective** wire clock (`effective_sck`)
+- SETISPSCK stores **requested** id (`requested_sck`); jumper / AUTO slowdown only change **effective** wire clock (`effective_sck`)
 - SETISPSCK applies the selected clock immediately (jumper still wins on the wire)
 
 ## L2.5 Timing (software SCK)

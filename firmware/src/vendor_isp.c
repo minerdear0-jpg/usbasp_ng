@@ -9,7 +9,7 @@
 #include "usbasp/clock.h"
 #include "usbasp/board.h"
 
-uchar prog_sck = USBASP_ISP_SCK_AUTO;
+uchar requested_sck = USBASP_ISP_SCK_AUTO;
 uchar prog_state = PROG_STATE_IDLE;
 uchar prog_address_newmode = 0;
 unsigned long prog_address;
@@ -94,7 +94,7 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         break;
 
     case USBASP_FUNC_SETISPSCK:
-        prog_sck = data[2];
+        requested_sck = data[2];
         isp_apply_host_sck();
         replyBuffer[0] = 0;
         len = 1;
