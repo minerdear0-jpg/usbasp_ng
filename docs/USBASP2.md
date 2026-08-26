@@ -1,5 +1,7 @@
 # USBasp2
 
+**Status: beta.1** — first public beta (`usbasp2-beta.1`). Release notes: [RELEASE-USBASP2-BETA.md](RELEASE-USBASP2-BETA.md).
+
 **USBasp2** is a USBasp NG programmer whose MCU is an **ATmega328P** (typically TQFP-32 reflowed onto a common mega8 clone PCB, same 12 MHz crystal and ISP/USB wiring).
 
 Same host protocol as Fischl USBasp (`-c usbasp` / `usbasp-clone`). More flash/RAM than mega8 → room to grow from “a few diagnostic bytes” into an **ISP development probe** (observability / measurement / capture) while L1 stays ordinary USBasp. Architecture: [DIAGNOSTICS_PROBE.md](DIAGNOSTICS_PROBE.md). Shipping diag wire today: [DIAGNOSTICS.md](DIAGNOSTICS.md).
@@ -31,7 +33,7 @@ avrdude -c usbasp -p m328p -B 8 \
   -U eeprom:w:firmware/build/usbasp-hiduart-atmega328p/usbasp-hiduart.eep:i
 ```
 
-Size budget (typical): ~8.5 KiB flash / ~0.6 KiB RAM of 32 KiB / 2 KiB.
+Size budget (typical beta.1 HIDUART+diag): ~10 KiB flash / ~1.2 KiB RAM of 32 KiB / 2 KiB; `USBASP_DIAG_TRACE_SLOTS=128`.
 
 Fuses on a working crystal part are often already `lfuse=0xff`; board recipe documents `hfuse=0xde` `lfuse=0xff`. Do not blast fuses blindly.
 

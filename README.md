@@ -6,13 +6,13 @@ Firmware for the cheap, widespread USBasp AVR programmer.
 
 - **Protocol:** Fischl USBasp 2011 (what avrdude / AVRDUDESS speak)
 - **ISP internals:** dioannidis / nerdralph fixes, without their composite USB identity on the **classic** image
-- **Products:** **classic** (Windows / Arduino on mega8), **HIDUART** Diagnostics Plane, and **[USBasp2](docs/USBASP2.md)** (ATmega328P — ISP **development probe** path; [DIAGNOSTICS_PROBE.md](docs/DIAGNOSTICS_PROBE.md))
+- **Products:** **classic** (Windows / Arduino on mega8), **HIDUART** Diagnostics Plane, and **[USBasp2](docs/USBASP2.md) beta** — first USBasp fork with an integrated lab instrument (L1 + Diagnostics Plane; [RELEASE-USBASP2-BETA.md](docs/RELEASE-USBASP2-BETA.md))
 
 ---
 
 ## USBasp2 (ATmega328P programmer)
 
-**USBasp2** = same clone PCB, MCU upgraded to **ATmega328P** (reflow, 12 MHz crystal). Bench name for the yellow stick after the swap.
+**USBasp2 beta** = same clone PCB, MCU upgraded to **ATmega328P** (reflow, 12 MHz crystal), with HIDUART + Diagnostics Plane for lab work. Bench name for the yellow stick after the swap.
 
 | | mega8 HIDUART | **USBasp2** |
 |---|---|---|

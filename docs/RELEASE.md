@@ -36,8 +36,9 @@ A dirty “zip the working folder” RC is not a release. GitHub’s automatic �
 | `usbasp-ng-classic-atmega88.hex` | `usbasp-atmega88` |
 | `usbasp-ng-hiduart-atmega8.hex` (+ `.eep`) | `usbasp-hiduart-atmega8` |
 | `usbasp-ng-hiduart-atmega88.hex` (+ `.eep`) | `usbasp-hiduart-atmega88` |
+| `usbasp-ng-hiduart-atmega328p.hex` (+ `.eep`) | `usbasp-hiduart-atmega328p` (USBasp2) |
 
-Default Windows/Arduino image: **classic ATmega8**. HIDUART EEPROM in release builds uses serial `0000` (override locally with `SERIAL=`).
+Default Windows/Arduino image: **classic ATmega8**. HIDUART EEPROM in release builds uses serial `0000` (override locally with `SERIAL=`; lab often `YEL0`). USBasp2 beta packaging: [RELEASE-USBASP2-BETA.md](RELEASE-USBASP2-BETA.md).
 
 ## Host client (`diagplane.bin`)
 
