@@ -59,6 +59,7 @@ test:
 	python3 tests/core/test_diag_v1.py
 	python3 ../host/test_usbaspctl_profile.py
 	python3 ../host/golden/diag/test_decode_parity.py
+	cd ../tools/usbasp-ng-diag && cargo test -q && cargo run -q -- demo enableprog_fail_sw >/dev/null
 
 flash: hex
 	avrdude -c $(ISP) -p $(MCU) -U flash:w:$(BUILDDIR)/$(HEX_NAME).hex:i

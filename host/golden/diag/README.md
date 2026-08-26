@@ -9,5 +9,8 @@ Synthetic `uint64_le host_ns` + 8-byte HID report records for decoder parity.
 ```bash
 python3 host/usbasp-trace.py host/golden/diag/enableprog_fail_sw.bin
 cd tools/usbasp-ng-diag && cargo run --quiet -- decode ../../host/golden/diag/enableprog_fail_sw.bin
+cd tools/usbasp-ng-diag && cargo run --quiet -- demo enableprog_fail_sw
 python3 host/golden/diag/test_decode_parity.py
 ```
+
+Legacy golden `.bin` files have no `USBDIAGv` header; `demo --out` writes headered captures.

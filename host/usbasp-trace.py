@@ -38,6 +38,27 @@ EP_OK = 0x10
 EP_FAIL = 0x20
 TRANSPORT = {0: "HW", 1: "SW"}
 MEM_KIND = {0: "FLASH", 1: "EEPROM", 2: "READFLASH"}
+CAPTURE_MAGIC = b"USBDIAGv"
+CAPTURE_HEADER_SIZE = 16
+
+
+def skip_capture_header(blob: bytes) -> tuple[bytes, dict | None]:
+    """Return (records_blob, header_info|None). Legacy files have no header."""
+    if len(blob) < 8 or blob[:8] != CAPTURE_MAGIC:
+        return blob, None
+    if len(blob) < CAPTURE_HEADER_SIZE:
+        raise ValueError("truncated USBDIAGv header")
+    info = {
+        "format_version": blob[8],
+        "diag_schema": blob[9],
+        "record_size": blob[10],
+        "flags": blob[11],
+    }
+    if info["format_version"] != 1:
+        raise ValueError(f"unsupported capture format_version {info['format_version']}")
+    if info["record_size"] != 16:
+        raise ValueError(f"unsupported record_size {info['record_size']}")
+    return blob[CAPTURE_HEADER_SIZE:], info
 
 
 def _seq_flags(flags: int) -> str:
@@ -311,6 +332,20 @@ def main() -> int:
     args = ap.parse_args()
 
     blob = args.capture.read_bytes()
+    try:
+        blob, hdr = skip_capture_header(blob)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if hdr and not args.jsonl:
+        print(
+            f"capture header: format={hdr['format_version']} "
+            f"schema={hdr['diag_schema']} record={hdr['record_size']}",
+            file=sys.stderr,
+        )
+    elif not hdr and not args.jsonl:
+        print("capture header: (legacy, no USBDIAGv)", file=sys.stderr)
+
     rec = 8 + 8
     if len(blob) % rec != 0:
         print(f"warning: trailing {len(blob) % rec} bytes", file=sys.stderr)

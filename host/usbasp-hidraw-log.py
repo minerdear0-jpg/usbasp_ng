@@ -20,6 +20,17 @@ VID, PID = 0x16C0, 0x05DC
 # Composite IF2 = EP 0x82 interrupt IN (monitor / diagnostics)
 EP2_IN = 0x82
 IF_MONITOR = 2
+CAPTURE_MAGIC = b"USBDIAGv"
+
+
+def write_capture_header(f) -> None:
+    """16-byte USBDIAGv header (format=1, schema=1, record=16)."""
+    hdr = bytearray(16)
+    hdr[0:8] = CAPTURE_MAGIC
+    hdr[8] = 1  # format_version
+    hdr[9] = 1  # diag_schema
+    hdr[10] = 16  # record_size
+    f.write(hdr)
 
 
 def find_dev(want_serial: str | None):
@@ -60,6 +71,8 @@ def main() -> int:
     n = 0
     try:
         with open(out_path, "ab") as f:
+            if f.tell() == 0:
+                write_capture_header(f)
             while True:
                 try:
                     data = bytes(dev.read(EP2_IN, 8, timeout=1000))

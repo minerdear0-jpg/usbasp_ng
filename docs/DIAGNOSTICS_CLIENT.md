@@ -13,66 +13,70 @@ Telemetry rides **HID interrupt EP2** (composite IF2), not the USART bridge on P
 | “RESET LOW/HIGH” | **`RESET_ASSERT` / `RESET_RELEASE`** (drive intent) |
 | ENABLEPROG packing | **Four** 6-byte frames (`START`/`CONT`/`END\|RESULT`) |
 | FAULT_SNAPSHOT | **Four** compact frames; END carries `rx[0]` + `sw_delay` + OK/FAIL |
-| Capture file | `uint64_le host_ns` + 8-byte USB report (no versioned header yet) |
+| Capture file | Optional **`USBDIAGv`** 16-byte header + `uint64_le host_ns` + 8-byte report; legacy (no header) still decodes |
 
 Ideal final function (TRIZ): *presentation works without the stick* — via `file` / `replay` / `demo` sources.
 
-## Dual toolchain (RC)
+## Dual toolchain
 
 ```text
-Python (lab)                         Rust (production P0)
+Python (lab)                         Rust (production)
 host/usbasp-hidraw-log.py            usbasp-ng-diag record
-host/usbasp-trace.py                 usbasp-ng-diag decode
+host/usbasp-trace.py                 usbasp-ng-diag decode / replay
 host/usbasp-diag-monitor.py          usbasp-ng-diag monitor [--json]
+                                     usbasp-ng-diag demo <scenario>
 host/golden/diag/                    same fixtures (parity test)
 ```
 
-| | Python | Rust |
-|--|--------|------|
-| Role | Forensic, golden, bench | Single binary, end-user |
-| Deps | pyusb (lab machines) | clap, rusb, serde, anyhow |
-| TUI | not required | ratatui = **P2**, not RC |
-
 ```bash
 cd tools/usbasp-ng-diag && cargo build --release
-./target/release/usbasp-ng-diag monitor YEL0
+./target/release/usbasp-ng-diag demo --list
+./target/release/usbasp-ng-diag demo enableprog_fail_sw
+./target/release/usbasp-ng-diag demo memop_flash --out /tmp/m.bin
+./target/release/usbasp-ng-diag replay /tmp/m.bin --speed 10
+./target/release/usbasp-ng-diag replay /tmp/m.bin --step
 ./target/release/usbasp-ng-diag decode capture.bin
 ```
 
-### lnav analysis (from `.bin`)
+### Capture header (`USBDIAGv`)
 
-Keep the binary capture as source of truth. Convert for interactive viewing:
+| Offset | Field |
+|--------|-------|
+| 0..7 | magic `USBDIAGv` |
+| 8 | format_version (=1) |
+| 9 | diag_schema (=1) |
+| 10 | record_size (=16) |
+| 11 | flags |
+| 12..15 | reserved |
+
+`record` / `hidraw-log` write the header on new files. Decoders accept header or legacy.
+
+### lnav
 
 ```bash
 python3 host/usbasp-trace.py capture.bin --jsonl > capture.jsonl
-lnav -i tools/usbasp-ng-diag/lnav/usbasp_ng_diag.json   # once
+lnav -i tools/usbasp-ng-diag/lnav/usbasp_ng_diag.json
 lnav capture.jsonl
-# :filter-in ENABLEPROG   :filter-in OVERFLOW   :goto error
 ```
-
-`--semantic-only` emits only reassembled ENABLEPROG / FAULT_SNAPSHOT summaries.
 
 ## Layers L0–L3
 
 ```text
 L0 Wire          DiagFrame (6 B) + USB report pad
 L1 Protocol      decoded human / JSON lines
-L2 Application   AppState reducer   # P1+
+L2 Application   AppState reducer   # P2
 L3 Presentation  stdout / JSON / TUI
 ```
 
-## RC status
+## Status
 
 | Item | Status |
 |------|--------|
-| Firmware PR1 lifecycle | done |
-| Firmware PR2 ENABLEPROG + snapshot | done (4-frame compact snapshot) |
-| Firmware PR3 forensics | done (last-try `DIAG_ERROR` SW-only, SCK_CONFIG/step, ring 32) |
-| MEMOP flash markers | done (`START`/`END` + page count; deduped SCK) |
-| Client P0 record/decode/monitor | Python + Rust |
+| Firmware PR1–PR3 + MEMOP | done |
+| Client P0 record/decode/monitor | done |
+| Client P1 replay/demo + header | done |
 | Golden parity Python↔Rust | `host/golden/diag/` |
-| Client P1 replay/demo | open |
 | Client P2 TUI | open |
 | FX2 physical oracle | open ([SOFTWARE_SCK.md](SOFTWARE_SCK.md)) |
 
-Success criteria for RC: one production binary; bugs reproducible from `.bin`; firmware+client decode the same DIAG v1 bytes.
+Success: bugs reproducible from `.bin` / `demo` without hardware.
