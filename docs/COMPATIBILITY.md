@@ -66,6 +66,8 @@ NG-internal improvements that stay on the same wire:
 
 ## L2.5 Timing (software SCK)
 
+USB execution model (INT0 vs `usbPoll` / I=1): [USB_EXECUTION.md](USB_EXECUTION.md).
+
 USB execution: INT0 only clocks the bus; `usbPoll()` / `usbFunctionSetup()` run from main with I=1. ISP may be preempted by INT0.
 
 - HW mode: hardware SPI semantics

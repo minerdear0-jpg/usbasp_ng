@@ -38,3 +38,7 @@ Best-effort only. avrdude documents ARM64 USB limits.
 ## HIDUART on Windows MSVC avrdude
 
 Composite device: prefer MinGW/libusb avrdude, or use **classic** for Arduino / WinUSB-only hosts.
+
+## USB execution model
+
+Documented invariant (INT0 vs `usbPoll`): [USB_EXECUTION.md](USB_EXECUTION.md).

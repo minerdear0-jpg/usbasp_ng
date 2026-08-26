@@ -102,7 +102,7 @@ HIDUART USB serial is 4 characters in EEPROM (`make BOARD=usbasp-hiduart-atmega8
 
 ## Compatibility
 
-See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md), [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), and [docs/USB_DESCRIPTORS.md](docs/USB_DESCRIPTORS.md). Short version:
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md), [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), [docs/USB_DESCRIPTORS.md](docs/USB_DESCRIPTORS.md), and [docs/USB_EXECUTION.md](docs/USB_EXECUTION.md). Short version:
 
 - VID/PID `16c0:05dc`, FUNC 1–16 and 127
 - GETCAPABILITIES = TPI + 3 MHz bit, **not** dioannidis clock bytes
