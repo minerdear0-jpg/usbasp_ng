@@ -21,7 +21,7 @@ def test_classic_device_string_indices():
     assert info["product"] == "USBasp"
     assert info["idVendor"] == 0x16C0
     assert info["idProduct"] == 0x05DC
-    assert info["bcdDevice"] == 0x0202
+    assert info["bcdDevice"] == 0x0203
     assert info["bcdUSB"] == 0x0201
 
 

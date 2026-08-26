@@ -38,12 +38,13 @@ def test_classic_device_string_indices():
 
 def test_classic_msos_structural():
     info = validate_classic_winusb(load_classic_msos(FW))
-    assert info["interface"] == 0
+    assert info["layout"] == "device-level"
     assert info["compatible_id"] == "WINUSB"
+    assert info["total"] == 0x9E
 
 
 def test_classic_cmake_props():
-    assert 'set(USB_CFG_DEVICE_VERSION "0x02, 0x02")' in CMAKE
+    assert 'set(USB_CFG_DEVICE_VERSION "0x03, 0x02")' in CMAKE
     assert "USB_PROP_LENGTH(18)" in CMAKE
     assert 'set(USB_CFG_DESCR_PROPS_UNKNOWN "USB_PROP_IS_DYNAMIC")' in CMAKE
 
@@ -57,7 +58,7 @@ def test_hiduart_not_classic_topology():
 
 def test_bcddevice_is_deliberate_profile_key():
     """Same VID/PID; bcdDevice distinguishes classic WinUSB vs HIDUART for Windows IDs."""
-    assert 'set(USB_CFG_DEVICE_VERSION "0x02, 0x02")' in CMAKE  # classic 2.02
+    assert 'set(USB_CFG_DEVICE_VERSION "0x03, 0x02")' in CMAKE  # classic 2.03
     assert 'set(USB_CFG_DEVICE_VERSION "0x01, 0x02")' in CMAKE  # hiduart 2.01
 
 

@@ -12,12 +12,35 @@
 uchar requested_sck = USBASP_ISP_SCK_AUTO;
 uchar prog_state = PROG_STATE_IDLE;
 uchar prog_address_newmode = 0;
-unsigned long prog_address;
-unsigned int prog_nbytes = 0;
-unsigned int prog_pagesize;
+uint32_t prog_address;
+uint16_t prog_nbytes = 0;
+uint16_t prog_pagesize;
 uchar prog_blockflags;
-unsigned int prog_pagecounter;
+uint16_t prog_pagecounter;
 uchar replyBuffer[8];
+
+void prog_reset_state(void)
+{
+    prog_state = PROG_STATE_IDLE;
+    prog_nbytes = 0;
+    prog_pagecounter = 0;
+    prog_pagesize = 0;
+    prog_blockflags = 0;
+    prog_address_newmode = 0;
+    prog_address = 0;
+}
+
+/* Enter USB data-stage only when host asked for a non-zero transfer. */
+static usbMsgLen_t prog_begin_transfer(uchar state, uint16_t nbytes)
+{
+    prog_nbytes = nbytes;
+    if (nbytes == 0) {
+        prog_state = PROG_STATE_IDLE;
+        return 0;
+    }
+    prog_state = state;
+    return USB_NO_MSG;
+}
 
 usbMsgLen_t usbasp_vendor_setup(uchar data[8])
 {
@@ -26,13 +49,14 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
     switch (data[1]) {
     case USBASP_FUNC_CONNECT:
         /* JP3 forces 8 kHz on the wire; do not overwrite the host SETISPSCK id. */
+        prog_reset_state();
         isp_apply_host_sck();
-        prog_address_newmode = 0;
         ispConnect();
         break;
 
     case USBASP_FUNC_DISCONNECT:
         ispDisconnect();
+        prog_reset_state();
         break;
 
     case USBASP_FUNC_TRANSMIT:
@@ -47,17 +71,16 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
     case USBASP_FUNC_READFLASH:
         if (!prog_address_newmode)
             prog_address = usbasp_read_le16(&data[2]);
-        prog_nbytes = usbasp_read_le16(&data[6]);
-        prog_state = PROG_STATE_READFLASH;
-        len = USB_NO_MSG;
+        len = prog_begin_transfer(PROG_STATE_READFLASH, usbasp_read_le16(&data[6]));
         break;
 
     case USBASP_FUNC_READEEPROM:
+        /* Wire address is 16-bit; ignore high bits if SETLONGADDRESS was used. */
         if (!prog_address_newmode)
             prog_address = usbasp_read_le16(&data[2]);
-        prog_nbytes = usbasp_read_le16(&data[6]);
-        prog_state = PROG_STATE_READEEPROM;
-        len = USB_NO_MSG;
+        else
+            prog_address &= 0xffffu;
+        len = prog_begin_transfer(PROG_STATE_READEEPROM, usbasp_read_le16(&data[6]));
         break;
 
     case USBASP_FUNC_ENABLEPROG:
@@ -70,22 +93,20 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
             prog_address = usbasp_read_le16(&data[2]);
         prog_pagesize = data[4];
         prog_blockflags = data[5] & 0x0F;
-        prog_pagesize += (((unsigned int)data[5] & 0xF0) << 4);
+        prog_pagesize += (uint16_t)(((uint16_t)data[5] & 0xF0) << 4);
         if (prog_blockflags & PROG_BLOCKFLAG_FIRST)
             prog_pagecounter = prog_pagesize;
-        prog_nbytes = usbasp_read_le16(&data[6]);
-        prog_state = PROG_STATE_WRITEFLASH;
-        len = USB_NO_MSG;
+        len = prog_begin_transfer(PROG_STATE_WRITEFLASH, usbasp_read_le16(&data[6]));
         break;
 
     case USBASP_FUNC_WRITEEEPROM:
         if (!prog_address_newmode)
             prog_address = usbasp_read_le16(&data[2]);
+        else
+            prog_address &= 0xffffu;
         prog_pagesize = 0;
         prog_blockflags = 0;
-        prog_nbytes = usbasp_read_le16(&data[6]);
-        prog_state = PROG_STATE_WRITEEEPROM;
-        len = USB_NO_MSG;
+        len = prog_begin_transfer(PROG_STATE_WRITEEEPROM, usbasp_read_le16(&data[6]));
         break;
 
     case USBASP_FUNC_SETLONGADDRESS:
@@ -137,19 +158,16 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
 
     case USBASP_FUNC_TPI_READBLOCK:
         prog_address = usbasp_read_le16(&data[2]);
-        prog_nbytes = usbasp_read_le16(&data[6]);
-        prog_state = PROG_STATE_TPI_READ;
-        len = USB_NO_MSG;
+        len = prog_begin_transfer(PROG_STATE_TPI_READ, usbasp_read_le16(&data[6]));
         break;
 
     case USBASP_FUNC_TPI_WRITEBLOCK:
         prog_address = usbasp_read_le16(&data[2]);
-        prog_nbytes = usbasp_read_le16(&data[6]);
-        prog_state = PROG_STATE_TPI_WRITE;
-        len = USB_NO_MSG;
+        len = prog_begin_transfer(PROG_STATE_TPI_WRITE, usbasp_read_le16(&data[6]));
         break;
 
     case USBASP_FUNC_GETCAPABILITIES:
+        /* Advertise TPI only when board profile enables it after silicon proof. */
 #if USBASP_HAS_TPI
         replyBuffer[0] = USBASP_CAP_TPI;
 #else
@@ -183,8 +201,16 @@ uchar usbasp_isp_read(uchar *data, uchar len)
     }
 
     if (prog_state == PROG_STATE_TPI_READ) {
+        if (prog_nbytes && len > prog_nbytes)
+            len = (uchar)prog_nbytes;
         tpi_read_block((uint16_t)prog_address, data, len);
         prog_address += len;
+        if (prog_nbytes > len)
+            prog_nbytes -= len;
+        else
+            prog_nbytes = 0;
+        if ((len < 8) || (prog_nbytes == 0))
+            prog_state = PROG_STATE_IDLE;
         return len;
     }
 
@@ -193,7 +219,7 @@ uchar usbasp_isp_read(uchar *data, uchar len)
         if (prog_state == PROG_STATE_READFLASH)
             data[i] = ispReadFlash(prog_address);
         else
-            data[i] = ispReadEEPROM((unsigned int)prog_address);
+            data[i] = ispReadEEPROM((uint16_t)prog_address);
         prog_address++;
         if (prog_nbytes)
             prog_nbytes--;
@@ -217,6 +243,8 @@ uchar usbasp_isp_write(uchar *data, uchar len)
     }
 
     if (prog_state == PROG_STATE_TPI_WRITE) {
+        if (prog_nbytes && len > prog_nbytes)
+            len = (uchar)prog_nbytes;
         tpi_write_block((uint16_t)prog_address, data, len);
         prog_address += len;
         if (prog_nbytes > len)
@@ -244,7 +272,7 @@ uchar usbasp_isp_write(uchar *data, uchar len)
                 }
             }
         } else {
-            ispWriteEEPROM((unsigned int)prog_address, data[i]);
+            ispWriteEEPROM((uint16_t)prog_address, data[i]);
         }
 
         if (prog_nbytes)

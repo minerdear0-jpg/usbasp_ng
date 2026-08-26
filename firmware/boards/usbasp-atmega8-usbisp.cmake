@@ -4,8 +4,8 @@
 set(USBASP_MCU atmega8)
 set(USBASP_F_CPU 12000000)
 set(USBASP_PROFILE classic)
-# TPI: see usbasp-atmega8-clone.cmake. Advertised; not silicon-validated yet.
-set(USBASP_HAS_TPI 1)
+# TPI FUNC compiled; capability bit off until silicon proof (see clone.cmake).
+set(USBASP_HAS_TPI 0)
 set(USBASP_HAS_SCK_JUMPER 0)
 set(USBASP_HAS_HID_UART 0)
 set(USBASP_HAS_3MHZ 1)

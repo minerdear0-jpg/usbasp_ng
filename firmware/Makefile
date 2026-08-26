@@ -55,6 +55,7 @@ test:
 	python3 tests/core/test_requested_sck_writes.py
 	python3 tests/core/test_ms_os_vendor_code.py
 	python3 tests/core/test_has_tpi_gate.py
+	python3 tests/core/test_prog_session.py
 	python3 ../host/test_usbaspctl_profile.py
 
 flash: hex
@@ -76,7 +77,7 @@ ifndef CONFIRM_FUSES
 	@echo "Re-run: make fuses CONFIRM_FUSES=1 BOARD=$(BOARD)"
 	@false
 else
-	avrdude -c $(ISP) -p $(MCU) -u -U hfuse:w:$(HFUSE):m -U lfuse:w:$(LFUSE):m
+	avrdude -c $(ISP) -p $(MCU) -U hfuse:w:$(HFUSE):m -U lfuse:w:$(LFUSE):m
 endif
 
 # Programmer already running NG: talk to an ATmega8 on the ISP header.

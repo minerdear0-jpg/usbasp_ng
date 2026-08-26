@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""HIDUART report descriptor and mega8 UCSRC URSEL (source checks)."""
+"""HIDUART report descriptor, mega8 UCSRC URSEL, and nested MS OS layout."""
 from pathlib import Path
 import re
+import sys
 
 FW = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ms_os20_parse import load_hiduart_msos, validate_hiduart_winusb
+
 DESC = (FW / "src_hid" / "usb_descriptors.h").read_text()
 UART_C = (FW / "src_hid" / "uart.c").read_text()
 UART_H = (FW / "src_hid" / "uart.h").read_text()
@@ -19,22 +23,21 @@ def test_mega8_ursel_on_ucsrc():
     assert "(1 << USBASPUART_URSEL) | byte" in UART_C
 
 
-def test_msos20_winusb_only_if0():
-    """WINUSB + DeviceInterfaceGUIDs only on vendor IF0; HID IFs use class binding."""
-    start = DESC.index("MS_2_0_OS_DESCRIPTOR_SET[]")
-    hiduart = DESC[start : DESC.index("usbDescriptorHidReport")]
-    packed = hiduart.replace(" ", "").replace("\n", "")
-    assert "'G',0x00,'U',0x00,'I',0x00,'D',0x00,'s',0x00" in packed
-    assert "MS_OS_20_REG_PROPERTY_REG_MULTI_SZ" in hiduart
-    assert hiduart.count("'W','I','N','U','S','B'") == 1
-    assert "0xB2, 0x00" in hiduart
-    assert "0xBE, 0x01" not in hiduart
+def test_msos20_nested_composite_if0():
+    """Composite profile: Configuration + Function subsets; WINUSB only on IF0."""
+    blob = load_hiduart_msos(FW)
+    assert len(blob) == 0xB2
+    info = validate_hiduart_winusb(blob)
+    assert info["layout"] == "nested-composite"
+    assert info["interface"] == 0
+    assert info["compatible_id"] == "WINUSB"
+    assert info["total"] == 0xB2
 
 
 def test_hiduart_bcddevice_not_classic():
     cmake = (FW / "CMakeLists.txt").read_text()
     assert 'set(USB_CFG_DEVICE_VERSION "0x01, 0x02")' in cmake
-    assert 'set(USB_CFG_DEVICE_VERSION "0x02, 0x02")' in cmake
+    assert 'set(USB_CFG_DEVICE_VERSION "0x03, 0x02")' in cmake
     proto = (FW / "include" / "usbasp" / "protocol.h").read_text()
     assert "0x16c0" in proto and "0x05dc" in proto
 
@@ -59,7 +62,7 @@ def test_hiduart_flash_restores_eeprom():
 def main() -> int:
     test_logical_minimum_zero()
     test_mega8_ursel_on_ucsrc()
-    test_msos20_winusb_only_if0()
+    test_msos20_nested_composite_if0()
     test_hiduart_bcddevice_not_classic()
     test_hid_idle_protocol_setup()
     test_hiduart_flash_restores_eeprom()

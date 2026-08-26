@@ -10,32 +10,19 @@ PCs that previously used Zadig/libusbK for `16c0:05dc` may keep that association
 
 ## Classic WinUSB + Arduino IDE 1.8.19 (Windows)
 
-**Status:** host-tool limitation, not a firmware bug.
-
-Classic NG binds **Microsoft WinUSB** (BOS / MS OS 2.0: config → function IF0 → WINUSB). AVRDUDESS and avrdude **7.x / 8.x MSVC** work.
-
-Arduino IDE **1.8.19** still ships **avrdude 6.3-20190619**, which cannot open WinUSB:
-
-```text
-avrdude: Warning: cannot query manufacturer for device: Invalid argument
-avrdude: Warning: cannot query product for device: Invalid argument
-avrdude: error: could not find USB device with vid=0x16c0 pid=0x5dc
-         vendor='www.fischl.de' product='USBasp'
-```
-
-USB strings are already Fischl (`www.fischl.de` / `USBasp`). Do **not** roll back to pre-WinUSB classic or reinstall libusbK for this.
-
-**Workaround:** AVRDUDESS / standalone modern avrdude, or run [`arduino/replace-avrdude.ps1`](../arduino/replace-avrdude.ps1). See [`ARDUINO.md`](ARDUINO.md), [`WINDOWS.md`](WINDOWS.md).
+**Status:** see [ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md) and [ARDUINO.md](ARDUINO.md). Prefer avrdude 7+/8.x; one bench Burn Bootloader PASS with stock 6.3 after string-index fix. Do **not** reinstall libusbK. Get Board Info is Serial-only.
 
 ## Software SCK ENABLEPROG (`-B 22` / slow ids)
 
-**Status:** open; waiting on waveform (Nano sniffer / FX2).
+**Status:** open; separate from WinUSB/HW ISP acceptance.
 
-`-B 8` / HW SPI PASS; software SCK ENABLEPROG often `0x01` on classic and HIDUART. See [`SOFTWARE_SCK.md`](SOFTWARE_SCK.md).
+HW SPI path is proven on Windows ([ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md)). SW bitbang still fails ENABLEPROG on the bench. Controlled sweep + scope: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md), [SOFTWARE_SCK.md](SOFTWARE_SCK.md).
 
 ## TPI
 
-Advertised in GETCAPABILITIES; not exercised on silicon in this tree yet (no tiny4/5/10 on the bench).
+**Status:** experimental — code present, **not** advertised.
+
+FUNC 11–16 remain compiled. Board profiles set `USBASP_HAS_TPI=0`, so GETCAPABILITIES does **not** set `USBASP_CAP_TPI` until a real ATtiny4/5/10 acceptance pass. Flip to `1` only after that review.
 
 ## Windows 11 ARM64
 

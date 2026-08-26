@@ -183,7 +183,7 @@ uchar ispEnterProgrammingMode(void)
     return 1;
 }
 
-static void ispUpdateExtended(unsigned long address)
+static void ispUpdateExtended(uint32_t address)
 {
     uchar curr_hiaddr = (uchar)(address >> 17);
     if (isp_hiaddr != curr_hiaddr) {
@@ -195,7 +195,7 @@ static void ispUpdateExtended(unsigned long address)
     }
 }
 
-uchar ispReadFlash(unsigned long address)
+uchar ispReadFlash(uint32_t address)
 {
     ispUpdateExtended(address);
     ispTransmit(0x20 | ((address & 1) << 3));
@@ -204,7 +204,7 @@ uchar ispReadFlash(unsigned long address)
     return ispTransmit(0);
 }
 
-uchar ispWriteFlash(unsigned long address, uchar data, uchar pollmode)
+uchar ispWriteFlash(uint32_t address, uchar data, uchar pollmode)
 {
     ispUpdateExtended(address);
     ispTransmit(0x40 | ((address & 1) << 3));
@@ -233,7 +233,7 @@ uchar ispWriteFlash(unsigned long address, uchar data, uchar pollmode)
     return 1;
 }
 
-uchar ispFlushPage(unsigned long address, uchar pollvalue)
+uchar ispFlushPage(uint32_t address, uchar pollvalue)
 {
     ispUpdateExtended(address);
     ispTransmit(0x4C);
@@ -259,7 +259,8 @@ uchar ispFlushPage(unsigned long address, uchar pollvalue)
     return 1;
 }
 
-uchar ispReadEEPROM(unsigned int address)
+/* ISP EEPROM address is 16-bit on the wire (0xA0/0xC0 load addr H/L). */
+uchar ispReadEEPROM(uint16_t address)
 {
     ispTransmit(0xA0);
     ispTransmit((uchar)(address >> 8));
@@ -267,12 +268,14 @@ uchar ispReadEEPROM(unsigned int address)
     return ispTransmit(0);
 }
 
-uchar ispWriteEEPROM(unsigned int address, uchar data)
+uchar ispWriteEEPROM(uint16_t address, uchar data)
 {
     ispTransmit(0xC0);
     ispTransmit((uchar)(address >> 8));
     ispTransmit((uchar)address);
     ispTransmit(data);
+    /* Conservative target EEPROM write wait: 30 × CLOCK_T_320us ≈ 9.6 ms.
+     * Independent of ISP SCK; do not shorten without silicon evidence. */
     clockWait(30);
     return 0;
 }

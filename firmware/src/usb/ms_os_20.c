@@ -2,9 +2,10 @@
  * Classic USB device descriptor (bcdUSB 2.01 so Windows asks for BOS)
  * plus BOS + MS OS 2.0 WinUSB binding. One vendor interface, EP0 only.
  *
- * MS OS 2.0 for non-composite WinUSB: Set → Configuration subset →
- * Function subset (IF0) → Compatible ID WINUSB → DeviceInterfaceGUID.
- * See Microsoft OS 2.0 descriptors; Adafruit/WebUSB use the same nesting.
+ * Classic intentionally uses device-level MS OS 2.0 (Set → WINUSB →
+ * DeviceInterfaceGUID, 0x9E). Nested Configuration/Function subsets were
+ * A/B-tested on the same Win11 stick and left the device unbound.
+ * See docs/USB_WINDOWS.md. The composite profile keeps nested subsets.
  */
 
 #include "usbasp/ms_os_20.h"
@@ -13,8 +14,6 @@
 #define USBDESCR_DEVICE_CAPABILITY_TYPE 0x10
 #define USBDESCR_DEVICE_CAPABILITY_PLATFORM 0x05
 #define MS_OS_20_SET_HEADER_DESCRIPTOR 0x00, 0x00
-#define MS_OS_20_SUBSET_HEADER_CONFIGURATION 0x01, 0x00
-#define MS_OS_20_SUBSET_HEADER_FUNCTION 0x02, 0x00
 #define MS_OS_20_FEATURE_COMPATIBLE_ID 0x03, 0x00
 #define MS_OS_20_FEATURE_REG_PROPERTY 0x04, 0x00
 #define MS_OS_20_REG_PROPERTY_REG_SZ 0x01, 0x00
@@ -34,7 +33,7 @@ PROGMEM const char usbDescriptorDevice[] = {
     8,
     (char)USB_CFG_VENDOR_ID,
     (char)USB_CFG_DEVICE_ID,
-    USB_CFG_DEVICE_VERSION, /* bcdDevice 2.02 */
+    USB_CFG_DEVICE_VERSION, /* bcdDevice 2.03 */
     USB_STR_MANUFACTURER,
     USB_STR_PRODUCT,
     USB_STR_NONE, /* iSerial — classic has none */
@@ -53,36 +52,21 @@ PROGMEM const char usbasp_bos_descriptor[USBASP_BOS_LEN] = {
     0xDF, 0x60, 0xDD, 0xD8, 0x89, 0x45, 0xC7, 0x4C,
     0x9C, 0xD2, 0x65, 0x9D, 0x9E, 0x64, 0x8A, 0x9F,
     0x00, 0x00, 0x03, 0x06,
-    0xAE, 0x00, /* MS OS 2.0 set size */
+    0x9E, 0x00, /* MS OS 2.0 set size — device-level */
     USBASP_MS_OS_VENDOR_CODE,
     0x00,
 };
 
 /*
- * wTotalLength 0xAE =
- *   0x0A set + 0x08 config + 0x08 function + 0x14 compat + 0x80 GUID
- * config subset 0xA4, function subset 0x9C (IF0).
+ * wTotalLength 0x9E = 0x0A set + 0x14 compat + 0x80 GUID.
+ * Device-level (no config/function subsets) for single-IF classic.
  */
 PROGMEM const char usbasp_ms_os_20_set[USBASP_MS_OS_20_SET_LEN] = {
     /* Set header */
     0x0A, 0x00,
     MS_OS_20_SET_HEADER_DESCRIPTOR,
     0x00, 0x00, 0x03, 0x06,
-    0xAE, 0x00,
-
-    /* Configuration subset (index 0) */
-    0x08, 0x00,
-    MS_OS_20_SUBSET_HEADER_CONFIGURATION,
-    0x00,
-    0x00,
-    0xA4, 0x00,
-
-    /* Function subset — vendor IF0 */
-    0x08, 0x00,
-    MS_OS_20_SUBSET_HEADER_FUNCTION,
-    0x00,
-    0x00,
-    0x9C, 0x00,
+    0x9E, 0x00,
 
     /* Compatible ID */
     0x14, 0x00,

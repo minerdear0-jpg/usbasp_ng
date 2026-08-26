@@ -24,7 +24,7 @@ firmware
 | Size (ATmega8) | ~5358 B | ~6816 B |
 | Role | Default image: Windows 10/11 x64 without Zadig; Linux/macOS libusb | UART console on the same stick |
 
-**Windows / Arduino:** flash **classic**. Goal is Device Manager → Microsoft WinUSB, then modern avrdude / AVRDUDESS, then Arduino **USBasp**. Matrix and troubleshooting: [`docs/WINDOWS.md`](docs/WINDOWS.md). Arduino 1.8 + avrdude 6.3: [`arduino/replace-avrdude.ps1`](arduino/replace-avrdude.ps1). ARM64 is best-effort.
+**Windows / Arduino:** flash **classic**. WinUSB + full ISP burn recorded in [`docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md`](docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md). Matrix: [`docs/WINDOWS.md`](docs/WINDOWS.md). Arduino notes: [`docs/ARDUINO.md`](docs/ARDUINO.md). Open: software SCK sweep [`docs/acceptance/ACCEPTANCE-SCK-SWEEP-001.md`](docs/acceptance/ACCEPTANCE-SCK-SWEEP-001.md). ARM64 is best-effort.
 
 USBHID adds HID UART; it is not required for Arduino. Classic must not grow HID, interrupt endpoints, or EEPROM serial. BOS/MS OS 2.0 on classic is host-driver metadata only ([`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)).
 
@@ -102,7 +102,7 @@ HIDUART USB serial is 4 characters in EEPROM (`make BOARD=usbasp-hiduart-atmega8
 
 ## Compatibility
 
-See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md), [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), [docs/USB_DESCRIPTORS.md](docs/USB_DESCRIPTORS.md), and [docs/USB_EXECUTION.md](docs/USB_EXECUTION.md). Short version:
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md), [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), [docs/USB_DESCRIPTORS.md](docs/USB_DESCRIPTORS.md), [docs/USB_WINDOWS.md](docs/USB_WINDOWS.md), and [docs/USB_EXECUTION.md](docs/USB_EXECUTION.md). Short version:
 
 - VID/PID `16c0:05dc`, FUNC 1–16 and 127
 - GETCAPABILITIES = TPI + 3 MHz bit, **not** dioannidis clock bytes

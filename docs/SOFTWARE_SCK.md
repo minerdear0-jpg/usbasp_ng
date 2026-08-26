@@ -1,6 +1,8 @@
 # Software SCK ENABLEPROG failure
 
-**Status:** RST PORTB RMW is `cli`/`SREG` (same as MOSI/SCK). **Bench 2026-08-26:** wrap did **not** change the symptom. Programmer yellow-dot HIDUART `YEL0`, target no-dot `1E 93 07`, JP3 open. `-B 8` / `-B 0.5` PASS; `-B 22` / `-B 50` still ENABLEPROG `0x01`. Bitbang algorithm unchanged. Next: waveform, not more IRQ wrapping.
+**Status:** open; next controlled test [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md). Baseline WinUSB/HW ISP pipeline: [ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md).
+
+RST PORTB RMW is `cli`/`SREG` (same as MOSI/SCK). **Bench 2026-08-26:** wrap did **not** change the symptom. Programmer yellow-dot HIDUART `YEL0`, target no-dot `1E 93 07`, JP3 open. `-B 8` / `-B 0.5` PASS; `-B 22` / `-B 50` still ENABLEPROG `0x01`. Bitbang algorithm unchanged. Next: **HW vs SW sweep + waveform**, not more IRQ wrapping.
 
 **Wanted:** a capture (FX2 `fx2lafw` / PulseView, or Nano 328P sniffer) of **PASS `-B 8`** vs **FAIL `-B 22`**. Attach to [issue #1](https://github.com/minerdear0-jpg/usbasp_ng/issues/1) or a PR.
 

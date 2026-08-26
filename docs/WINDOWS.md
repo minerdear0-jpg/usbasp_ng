@@ -2,7 +2,7 @@
 
 **Goal (x64):** plug in, no Zadig, no libusbK, no INF. Device Manager shows Microsoft **WinUSB**. Then modern avrdude `-c usbasp` (or `usbasp-clone`) programs the target.
 
-Classic stays **one vendor-specific interface, EP0 only**. USBasp FUNC 1–16 / 127 is unchanged. Windows binds WinUSB via BOS + Microsoft OS 2.0 (`WINUSB`).
+Classic stays **one vendor-specific interface, EP0 only**. USBasp FUNC 1–16 / 127 is unchanged. Windows binds WinUSB via BOS + Microsoft OS 2.0 (`WINUSB`). MS OS layout decision and Win11 A/B: [USB_WINDOWS.md](USB_WINDOWS.md).
 
 Use **classic** for Arduino and for MSVC avrdude. HIDUART is composite — different story (see below).
 
@@ -13,7 +13,7 @@ Use **classic** for Arduino and for MSVC avrdude. HIDUART is composite — diffe
 | Win10/11 x64 | avrdude 8.x MSVC | WinUSB | ✅ bench | ⚠️ prefer MinGW/libusb |
 | Win10/11 x64 | avrdude 8.x MinGW | WinUSB | ✅ | ✅ / check |
 | Win10/11 x64 | AVRDUDESS (current) | WinUSB | ✅ bench (`usbasp-clone`) | ⚠️ |
-| Win10/11 x64 | Arduino IDE 1.8.19 bundled avrdude **6.3** | WinUSB | ❌ host tool too old | ❌ |
+| Win10/11 x64 | Arduino IDE 1.8.19 bundled avrdude **6.3** | WinUSB | see [ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md); not a matrix expansion | ❌ |
 | Win10/11 x64 | Arduino IDE + replaced avrdude 8.x MSVC | WinUSB | ✅ expected | use classic |
 | Linux | current avrdude | libusb | ✅ | ✅ |
 | macOS | current avrdude | libusb | ✅ | ✅ |
@@ -26,9 +26,9 @@ Details for the Arduino 6.3 failure: [ARDUINO.md](ARDUINO.md), [KNOWN_ISSUES.md]
 1. Prefer a PC without a leftover libusb0/libusbK binding for `16c0:05dc` (or uninstall that OEM INF first).
 2. Flash **classic** (`usbasp-ng-classic-atmega8.hex` from [releases](https://github.com/minerdear0-jpg/usbasp_ng/releases); packaging: [RELEASE.md](RELEASE.md)), plug in.
 3. Device Manager: no unknown device; publisher **Microsoft**, driver **WinUSB**.
-4. `bcdDevice` **2.02** (2.00 = pre-WinUSB classic; HIDUART uses **2.01** — same VID/PID, separate Windows hardware ID by design).
+4. `bcdDevice` **2.03** (2.00 = pre-WinUSB; 2.02 = nested-MS-OS experiment; HIDUART uses **2.01** — same VID/PID, separate Windows hardware ID by design).
 5. Modern avrdude: `avrdude -c usbasp -p atmega328p` (or `-c usbasp-clone`).
-6. Arduino: only after step 5’s avrdude is new enough — Tools → Programmer → **USBasp** → Burn Bootloader / Upload Using Programmer.
+6. Arduino: Tools → Programmer → **USBasp** → Burn Bootloader / Upload Using Programmer. Prefer modern avrdude; stock 6.3 may work after Fischl string indices ([ARDUINO.md](ARDUINO.md)). Never Burn Bootloader with another programmer MCU on the ISP ribbon.
 
 **First-plug WinUSB** on a clean machine is not proof that every PC with an old USBasp OEM INF will migrate automatically. Existing libusbK/libusb0 associations for `16c0:05dc` may stick until the device (and optionally the OEM INF) is removed. That is Windows driver-store behavior, not an NG bug.
 
@@ -38,17 +38,20 @@ Device Manager may still show the generic label **“WinUSB Device”**. That is
 
 | Symptom | Likely cause | Action |
 |---------|--------------|--------|
-| Unknown device / needs Zadig | Old firmware without BOS/MS OS 2.0 | Flash classic ≥ v0.2.0 |
+| Unknown device / needs Zadig | Old firmware / stale bind / wrong image | Flash classic with device-level MS OS `0x9E`, `bcdDevice` 2.03 ([USB_WINDOWS.md](USB_WINDOWS.md)). Uninstall device first. **Not** libusbK |
 | WinUSB OK, avrdude 6.3 `cannot query manufacturer` | Arduino IDE bundled tool | Replace avrdude or use AVRDUDESS — **not** libusbK |
 | Still libusbK/libusb0 on `16c0:05dc` | Stale driver store | Uninstall device + delete OEM INF, replug |
+| `!` on 16C0:05DC, no publisher after nested MS OS `0xAE` | Classic nested layout failed Win11 auto-bind on this hardware | Use device-level classic; uninstall + replug ([USB_WINDOWS.md](USB_WINDOWS.md)) |
 | `usbasp` fails, `usbasp-clone` works | Vendor string check | Normal for some clones; NG has Fischl strings so both should work |
 | COM port missing | Expected | USBasp is not CDC |
 
 ## Bench 2026-08-26 (Win11 x64)
 
-Yellow-dot classic NG, libusbK removed. **WinUSB on first plug.** AVRDUDESS read flash/EEPROM via `usbasp-clone`. Arduino 1.8.19 + avrdude 6.3 failed as in the matrix.
+Yellow-dot classic NG, libusbK removed. **WinUSB on first plug** with device-level MS OS `0x9E`. Nested `0xAE` on the same stick → unbound (`!`, no publisher); see [USB_WINDOWS.md](USB_WINDOWS.md). AVRDUDESS read flash/EEPROM via `usbasp-clone`.
 
-USBasp is USB, not a COM port. AVRDUDESS **115200** is irrelevant; use `-B` / SCK for ISP speed.
+Later the same day: full destructive ISP via IDE Burn Bootloader through yellow — recorded as **[ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md)**. Do not widen this matrix from that single run. **SW SCK** remains open: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
+
+USBasp is USB, not a COM port. AVRDUDESS **115200** is irrelevant; use `-B` / SCK for ISP speed. Arduino **Get Board Info** is Serial-only — irrelevant for USBasp.
 
 ## HIDUART on Windows
 

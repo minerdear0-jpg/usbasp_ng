@@ -18,8 +18,8 @@ getcapabilities:
   func: 127
   dir: in
   response_len: 4
-  classic_bytes: [0x01, 0x00, 0x00, 0x01]  # TPI | 3MHz
-  avrdude_caps: 0x01000001
+  classic_bytes: [0x00, 0x00, 0x00, 0x01]  # 3MHz only; TPI off until silicon proof
+  avrdude_caps: 0x01000000
 
 functions:
   CONNECT:

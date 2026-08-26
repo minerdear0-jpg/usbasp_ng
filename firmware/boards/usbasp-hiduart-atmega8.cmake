@@ -3,7 +3,7 @@ set(USBASP_MCU atmega8)
 set(USBASP_F_CPU 12000000)
 set(USBASP_PROFILE hiduart)
 # TPI: advertised; not silicon-validated yet. See clone board comment.
-set(USBASP_HAS_TPI 1)
+set(USBASP_HAS_TPI 0)
 set(USBASP_HAS_SCK_JUMPER 1)
 set(USBASP_HAS_HID_UART 1)
 set(USBASP_HAS_3MHZ 1)

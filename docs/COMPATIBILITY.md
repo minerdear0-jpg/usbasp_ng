@@ -11,17 +11,17 @@ L0–L2 must not change without an explicit compatibility review.
 | Device class | `0xFF` (vendor), as Fischl 2011 |
 | Interface class | `0` (V-USB default; vendor is on the device, not the interface) |
 | bcdUSB | `2.01` (BOS; still **low speed** on the wire) |
-| bcdDevice | `2.02` (WinUSB bind; not Fischl `2.00`, not HIDUART `2.01`) |
+| bcdDevice | `2.03` (WinUSB bind; not Fischl `2.00`, not HIDUART `2.01`) |
 | Configuration | 1 |
 | Interfaces | 1 vendor interface, **no** extra class interfaces |
 | Endpoints | Control EP0 only (`bNumEndpoints = 0`) |
 | Serial string | none (`iSerial = 0`) |
 | Max power | 50 mA (2011) |
-| Host driver metadata | BOS + MS OS 2.0 Compatible ID `WINUSB` (not USBasp FUNC) |
+| Host driver metadata | BOS + MS OS 2.0 Compatible ID `WINUSB` (**device-level** set `0x9E`; see [USB_WINDOWS.md](USB_WINDOWS.md)) |
 
 Classic must keep the original USBasp **device/interface topology** (one vendor interface, EP0 only). BOS / MS OS 2.0 is **driver-binding metadata** for Windows; L1 FUNC 1–16 / 127 is unchanged. See [WINDOWS.md](WINDOWS.md).
 
-`usbasp-hiduart` is a **separate product**: composite vendor + HID. It keeps L1/L2 ISP/TPI behaviour and the stock avrdude VID/PID `16c0:05dc`. It is **not** an L0 topology match. Windows MSVC avrdude (libwinusb) may not open the composite; use a MinGW/libusb build or prefer classic for Arduino. WCID WINUSB + `DeviceInterfaceGUIDs` apply only to vendor IF0; HID IF1/IF2 bind by class. `bcdDevice` is 2.01 so Windows UsbFlags does not share classic 2.02.
+`usbasp-hiduart` is a **separate product**: composite vendor + HID. It keeps L1/L2 ISP/TPI behaviour and the stock avrdude VID/PID `16c0:05dc`. It is **not** an L0 topology match. Windows MSVC avrdude (libwinusb) may not open the composite; use a MinGW/libusb build or prefer classic for Arduino. WCID WINUSB + `DeviceInterfaceGUIDs` apply only to vendor IF0; HID IF1/IF2 bind by class. `bcdDevice` is 2.01 so Windows UsbFlags does not share classic 2.03.
 
 ## L1 USB wire protocol
 
@@ -100,7 +100,7 @@ Measured on ATmega8 clones (no-dot programmer, yellow-dot target / USB DUT):
 - yellow as ISP target (no-dot programmer): EEPROM 512 B read; 16-byte write+verify+restore `0xFF`; `-B 0.25` → 3 MHz signature OK
 - yellow NG as programmer, no-dot as target: EEPROM read 512 B (`0xFF`); SETISPSCK `-B 8` / `-B 0.5` / `-B 0.25` (3 MHz) signature OK. JP3 closed → 8 kHz software SCK, ENABLEPROG `0x01` (same SW-SCK bug).
 - GETCAPABILITIES `01 00 00 01`
-- classic L0 USB: one interface, EP0 only; BOS + MS OS 2.0 WinUSB; `bcdDevice` 2.02. HIDUART is USB 2.01 composite (not L0), same VID/PID, `bcdDevice` 2.01
+- classic L0 USB: one interface, EP0 only; BOS + MS OS 2.0 WinUSB (**device-level** set `0x9E`); `bcdDevice` 2.03. HIDUART is USB 2.01 composite (not L0), same VID/PID, `bcdDevice` 2.01
 - **Win11 x64 2026-08-26:** yellow classic, libusbK uninstalled → WinUSB immediately; AVRDUDESS latest `-c usbasp-clone` read flash+EEPROM of the other mega8. See [WINDOWS.md](WINDOWS.md).
 - HIDUART yellow-dot: iSerial `YEL0`; ISP read of no-dot through composite (flash 4018 B, EEPROM 512 B `0xFF`, `-B 8`/`0.5`/`0.25`); UART loopback PD0–PD1
 
@@ -110,14 +110,14 @@ avrdude: `caps = b0 | b1<<8 | b2<<16 | b3<<24`
 
 Classic:
 
-- byte 0: `USBASP_CAP_TPI` (0x01)
+- byte 0: `USBASP_CAP_TPI` (0x01) **only if** `USBASP_HAS_TPI=1` (current boards: **0** — TPI experimental)
 - byte 1: 0
 - byte 2: 0
 - byte 3: `USBASP_CAP_3MHZ >> 24` (0x01) if the board can do 3 MHz SCK
 
 No dioannidis clock-id bits in byte 1. No HID flags in the avrdude bitmap.
 
-TPI (FUNC 11–16) is compiled. GETCAPABILITIES advertises `USBASP_CAP_TPI` when the board profile sets `USBASP_HAS_TPI=1` (current boards). It is **not** exercised on silicon in this repo yet (no tiny4/5/10 on the bench). Flip `USBASP_HAS_TPI` to `0` only after a compatibility review if you must ship without the capability bit.
+TPI (FUNC 11–16) is compiled. Do **not** advertise `USBASP_CAP_TPI` until a real tiny4/5/10 acceptance pass; then set `USBASP_HAS_TPI=1` on that board profile.
 
 ## What classic must not grow
 

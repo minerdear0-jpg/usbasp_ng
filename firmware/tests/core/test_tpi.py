@@ -81,7 +81,8 @@ def test_vendor_raw_and_block_packing():
     assert "replyBuffer[0] = tpi_recv_byte()" in VENDOR
     blk = VENDOR.split("USBASP_FUNC_TPI_READBLOCK", 1)[1]
     assert "prog_address = usbasp_read_le16(&data[2])" in blk
-    assert "prog_nbytes = usbasp_read_le16(&data[6])" in blk
+    assert "prog_begin_transfer(PROG_STATE_TPI_READ, usbasp_read_le16(&data[6]))" in blk
+    assert "prog_begin_transfer(PROG_STATE_TPI_WRITE, usbasp_read_le16(&data[6]))" in blk
     assert "PROG_STATE_TPI_READ" in blk
     assert "PROG_STATE_TPI_WRITE" in blk
 

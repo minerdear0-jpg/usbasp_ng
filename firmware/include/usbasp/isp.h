@@ -18,11 +18,11 @@ void isp_out_clr_bit(uchar bit);
 uchar ispTransmit_sw(uchar send_byte);
 uchar ispTransmit_hw(uchar send_byte);
 uchar ispEnterProgrammingMode(void);
-uchar ispReadEEPROM(unsigned int address);
-uchar ispWriteFlash(unsigned long address, uchar data, uchar pollmode);
-uchar ispFlushPage(unsigned long address, uchar pollvalue);
-uchar ispReadFlash(unsigned long address);
-uchar ispWriteEEPROM(unsigned int address, uchar data);
+uchar ispReadEEPROM(uint16_t address);
+uchar ispWriteFlash(uint32_t address, uchar data, uchar pollmode);
+uchar ispFlushPage(uint32_t address, uchar pollvalue);
+uchar ispReadFlash(uint32_t address);
+uchar ispWriteEEPROM(uint16_t address, uchar data);
 
 typedef uchar (*isp_transfer_fn)(uchar);
 

@@ -150,26 +150,47 @@ def parse_ms_os20(blob: bytes) -> MsOsNode:
 
 
 def validate_classic_winusb(blob: bytes) -> dict:
-    """Non-composite: Set → Config → Function(IF0) → WINUSB → DeviceInterfaceGUID."""
+    """Classic non-composite: Set → WINUSB → DeviceInterfaceGUID (no subsets)."""
+    root = parse_ms_os20(blob)
+    kinds = [c.kind for c in root.children]
+    assert MSOS_CONFIG_SUBSET not in kinds, "classic must not use Configuration subset"
+    assert MSOS_FUNCTION_SUBSET not in kinds, "classic must not use Function subset"
+    assert len(root.children) == 2, kinds
+    assert root.children[0].kind == MSOS_COMPATIBLE_ID
+    assert root.children[0].raw[4:10] == b"WINUSB"
+    assert root.children[1].kind == MSOS_REG_PROPERTY
+    prop = root.children[1].raw
+    name = prop[8 : 8 + _u16(prop, 6)]
+    assert b"D\x00e\x00v\x00i\x00c\x00e\x00I\x00n\x00t\x00e\x00r\x00f\x00a\x00c\x00e\x00G\x00U\x00I\x00D\x00" in name
+    # Singular GUID (REG_SZ), not GUIDs (REG_MULTI_SZ)
+    assert b"G\x00U\x00I\x00D\x00s\x00" not in name
+    return {
+        "total": len(blob),
+        "layout": "device-level",
+        "compatible_id": "WINUSB",
+    }
+
+
+def validate_hiduart_winusb(blob: bytes) -> dict:
+    """HIDUART composite: Set → Config → Function IF0 → WINUSB → DeviceInterfaceGUIDs."""
     root = parse_ms_os20(blob)
     assert len(root.children) == 1, [c.kind for c in root.children]
     cfg = root.children[0]
     assert cfg.kind == MSOS_CONFIG_SUBSET
-    assert cfg.length == 0xA4
     assert len(cfg.children) == 1
     fn = cfg.children[0]
     assert fn.kind == MSOS_FUNCTION_SUBSET
-    assert fn.length == 0x9C
-    assert fn.raw[4] == 0  # first interface
+    assert fn.raw[4] == 0  # vendor IF0
     assert len(fn.children) == 2
     assert fn.children[0].kind == MSOS_COMPATIBLE_ID
     assert fn.children[0].raw[4:10] == b"WINUSB"
     assert fn.children[1].kind == MSOS_REG_PROPERTY
     prop = fn.children[1].raw
     name = prop[8 : 8 + _u16(prop, 6)]
-    assert b"D\x00e\x00v\x00i\x00c\x00e\x00I\x00n\x00t\x00e\x00r\x00f\x00a\x00c\x00e\x00G\x00U\x00I\x00D\x00" in name
+    assert b"G\x00U\x00I\x00D\x00s\x00" in name  # plural MULTI_SZ
     return {
         "total": len(blob),
+        "layout": "nested-composite",
         "config_subset": cfg.length,
         "function_subset": fn.length,
         "interface": 0,
@@ -180,6 +201,26 @@ def validate_classic_winusb(blob: bytes) -> dict:
 def load_classic_msos(fw_root: Path) -> bytes:
     src = (fw_root / "src" / "usb" / "ms_os_20.c").read_text()
     return c_array_bytes(src, "usbasp_ms_os_20_set", {"USBASP_MS_OS_VENDOR_CODE": "0x5D"})
+
+
+def load_hiduart_msos(fw_root: Path) -> bytes:
+    """Active HIDUART set is MS_2_0_OS_DESCRIPTOR_SET before the #else (non-HID) branch."""
+    src = (fw_root / "src_hid" / "usb_descriptors.h").read_text()
+    # Truncate at the alternate #else block so we don't pick the duplicate name.
+    cut = src.find("\n#else")
+    if cut < 0:
+        raise ValueError("expected #else in usb_descriptors.h")
+    head = src[:cut]
+    extras = {
+        "MS_OS_20_SET_HEADER_DESCRIPTOR": "0x00, 0x00",
+        "MS_OS_20_SUBSET_HEADER_CONFIGURATION": "0x01, 0x00",
+        "MS_OS_20_SUBSET_HEADER_FUNCTION": "0x02, 0x00",
+        "MS_OS_20_FEATURE_COMPATIBLE_ID": "0x03, 0x00",
+        "MS_OS_20_FEATURE_REG_PROPERTY": "0x04, 0x00",
+        "MS_OS_20_REG_PROPERTY_REG_MULTI_SZ": "0x07, 0x00",
+        "VENDOR_CODE": "0x5D",
+    }
+    return c_array_bytes(head, "MS_2_0_OS_DESCRIPTOR_SET", extras)
 
 
 def load_classic_bos(fw_root: Path) -> bytes:
@@ -212,14 +253,14 @@ def load_classic_device_descriptor(fw_root: Path) -> bytes:
     src = (fw_root / "src" / "usb" / "ms_os_20.c").read_text()
     strings = (fw_root / "include" / "usbasp" / "usb_strings.h").read_text()
     cfg_in = (fw_root / "cmake" / "usbconfig.h.in").read_text()
-    # Classic cmake: class 0xff, bcdDevice 2.02 (little-endian bytes in macro).
+    # Classic cmake: class 0xff, bcdDevice 2.03 (little-endian bytes in macro).
     extras = {
         "USBDESCR_DEVICE": "0x01",
         "USB_CFG_DEVICE_CLASS": "0xff",
         "USB_CFG_DEVICE_SUBCLASS": "0",
         "USB_CFG_VENDOR_ID": "0xc0, 0x16",
         "USB_CFG_DEVICE_ID": "0xdc, 0x05",
-        "USB_CFG_DEVICE_VERSION": "0x02, 0x02",
+        "USB_CFG_DEVICE_VERSION": "0x03, 0x02",
     }
     blob = c_array_bytes(src + "\n" + strings + "\n" + cfg_in, "usbDescriptorDevice", extras)
     if len(blob) != 18:

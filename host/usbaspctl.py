@@ -17,12 +17,14 @@ USBasp NG on Windows (classic)
 ==============================
 Goal: Microsoft WinUSB, no Zadig / libusbK / INF.
 
-1. Flash classic usbasp.hex (bcdDevice 2.02), not HIDUART.
+1. Flash classic usbasp.hex (bcdDevice 2.03), not HIDUART.
 2. Device Manager → WinUSB (Microsoft). Label may say "WinUSB Device".
-3. Use avrdude 7+/8.x MSVC or AVRDUDESS. Arduino 1.8.19 ships avrdude 6.3 —
-   it cannot open WinUSB (cannot query manufacturer).
-4. Fix Arduino: arduino/replace-avrdude.ps1  OR use AVRDUDESS for ISP.
+3. Prefer avrdude 7+/8.x MSVC or AVRDUDESS. Arduino 1.8.19 ships avrdude 6.3 —
+   after Fischl string indices it may work (bench Burn Bootloader PASS); still prefer modern.
+4. Fix stubborn 6.3: arduino/replace-avrdude.ps1  OR use AVRDUDESS for ISP.
 5. Do NOT reinstall libusbK to please old Arduino.
+6. Get Board Info is Serial — not a USBasp test. Never Burn Bootloader with another
+   programmer MCU on the ISP ribbon.
 
 Docs: docs/WINDOWS.md  docs/ARDUINO.md  docs/KNOWN_ISSUES.md
 """.strip()
@@ -30,7 +32,7 @@ Docs: docs/WINDOWS.md  docs/ARDUINO.md  docs/KNOWN_ISSUES.md
 
 def _profile(bcd_device: int, n_intf: int, has_hid: bool) -> str:
     if n_intf == 1 and not has_hid:
-        if bcd_device == 0x0202:
+        if bcd_device in (0x0203, 0x0202):
             return "classic (WinUSB metadata)"
         if bcd_device == 0x0200:
             return "classic (pre-WinUSB / Fischl-like)"
@@ -141,7 +143,7 @@ def _collect_one(usb_core, usb_util, dev) -> dict:
     elif "hiduart" in info["profile"] and has_hid:
         info["topology_ok"] = "composite HID present"
 
-    if info["bcdDevice"] == 0x0202 and info["profile"].startswith("classic"):
+    if info["bcdDevice"] in (0x0203, 0x0202) and info["profile"].startswith("classic"):
         info["windows_expect"] = "WinUSB (Microsoft) without Zadig"
     elif "hiduart" in info["profile"]:
         info["windows_expect"] = "prefer classic for MSVC avrdude; HID uses hidclass"
