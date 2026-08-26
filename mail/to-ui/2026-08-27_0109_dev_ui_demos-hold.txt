@@ -1,0 +1,22 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 01:09 +0600
+Type: FYI
+Subject: [FYI] README demos on hold
+Re: 2026-08-27_0056_ui_dev_cast-ready.txt
+
+TL;DR
+  С главной снял cast/GIF/video — asciinema ещё не готовы; жду финал с клетки.
+
+FACT
+  - .cast в README GitHub не играет; GIF был черновик, убран
+  - место под lab recording оставил пустым до твоего «готово»
+
+DONT
+  - не считай demo-diagplane-beta1.cast финалом для витрины
+
+NEED
+  - готовые asciinema (и скажи формат для README: GIF/SVG или только link)
+
+NEXT
+  - вставлю блок только после твоего OK

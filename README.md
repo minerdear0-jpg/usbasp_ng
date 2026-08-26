@@ -39,42 +39,6 @@ mega8/88 HIDUART hex from beta.1 remains buildable and is **frozen** (no further
 
 While `avrdude` programs a target, firmware emits a semantic ISP timeline on HID EP2: SESSION, SCK, RESET, ENABLEPROG, MEMOP, TRACE, … Host `diagplane` watches, records, correlates.
 
-### Lab recording — USBasp2 beta.1
-
-Live cage (YEL0 → ATmega8): signature / fuses / EEPROM / flash reads, then `diagplane watch` (MEMOP, ENABLEPROG fail / TARGET SILENT, dual-column). Not a synthetic demo.
-
-GitHub cannot play `.cast` in README; this GIF is rendered from the recording. Replay the original with `asciinema`.
-
-![USBasp2 beta.1 — diagplane watch and cage memory reads](docs/media/demo-diagplane-beta1.gif)
-
-| | |
-|---|---|
-| GIF (README) | [`demo-diagplane-beta1.gif`](docs/media/demo-diagplane-beta1.gif) |
-| Recording | [`demo-diagplane-beta1.cast`](docs/media/demo-diagplane-beta1.cast) · [release asset](https://github.com/minerdear0-jpg/usbasp_ng/releases/download/usbasp2-beta.1/demo-diagplane-beta1.cast) |
-| Terminal | 120×36 (GIF preview at 100×28, 2× speed) |
-
-```bash
-asciinema play docs/media/demo-diagplane-beta1.cast
-```
-
-### Video overview
-
-Earlier overview clip (same instrument idea; prefer the beta.1 cast for the current TUI):
-
-<video
-  src="https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane.mp4"
-  poster="https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane-poster.webp"
-  controls
-  muted
-  playsinline
-  width="720">
-  <a href="https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane.mp4">Demo (MP4)</a>
-</video>
-
-[MP4](https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane.mp4)
-· [WebM](https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane.webm)
-· [`docs/media/`](docs/media/)
-
 ### Linux (USBasp2)
 
 1. Flash `usbasp-ng-hiduart-atmega328p.hex` + `.eep` (or `SERIAL=YEL0 make -C firmware BOARD=usbasp-hiduart-atmega328p flash` via another USBasp, J2 closed).
