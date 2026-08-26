@@ -38,13 +38,15 @@ avrdude -c usbasp -p atmega8 -B 22 -U signature:r:-:h
 avrdude -c usbasp -p atmega8 -B 8 -U signature:r:-:h
 ```
 
-Save the terminal log, decode:
+Save **both** terminal logs (`capture_b8.txt`, `capture_b22.txt`), decode:
 
 ```text
+python3 host/isp-sniffer/plot_capture.py --file capture_b8.txt --no-plot
 python3 host/isp-sniffer/plot_capture.py --file capture_b22.txt --no-plot
-python3 host/isp-sniffer/plot_capture.py --file capture_b22.txt --out b22.png
 ```
+
+Score RST / MOSI `AC 53 00 00` / MISO third byte / SCK half-period / leftover HW SPI as in [`docs/SOFTWARE_SCK.md`](../../docs/SOFTWARE_SCK.md).
 
 Expect after ~20 ms: MOSI `AC 53 00 00`. PASS if byte 2 MISO is `0x53`. Software SCK half-period at `-B 22` is on the order of 16 µs.
 
-`-B 8` / `-B 0.5` may miss edges on this busy-loop (HW SPI is fast). Those modes already PASS on the bench; the sniffer is for **software SCK**.
+`-B 8` / `-B 0.5` may miss edges on this busy-loop (HW SPI is fast). For the five-point PASS vs FAIL compare, prefer FX2/`fx2lafw` so `-B 8` is actually in the log. This mega8 sniffer is still useful for **software SCK** (`-B 22`).

@@ -66,7 +66,39 @@ def test_connect_does_not_store_jumper_as_host_sck():
     text = Path(__file__).resolve().parents[2] / "src" / "vendor_isp.c"
     src = text.read_text()
     assert "prog_sck = USBASP_ISP_SCK_8" not in src
-    assert "board_sck_jumper_slow()" in src
+    assert "isp_apply_host_sck()" in src
+
+
+def test_rst_portb_uses_cli():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "src"
+    isp = (root / "isp.c").read_text()
+    vendor = (root / "vendor_isp.c").read_text()
+    assert "void isp_out_set_bit" in isp
+    assert "void isp_out_clr_bit" in isp
+    assert "ISP_OUT |= (1 << ISP_RST)" not in isp
+    assert "ISP_OUT &= ~(1 << ISP_RST)" not in isp
+    assert "ISP_OUT |= (1 << ISP_RST)" not in vendor
+    assert "ISP_OUT &= ~(1 << ISP_RST)" not in vendor
+    for name in (
+        "isp_out_set_bit(ISP_RST)",
+        "isp_out_clr_bit(ISP_RST)",
+    ):
+        assert name in isp
+        assert name in vendor
+
+
+def test_enableprog_does_not_store_effective_as_requested():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    isp = (root / "src" / "isp.c").read_text()
+    sck = (root / "src" / "sck.c").read_text()
+    assert "prog_sck = sck" not in isp
+    assert "isp_apply_host_sck" in sck
+    assert "effective_sck = option" in sck
+    assert "board_led_isp_activity" not in isp.split("ispTransmit_hw", 1)[1].split("ispEnterProgrammingMode", 1)[0]
 
 
 def main():
@@ -74,6 +106,8 @@ def main():
     test_sw_delay_matches_fischl_table()
     test_hw_threshold()
     test_connect_does_not_store_jumper_as_host_sck()
+    test_rst_portb_uses_cli()
+    test_enableprog_does_not_store_effective_as_requested()
     print("ok  sck_autoslow")
     return 0
 

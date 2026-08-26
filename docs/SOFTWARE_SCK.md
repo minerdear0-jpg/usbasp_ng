@@ -1,8 +1,10 @@
 # Software SCK ENABLEPROG failure
 
-**Status:** known, parked. Do not patch `firmware/src/sck.c` until a waveform exists.
+**Status:** RST PORTB RMW is `cli`/`SREG` (same as MOSI/SCK). **Bench 2026-08-26:** wrap did **not** change the symptom. Programmer yellow-dot HIDUART `YEL0`, target no-dot `1E 93 07`, JP3 open. `-B 8` / `-B 0.5` PASS; `-B 22` / `-B 50` still ENABLEPROG `0x01`. Bitbang algorithm unchanged. Next: waveform, not more IRQ wrapping.
 
-**Wanted:** a capture (FX2 `fx2lafw` / PulseView, or a third mega8 sniffer) of the same pair at **PASS `-B 8`** vs **FAIL `-B 22`**. Attach it to [issue #1](https://github.com/minerdear0-jpg/usbasp_ng/issues/1) or open a PR.
+**Wanted:** a capture (FX2 `fx2lafw` / PulseView, or a third mega8 sniffer) of the same pair at **PASS `-B 8`** vs **FAIL `-B 22`**, if the RST wrap does not change the result. Attach it to issue #1 or open a PR.
+
+Review notes: [`reports/2026-08-26-master-review-2-rst-rmw.md`](../reports/2026-08-26-master-review-2-rst-rmw.md). Sample-MISO-before-SCK-rise matches Fischl 2011; that is not the bug to chase.
 
 ## Symptom
 
@@ -27,7 +29,7 @@ Programmer = yellow-dot NG (classic or HIDUART). Target = no-dot mega8, J2 close
 
 Same FAIL on **classic L0** and **HIDUART**. It is not composite HID IRQ.
 
-JP3 applies 8 kHz on the **wire** without storing that id as the host SETISPSCK value. Avrdude may still print 1.5 MHz after `-B 0.5` while the pins run ~8 kHz.
+JP3 applies 8 kHz on the **wire** without storing that id as the host SETISPSCK value (`prog_sck` requested vs `effective_sck` on the pins). Avrdude may still print 1.5 MHz after `-B 0.5` while the pins run ~8 kHz.
 
 ## What we already ruled out
 
@@ -35,8 +37,9 @@ JP3 applies 8 kHz on the **wire** without storing that id as the host SETISPSCK 
 - Software bitbang compiles to sbi/cbi; LED is off the `ispTransmit_sw` path.
 - INT0 TX does RMW on whole PORTB/DDRB; ISP DDR is touched one pin at a time. USB stayed up after FAIL.
 - `USB_COUNT_SOF` is off (would need INT0 on D−).
+- RST `PORTB` writes now use `isp_out_set_bit` / `isp_out_clr_bit` (`cli` around RMW). MOSI/SCK bitbang already did. Idle SCK/MOSI/MISO levels on connect/disconnect are still bare RMW.
 
-Root cause among RST / MOSI / MISO / SCK vs USB `out PORTB` during bitbang delays is **not scoped**.
+Root cause among remaining PORTB races vs USB `out PORTB` during bitbang delays is **not scoped**. RST `cli` is ruled out as the ENABLEPROG failure (2026-08-26).
 
 ## Reproduce (signature only)
 
@@ -56,6 +59,16 @@ Probe programmer **RST, MOSI, MISO, SCK**, common GND. Trigger **RST falling** (
 
 Need enough time for the ENABLEPROG `AC 53 00 00` exchange. PASS if byte 2 on MISO is `0x53`. At `-B 22` software half-period is on the order of 16 µs.
 
+When the traces exist, score them (do not stop at “FAIL confirmed”):
+
+1. **RST** — one clean fall on both runs, same amplitude? Difference → RST/`clockWait(62)`, not SCK.
+2. **MOSI** — `AC 53 00 00` bit-correct on `-B 22`? Yes → RX or target. Extra/missing bits only on SW → bitbang path.
+3. **MISO third byte** — stuck 0 (target not in ISP); toggles but not `0x53` (sample phase); smooth wrong byte (bit/byte slip).
+4. **SCK** — ~16 µs half-period at `-B 22`? Glitches at `cli`/`SREG` edges?
+5. **Not leftover HW SPI** — pins actually bitbang, not frozen.
+
+Checklist copy: [`reports/2026-08-26-sw-sck-capture-plan.md`](../reports/2026-08-26-sw-sck-capture-plan.md).
+
 Third mega8 sniffer in this tree: [`host/isp-sniffer/`](../host/isp-sniffer/README.md) (`plot_capture.py`). Do not flash the sniffer onto the two bench clones unless replacing NG.
 
 Cheap LA: sigrok `fx2lafw` + PulseView.
@@ -63,5 +76,16 @@ Cheap LA: sigrok `fx2lafw` + PulseView.
 ## Firmware
 
 Threshold: `ispSetSCKOption()` uses hardware SPI for id `>= USBASP_ISP_SCK_93_75` (8). Ids 1–7 are software.
+
+**SW SCK contract** (until a capture fills the table): requested frequency is an **upper bound**. Cycle-count delay is the **minimum** half-period. INT0 may only stretch a phase.
+
+| Requested | min half | measured high | measured low | max jitter |
+|-----------|----------|---------------|--------------|------------|
+| 32 kHz (`-B 22`) | ~16 µs | ? | ? | ? |
+| 16 kHz (`-B 50`) | ~32 µs | ? | ? | ? |
+| 4 kHz (`-B 250`) | ~128 µs | ? | ? | ? |
+| 8 kHz JP3 | ~62.5 µs | ? | ? | ? |
+
+USB: INT0 ISR returns → main `usbPoll()` → `usbFunctionSetup()` → ISP. PORTB RMW for MOSI/SCK/RST is atomic vs that ISR.
 
 Release with this bug still present: [v0.1.2](https://github.com/minerdear0-jpg/usbasp_ng/releases/tag/v0.1.2).

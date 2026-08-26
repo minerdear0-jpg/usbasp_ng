@@ -13,6 +13,8 @@
 
 void ispConnect(void);
 void ispDisconnect(void);
+void isp_out_set_bit(uchar bit);
+void isp_out_clr_bit(uchar bit);
 uchar ispTransmit_sw(uchar send_byte);
 uchar ispTransmit_hw(uchar send_byte);
 uchar ispEnterProgrammingMode(void);

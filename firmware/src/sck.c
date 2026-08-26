@@ -4,8 +4,12 @@
 #include "usbasp/sck.h"
 #include "usbasp/isp.h"
 #include "usbasp/clock.h"
+#include "usbasp/board.h"
 
 uchar sck_sw_delay;
+uchar effective_sck = USBASP_ISP_SCK_1500;
+
+extern uchar prog_sck;
 
 void isp_spi_hw_enable(void)
 {
@@ -19,10 +23,8 @@ void isp_spi_hw_disable(void)
 
 void isp_sck_delay(void)
 {
-    /* sck_sw_delay is Timer0 ticks at F_CPU/64, converted to CPU cycles.
-     * usbFunctionSetup() runs from usbPoll() with I=1, so INT0 may preempt
-     * this wait and stretch it. A TCNT0 compare can appear already elapsed
-     * after INT0; a cycle loop cannot run short. */
+    /* Minimum half-period. INT0 (USB) may only stretch; it must not shorten.
+     * usbFunctionSetup runs in usbPoll() with I=1 — see docs/COMPATIBILITY.md L2.5. */
     _delay_loop_2((uint16_t)sck_sw_delay * 16u);
 }
 
@@ -83,6 +85,15 @@ void ispSetSCKOption(uchar option)
         ISP_OUT &= ~(1 << ISP_SCK);
         sck_sw_delay = (uchar)(3u << (USBASP_ISP_SCK_32 - option));
     }
+    effective_sck = option;
+}
+
+void isp_apply_host_sck(void)
+{
+    if (board_sck_jumper_slow())
+        ispSetSCKOption(USBASP_ISP_SCK_8);
+    else
+        ispSetSCKOption(prog_sck);
 }
 
 int isp_sck_is_8khz(void)

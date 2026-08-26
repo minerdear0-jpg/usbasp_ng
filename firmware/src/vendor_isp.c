@@ -26,10 +26,7 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
     switch (data[1]) {
     case USBASP_FUNC_CONNECT:
         /* JP3 forces 8 kHz on the wire; do not overwrite the host SETISPSCK id. */
-        if (board_sck_jumper_slow())
-            ispSetSCKOption(USBASP_ISP_SCK_8);
-        else
-            ispSetSCKOption(prog_sck);
+        isp_apply_host_sck();
         prog_address_newmode = 0;
         ispConnect();
         break;
@@ -39,6 +36,7 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         break;
 
     case USBASP_FUNC_TRANSMIT:
+        board_led_isp_activity();
         replyBuffer[0] = ispTransmit(data[2]);
         replyBuffer[1] = ispTransmit(data[3]);
         replyBuffer[2] = ispTransmit(data[4]);
@@ -97,20 +95,17 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
 
     case USBASP_FUNC_SETISPSCK:
         prog_sck = data[2];
-        if (board_sck_jumper_slow())
-            ispSetSCKOption(USBASP_ISP_SCK_8);
-        else
-            ispSetSCKOption(prog_sck);
+        isp_apply_host_sck();
         replyBuffer[0] = 0;
         len = 1;
         break;
 
     case USBASP_FUNC_TPI_CONNECT:
         tpi_dly_cnt = usbasp_read_le16(&data[2]);
-        ISP_OUT |= (1 << ISP_RST);
+        isp_out_set_bit(ISP_RST);
         ISP_DDR |= (1 << ISP_RST);
         clockWait(3);
-        ISP_OUT &= ~(1 << ISP_RST);
+        isp_out_clr_bit(ISP_RST);
         clockWait(16);
         tpi_init();
         break;
@@ -119,14 +114,14 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         tpi_send_byte(TPI_OP_SSTCS(TPISR));
         tpi_send_byte(0);
         clockWait(10);
-        ISP_OUT |= (1 << ISP_RST);
+        isp_out_set_bit(ISP_RST);
         clockWait(5);
-        ISP_OUT &= ~(1 << ISP_RST);
+        isp_out_clr_bit(ISP_RST);
         clockWait(5);
         ISP_DDR &= ~(1 << ISP_RST);
         ISP_DDR &= ~(1 << ISP_SCK);
         ISP_DDR &= ~(1 << ISP_MOSI);
-        ISP_OUT &= ~(1 << ISP_RST);
+        isp_out_clr_bit(ISP_RST);
         ISP_OUT &= ~(1 << ISP_SCK);
         ISP_OUT &= ~(1 << ISP_MOSI);
         break;
@@ -189,6 +184,7 @@ uchar usbasp_isp_read(uchar *data, uchar len)
         return len;
     }
 
+    board_led_isp_activity();
     for (i = 0; i < len; i++) {
         if (prog_state == PROG_STATE_READFLASH)
             data[i] = ispReadFlash(prog_address);
@@ -230,6 +226,7 @@ uchar usbasp_isp_write(uchar *data, uchar len)
         return 0;
     }
 
+    board_led_isp_activity();
     for (i = 0; i < len; i++) {
         if (prog_state == PROG_STATE_WRITEFLASH) {
             if (prog_pagesize == 0) {

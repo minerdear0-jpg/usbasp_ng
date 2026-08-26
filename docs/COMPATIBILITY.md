@@ -58,8 +58,20 @@ NG-internal improvements that stay on the same wire:
 - AT89S51/52 programming-enable probe
 - board layer for LED polarity and optional PC2 jumper
 - LEDs: PC0 1 Hz on USB/ISP traffic; idle PC0 breathes only when 8 kHz software SCK is applied (JP3 or SETISPSCK); otherwise idle 1 Hz while configured (USB host). PC1 ISP ~10 Hz
-- software SCK: cycle-count half-period (INT0 may stretch); LED stays out of ispTransmit_sw
-- SETISPSCK applies the selected clock immediately
+- software SCK: cycle-count **minimum** half-period (INT0 may stretch, must not shorten); LED stays out of `ispTransmit_sw` and `ispTransmit_hw`
+- SETISPSCK stores **requested** id (`prog_sck`); jumper / AUTO slowdown only change **effective** wire clock (`effective_sck`)
+- SETISPSCK applies the selected clock immediately (jumper still wins on the wire)
+
+## L2.5 Timing (software SCK)
+
+USB execution: INT0 only clocks the bus; `usbPoll()` / `usbFunctionSetup()` run from main with I=1. ISP may be preempted by INT0.
+
+- HW mode: hardware SPI semantics
+- SW mode: `f_requested` is an upper bound; actual half-period >= requested half-period
+- Interrupt latency may stretch SCK high/low; no ISR may shorten a phase
+- PORTB RMW for MOSI/SCK/RST is `cli`/`SREG` vs V-USB `in`/`ori`/`out`
+
+Waveform proof for ENABLEPROG at `-B 22` is still open: [SOFTWARE_SCK.md](SOFTWARE_SCK.md).
 
 ## L3 Host compatibility
 

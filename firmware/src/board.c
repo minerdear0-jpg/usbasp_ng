@@ -4,7 +4,6 @@
 #include "usbasp/board.h"
 #include "usbasp/clock.h"
 #include "usbasp/sck.h"
-#include "usbasp/prog_state.h"
 
 #if USBASP_LED_STYLE == USBASP_LED_PORT
 /* Fischl 2011: LEDs active-low on PORTC, DDRC already outputs.
@@ -166,7 +165,7 @@ void board_led_usb_update(void)
     if (jp && !jp_was)
         ispSetSCKOption(USBASP_ISP_SCK_8);
     else if (!jp && jp_was)
-        ispSetSCKOption(prog_sck);
+        isp_apply_host_sck();
     jp_was = jp;
 
     led_time_step();

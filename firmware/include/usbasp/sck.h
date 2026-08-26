@@ -4,8 +4,12 @@
 #include "usbasp/protocol.h"
 
 extern uchar sck_sw_delay;
+/* Last id actually applied to the wire (after AUTO→1500, jumper, autoslow). */
+extern uchar effective_sck;
 
 void ispSetSCKOption(uchar option);
+/* Jumper 8 kHz else host SETISPSCK id (`prog_sck`). Does not write `prog_sck`. */
+void isp_apply_host_sck(void);
 void isp_spi_hw_enable(void);
 void isp_spi_hw_disable(void);
 void isp_sck_delay(void);

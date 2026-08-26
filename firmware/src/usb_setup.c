@@ -1,7 +1,8 @@
 #include "usbdrv.h"
 #include "usbasp/prog_state.h"
 
-/* V-USB: INT0 only clocks the bus. usbProcessRx() / this setup run in usbPoll() with I=1. */
+/* V-USB: INT0 only clocks the bus. usbProcessRx() / this setup run in
+ * usbPoll() from main with I=1, so INT0 may preempt ISP. */
 usbMsgLen_t usbFunctionSetup(uchar data[8])
 {
     usbMsgLen_t len = usbasp_vendor_setup(data);

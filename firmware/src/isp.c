@@ -10,20 +10,38 @@
 uchar isp_hiaddr;
 uchar (*ispTransmit)(uchar) = ispTransmit_sw;
 
+void isp_out_set_bit(uchar bit)
+{
+    uchar sreg = SREG;
+
+    cli();
+    ISP_OUT |= (1 << bit);
+    SREG = sreg;
+}
+
+void isp_out_clr_bit(uchar bit)
+{
+    uchar sreg = SREG;
+
+    cli();
+    ISP_OUT &= ~(1 << bit);
+    SREG = sreg;
+}
+
 void ispConnect(void)
 {
     /* One pin per RMW: V-USB TX does in/ori/out on DDRB (PB0/PB1). */
     ISP_DDR |= (1 << ISP_SCK);
     ISP_DDR |= (1 << ISP_MOSI);
     ISP_DDR |= (1 << ISP_RST);
-    ISP_OUT &= ~(1 << ISP_RST);
+    isp_out_clr_bit(ISP_RST);
     ISP_OUT &= ~(1 << ISP_SCK);
     ISP_OUT |= (1 << ISP_MISO);
     /* 2011: RST high-low longer than two target SCK before ENABLEPROG. */
     clockWait(1);
-    ISP_OUT |= (1 << ISP_RST);
+    isp_out_set_bit(ISP_RST);
     clockWait(1);
-    ISP_OUT &= ~(1 << ISP_RST);
+    isp_out_clr_bit(ISP_RST);
     /* 0xff: first flash access at 0 still writes Load Extended Address (dioannidis). */
     isp_hiaddr = 0xff;
 }
@@ -33,15 +51,12 @@ void ispDisconnect(void)
     ISP_DDR &= ~(1 << ISP_RST);
     ISP_DDR &= ~(1 << ISP_SCK);
     ISP_DDR &= ~(1 << ISP_MOSI);
-    ISP_OUT &= ~(1 << ISP_RST);
+    isp_out_clr_bit(ISP_RST);
     ISP_OUT &= ~(1 << ISP_SCK);
     ISP_OUT &= ~(1 << ISP_MOSI);
     ISP_OUT &= ~(1 << ISP_MISO);
     isp_spi_hw_disable();
-    if (board_sck_jumper_slow())
-        ispSetSCKOption(USBASP_ISP_SCK_8);
-    else
-        ispSetSCKOption(prog_sck);
+    isp_apply_host_sck();
     /* Keep requested SCK: avrdude may reconnect in the same session. */
 }
 
@@ -52,7 +67,7 @@ uchar ispTransmit_sw(uchar send_byte)
     uchar sreg;
 
     /* No LED/USB here: bitbang is a timing path. cli is only PORTB RMW
-     * vs INT0 (setup runs from usbPoll, I=1). */
+     * vs INT0 (usbPoll / usbFunctionSetup, I=1). */
     for (i = 0; i < 8; i++) {
         sreg = SREG;
         cli();
@@ -78,7 +93,6 @@ uchar ispTransmit_sw(uchar send_byte)
 
 uchar ispTransmit_hw(uchar send_byte)
 {
-    board_led_isp_activity();
     SPDR = send_byte;
     while (!(SPSR & (1 << SPIF)))
         ;
@@ -97,7 +111,6 @@ uchar ispEnterProgrammingMode(void)
     } else if (sck == USBASP_ISP_SCK_AUTO) {
         autoslow = 1;
         sck = USBASP_ISP_SCK_1500;
-        prog_sck = sck;
     }
 
     while (sck >= USBASP_ISP_SCK_0_5) {
@@ -110,9 +123,9 @@ uchar ispEnterProgrammingMode(void)
 
         uchar tries = 3;
         do {
-            ISP_OUT |= (1 << ISP_RST);
+            isp_out_set_bit(ISP_RST);
             clockWait(1);
-            ISP_OUT &= ~(1 << ISP_RST);
+            isp_out_clr_bit(ISP_RST);
             clockWait(62); /* ~20 ms at 320 us ticks */
 
             spiTx(0xAC);
@@ -124,7 +137,7 @@ uchar ispEnterProgrammingMode(void)
                 return 0;
 
             /* AT89S51/52 programming-enable echo */
-            ISP_OUT |= (1 << ISP_RST);
+            isp_out_set_bit(ISP_RST);
             clockWait(5);
             spiTx(0xAC);
             spiTx(0x53);
@@ -145,7 +158,6 @@ uchar ispEnterProgrammingMode(void)
             sck--;
         if (sck < USBASP_ISP_SCK_0_5)
             break;
-        prog_sck = sck;
         ispSetSCKOption(sck);
     }
 
