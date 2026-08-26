@@ -97,7 +97,7 @@ Checklist: [`firmware/tests/compatibility/avrdude/hw-smoke-atmega8.txt`](firmwar
 avrdude -c usbasp -p atmega328p -U flash:w:firmware.hex:i
 ```
 
-From `firmware/`: `make flash` writes the hex onto a USBasp (J2 closed) using another USBasp. HIDUART `make flash` then writes EEPROM `SERIAL` in the same recipe — avrdude chip-erase wipes EEPROM on clones without EESAVE (`hfuse 0xd9`). Do not run `flash` and `eeprom` in parallel. Linux udev: [`host/udev/`](host/udev/). Inspect: [`host/usb-inspect-usbasp.sh`](host/usb-inspect-usbasp.sh), [`host/usbasp-getcaps.py`](host/usbasp-getcaps.py). HIDUART loopback: [`host/usbasp-hiduart-loopback.py`](host/usbasp-hiduart-loopback.py) (TQFP pins 30–31).
+From `firmware/`: `make flash` writes the hex onto a USBasp (J2 closed) using another USBasp. HIDUART `make flash` then writes EEPROM `SERIAL` in the same recipe — avrdude chip-erase wipes EEPROM on clones without EESAVE (`hfuse 0xd9`). Do not run `flash` and `eeprom` in parallel. Linux udev: [`host/udev/70-usbasp.rules`](host/udev/70-usbasp.rules) (`usb` for avrdude plus `hidraw` for HIDUART). Inspect: [`host/usb-inspect-usbasp.sh`](host/usb-inspect-usbasp.sh), [`host/usbasp-getcaps.py`](host/usbasp-getcaps.py). HIDUART status (hidraw, kernel stays on HID): [`host/usbasp-hiduart-status.py`](host/usbasp-hiduart-status.py). Loopback: [`host/usbasp-hiduart-loopback.py`](host/usbasp-hiduart-loopback.py) (TQFP pins 30–31).
 
 HIDUART image: on Windows use a **MinGW/libusb** avrdude, not the MSVC/libwinusb build.
 

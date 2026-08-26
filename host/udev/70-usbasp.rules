@@ -1,0 +1,9 @@
+# USBasp NG — unprivileged access (VID 16c0 / PID 05dc).
+# Stock avrdude -c usbasp matches this VID/PID. Do not change it.
+# Filename must be before 73-seat-late.rules so TAG+=uaccess applies.
+
+# libusb / avrdude (usbfs)
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="16c0", ATTR{idProduct}=="05dc", MODE="0666", TAG+="uaccess"
+
+# HID UART hidraw (HIDUART composite). Harmless on classic (no hidraw nodes).
+KERNEL=="hidraw*", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="05dc", MODE="0666", TAG+="uaccess"

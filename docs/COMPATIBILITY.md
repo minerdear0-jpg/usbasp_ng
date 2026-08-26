@@ -19,7 +19,7 @@ L0–L2 must not change without an explicit compatibility review.
 
 Classic must keep the original USBasp **device/interface topology** enough that existing host stacks (avrdude + libusb / libusb-win32 / WinUSB-on-single-interface) still bind the same way.
 
-`usbasp-hiduart` is a **separate product**: composite vendor + HID. It keeps L1/L2 ISP/TPI behaviour but is **not** an L0 topology match. Windows MSVC avrdude (libwinusb) may not open it; use a MinGW/libusb build.
+`usbasp-hiduart` is a **separate product**: composite vendor + HID. It keeps L1/L2 ISP/TPI behaviour and the stock avrdude VID/PID `16c0:05dc`. It is **not** an L0 topology match. Windows MSVC avrdude (libwinusb) may not open it; use a MinGW/libusb build. WCID WINUSB + `DeviceInterfaceGUIDs` apply only to vendor IF0; HID IF1/IF2 bind by class. `bcdDevice` is 2.01 so Windows UsbFlags does not share classic 2.00.
 
 ## L1 USB wire protocol
 
@@ -84,7 +84,7 @@ Measured on ATmega8 clones (no-dot programmer, yellow-dot target / USB DUT):
 - yellow as ISP target (no-dot programmer): EEPROM 512 B read; 16-byte write+verify+restore `0xFF`; `-B 0.25` → 3 MHz signature OK
 - yellow NG as programmer, no-dot as target: EEPROM read 512 B (`0xFF`); SETISPSCK `-B 8` / `-B 0.5` / `-B 0.25` (3 MHz) signature OK. JP3 closed → 8 kHz software SCK, ENABLEPROG `0x01` (same SW-SCK bug).
 - GETCAPABILITIES `01 00 00 01`
-- classic L0 USB: one interface, EP0 only, no HID/BOS; HIDUART is USB 2.01 composite (not L0)
+- classic L0 USB: one interface, EP0 only, no HID/BOS; HIDUART is USB 2.01 composite (not L0), same VID/PID, `bcdDevice` 2.01
 - HIDUART yellow-dot: iSerial `YEL0`; ISP read of no-dot through composite (flash 4018 B, EEPROM 512 B `0xFF`, `-B 8`/`0.5`/`0.25`); UART loopback PD0–PD1
 
 ## Capability bytes (GETCAPABILITIES)

@@ -37,7 +37,7 @@ void board_usb_rx_activity(void);
 
 #define USB_CFG_VENDOR_ID       0xc0, 0x16
 #define USB_CFG_DEVICE_ID       0xdc, 0x05
-#define USB_CFG_DEVICE_VERSION  0x00, 0x02
+#define USB_CFG_DEVICE_VERSION  @USB_CFG_DEVICE_VERSION@
 #define USB_CFG_VENDOR_NAME     'w', 'w', 'w', '.', 'f', 'i', 's', 'c', 'h', 'l', '.', 'd', 'e'
 #define USB_CFG_VENDOR_NAME_LEN 13
 #define USB_CFG_DEVICE_NAME     'U', 'S', 'B', 'a', 's', 'p'

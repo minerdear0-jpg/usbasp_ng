@@ -184,111 +184,62 @@ PROGMEM const char BOS_DESCRIPTOR[] = {
     0xDF, 0x60, 0xDD, 0xD8, 0x89, 0x45, 0xC7, 0x4C,        /* MS OS 2.0 Platform Capability */
     0x9C, 0xD2, 0x65, 0x9D, 0x9E, 0x64, 0x8A, 0x9F,        /* {D8DD60DF-4589-4CC7-9CD2-659D9E648A9F} */
     0x00, 0x00, 0x03, 0x06,                                /* Windows Version - Windows 8.1 or later */
-    0xBE, 0x01,                                            /* Size of MS OS 2.0 Descriptor set */
+    0xB2, 0x00,                                            /* Size of MS OS 2.0 Descriptor set */
     VENDOR_CODE,                                           /* Vendor Request Code */
     0x00                                                   /* Alternate Enumeration support - 0 No support */
 
 };
 
-/* Microsft OS 2.0 Descriptor Set */
+/* Microsoft OS 2.0 Descriptor Set.
+ * WINUSB + DeviceInterfaceGUIDs (REG_MULTI_SZ) only on vendor IF0.
+ * HID IF1/IF2 bind by class. wTotalLength = 0x00B2.
+ */
 PROGMEM const char MS_2_0_OS_DESCRIPTOR_SET[] = {
 
     /* MS OS 2.0 Descriptor Set Header */
     0x0A, 0x00,                                            /* Size of descriptor */
     MS_OS_20_SET_HEADER_DESCRIPTOR,                        /* Descriptor Type */
     0x00, 0x00, 0x03, 0x06,                                /* Windows Version - Windows 8.1 or later */
-    0xBE, 0x01,                                            /* Size of MS OS 2.0 Descriptor set */
+    0xB2, 0x00,                                            /* Size of MS OS 2.0 Descriptor set */
 
     /* MS OS 2.0 Configuration Subset Header */
     0x08, 0x00,                                            /* Size of descriptor */
     MS_OS_20_SUBSET_HEADER_CONFIGURATION,                  /* Descriptor Type */
-    0x00,                                                  /* The configuration value for the USB configuration to which this subset applies. */
+    0x00,                                                  /* configuration index (zero-based) */
     0x00,                                                  /* Reserved */
-    0xB4, 0x01,                                            /* The size of entire configuration subset including this header. */
+    0xA8, 0x00,                                            /* entire configuration subset including this header */
 
-    /* MS OS 2.0 Function Subset Header */
+    /* MS OS 2.0 Function Subset Header — vendor IF0 */
     0x08, 0x00,                                            /* Size of descriptor */
     MS_OS_20_SUBSET_HEADER_FUNCTION,                       /* Descriptor Type */
-    0x00,                                                  /* The interface number for the first interface of the function to which this subset applies. */
+    0x00,                                                  /* first interface of this function */
     0x00,                                                  /* Reserved */
-    0x9C, 0x00,                                            /* The size of entire function subset including this header. */
+    0xA0, 0x00,                                            /* entire function subset including this header */
 
     /* MS OS 2.0 Compatible ID Descriptor */
     0x14, 0x00,                                            /* Size of descriptor */
     MS_OS_20_FEATURE_COMPATIBLE_ID,                        /* Descriptor Type */
-    'W','I','N','U','S','B', 0x00, 0x00,                   /* Windows string Compatible ID */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,        /* Windows string SubCompatible ID */
+    'W','I','N','U','S','B', 0x00, 0x00,                   /* Compatible ID */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,        /* SubCompatible ID */
 
-    /* MS OS 2.0 Registry Property Descriptor */
-    0x80, 0x00,                                            /* Size of descriptor */
+    /* DeviceInterfaceGUIDs REG_MULTI_SZ */
+    0x84, 0x00,                                            /* Size of descriptor */
     MS_OS_20_FEATURE_REG_PROPERTY,                         /* Descriptor Type */
-    MS_OS_20_REG_PROPERTY_REG_SZ,                          /* The type of registry property */
-    0x28, 0x00,                                            /* The length of the property name */
-    'D',0x00,'e',0x00,'v',0x00,'i',0x00,'c',0x00,          /* The name of the property name */
-    'e',0x00,'I',0x00,'n',0x00,'t',0x00,'e',0x00,          /*    -//-    */
-    'r',0x00,'f',0x00,'a',0x00,'c',0x00,'e',0x00,          /*    -//-    */
-    'G',0x00,'U',0x00,'I',0x00,'D',0x00,0x00,0x00,         /*    -//-    */
-    0x4e, 0x00,                                            /* The length of property data */
-    '{',0x00,'A',0x00,'D',0x00,'5',0x00,'7',0x00,          /* Property data */
-    'D',0x00,'3',0x00,'B',0x00,'9',0x00,'-',0x00,          /*    -//-    */
-    '1',0x00,'1',0x00,'6',0x00,'6',0x00,'-',0x00,          /*    -//-    */
-    '4',0x00,'3',0x00,'F',0x00,'8',0x00,'-',0x00,          /*    -//-    */
-    '8',0x00,'7',0x00,'9',0x00,'0',0x00,'-',0x00,          /*    -//-    */
-    '0',0x00,'B',0x00,'E',0x00,'1',0x00,'4',0x00,          /*    -//-    */
-    'D',0x00,'D',0x00,'C',0x00,'7',0x00,'5',0x00,          /*    -//-    */
-    '0',0x00,'4',0x00,'}',0x00,0x00,0x00,                  /*    -//-    */
-
-    /* MS OS 2.0 Function Subset Header */
-    0x08, 0x00,                                            /* Size of descriptor */
-    MS_OS_20_SUBSET_HEADER_FUNCTION,                       /* Descriptor Type */
-    0x01,                                                  /* The interface number for the first interface of the function to which this subset applies. */
-    0x00,                                                  /* Reserved */
-    0x88, 0x00,                                            /* The size of entire function subset including this header. */
-
-    /* MS OS 2.0 Registry Property Descriptor */
-    0x80, 0x00,                                            /* Size of descriptor */
-    MS_OS_20_FEATURE_REG_PROPERTY,                         /* Descriptor Type */
-    MS_OS_20_REG_PROPERTY_REG_SZ,                          /* The type of registry property */
-    0x28, 0x00,                                            /* The length of the property name */
-    'D',0x00,'e',0x00,'v',0x00,'i',0x00,'c',0x00,          /* The name of the property name */
-    'e',0x00,'I',0x00,'n',0x00,'t',0x00,'e',0x00,          /*    -//-    */
-    'r',0x00,'f',0x00,'a',0x00,'c',0x00,'e',0x00,          /*    -//-    */
-    'G',0x00,'U',0x00,'I',0x00,'D',0x00,0x00,0x00,         /*    -//-    */
-    0x4e, 0x00,                                            /* The length of property data */
-    '{',0x00,'A',0x00,'D',0x00,'5',0x00,'7',0x00,          /* Property data */
-    'D',0x00,'3',0x00,'B',0x00,'9',0x00,'-',0x00,          /*    -//-    */
-    '1',0x00,'1',0x00,'6',0x00,'6',0x00,'-',0x00,          /*    -//-    */
-    '4',0x00,'3',0x00,'F',0x00,'8',0x00,'-',0x00,          /*    -//-    */
-    '8',0x00,'7',0x00,'9',0x00,'0',0x00,'-',0x00,          /*    -//-    */
-    '1',0x00,'B',0x00,'E',0x00,'1',0x00,'4',0x00,          /*    -//-    */
-    'D',0x00,'D',0x00,'C',0x00,'7',0x00,'5',0x00,          /*    -//-    */
-    '0',0x00,'4',0x00,'}',0x00,0x00,0x00,                   /*    -//-    */
-
-    /* MS OS 2.0 Function Subset Header */
-    0x08, 0x00,                                            /* Size of descriptor */
-    MS_OS_20_SUBSET_HEADER_FUNCTION,                       /* Descriptor Type */
-    0x02,                                                  /* The interface number for the first interface of the function to which this subset applies. */
-    0x00,                                                  /* Reserved */
-    0x88, 0x00,                                            /* The size of entire function subset including this header. */
-
-    /* MS OS 2.0 Registry Property Descriptor */
-    0x80, 0x00,                                            /* Size of descriptor */
-    MS_OS_20_FEATURE_REG_PROPERTY,                         /* Descriptor Type */
-    MS_OS_20_REG_PROPERTY_REG_SZ,                          /* The type of registry property */
-    0x28, 0x00,                                            /* The length of the property name */
-    'D',0x00,'e',0x00,'v',0x00,'i',0x00,'c',0x00,          /* The name of the property name */
-    'e',0x00,'I',0x00,'n',0x00,'t',0x00,'e',0x00,          /*    -//-    */
-    'r',0x00,'f',0x00,'a',0x00,'c',0x00,'e',0x00,          /*    -//-    */
-    'G',0x00,'U',0x00,'I',0x00,'D',0x00,0x00,0x00,         /*    -//-    */
-    0x4e, 0x00,                                            /* The length of property data */
-    '{',0x00,'A',0x00,'D',0x00,'5',0x00,'7',0x00,          /* Property data */
-	'D',0x00,'3',0x00,'B',0x00,'9',0x00,'-',0x00,          /*    -//-    */
-	'1',0x00,'1',0x00,'6',0x00,'6',0x00,'-',0x00,          /*    -//-    */
-	'4',0x00,'3',0x00,'F',0x00,'8',0x00,'-',0x00,          /*    -//-    */
-	'8',0x00,'7',0x00,'9',0x00,'0',0x00,'-',0x00,          /*    -//-    */
-	'2',0x00,'B',0x00,'E',0x00,'1',0x00,'4',0x00,          /*    -//-    */
-	'D',0x00,'D',0x00,'C',0x00,'7',0x00,'5',0x00,          /*    -//-    */
-	'0',0x00,'4',0x00,'}',0x00,0x00,0x00                   /*    -//-    */
+    MS_OS_20_REG_PROPERTY_REG_MULTI_SZ,                    /* The type of registry property */
+    0x2A, 0x00,                                            /* The length of the property name */
+    'D',0x00,'e',0x00,'v',0x00,'i',0x00,'c',0x00,
+    'e',0x00,'I',0x00,'n',0x00,'t',0x00,'e',0x00,
+    'r',0x00,'f',0x00,'a',0x00,'c',0x00,'e',0x00,
+    'G',0x00,'U',0x00,'I',0x00,'D',0x00,'s',0x00,0x00,0x00,
+    0x50, 0x00,                                            /* The length of property data */
+    '{',0x00,'A',0x00,'D',0x00,'5',0x00,'7',0x00,
+    'D',0x00,'3',0x00,'B',0x00,'9',0x00,'-',0x00,
+    '1',0x00,'1',0x00,'6',0x00,'6',0x00,'-',0x00,
+    '4',0x00,'3',0x00,'F',0x00,'8',0x00,'-',0x00,
+    '8',0x00,'7',0x00,'9',0x00,'0',0x00,'-',0x00,
+    '0',0x00,'B',0x00,'E',0x00,'1',0x00,'4',0x00,
+    'D',0x00,'D',0x00,'C',0x00,'7',0x00,'5',0x00,
+    '0',0x00,'4',0x00,'}',0x00,0x00,0x00,0x00,0x00
 
 };
 

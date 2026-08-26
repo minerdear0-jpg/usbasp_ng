@@ -10,6 +10,8 @@ static uchar interruptBuffer[8];
 static uchar monitorBuffer[8];
 static uchar uart_state = UART_STATE_DISABLED;
 static uchar hid_set_report;
+static uchar hid_idle_rate;
+static uchar hid_protocol = 1; /* HID report protocol, not boot */
 
 usbMsgLen_t usbFunctionDescriptor(struct usbRequest *rq)
 {
@@ -47,20 +49,33 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
         }
     } else if ((data[0] & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS) {
         if ((data[0] & USBRQ_RCPT_MASK) == USBRQ_RCPT_INTERFACE) {
-            if (data[3] == 3) {
-                switch (data[1]) {
-                case USBRQ_HID_GET_REPORT:
+            switch (data[1]) {
+            case USBRQ_HID_GET_REPORT:
+                if (data[3] == 3) {
                     usbMsgPtr = (usbMsgPtr_t)&featureReport;
                     return sizeof(featureReport);
-                case USBRQ_HID_SET_REPORT:
-                    if (usbasp_read_le16(&data[5]) != 0) {
-                        hid_set_report = 1;
-                        return USB_NO_MSG;
-                    }
-                    break;
-                default:
-                    break;
                 }
+                break;
+            case USBRQ_HID_SET_REPORT:
+                if (data[3] == 3 && usbasp_read_le16(&data[5]) != 0) {
+                    hid_set_report = 1;
+                    return USB_NO_MSG;
+                }
+                break;
+            case USBRQ_HID_GET_IDLE:
+                usbMsgPtr = (usbMsgPtr_t)&hid_idle_rate;
+                return 1;
+            case USBRQ_HID_SET_IDLE:
+                hid_idle_rate = data[3];
+                return 0;
+            case USBRQ_HID_GET_PROTOCOL:
+                usbMsgPtr = (usbMsgPtr_t)&hid_protocol;
+                return 1;
+            case USBRQ_HID_SET_PROTOCOL:
+                hid_protocol = data[2] ? 1 : 0;
+                return 0;
+            default:
+                break;
             }
         }
     }
