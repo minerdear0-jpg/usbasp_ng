@@ -20,12 +20,18 @@
 #define DIAG_CAPS                   13  /* firmware + board capability bitsets */
 #define DIAG_TRACE_BEGIN            14  /* capture metadata: arm / slots */
 #define DIAG_TRACE_END              15  /* capture metadata: valid / overflow */
+#define DIAG_ISP_PINS               16  /* programmer ISP pin DDR/PIN after disconnect */
 
 /* DIAG_ERROR flags — ENABLEPROG attempt note (B8/B22 forensics) */
 #define DIAG_ERR_EP_AVR             0x01  /* check after AC 53 00 00 (expect 0x53) */
 #define DIAG_ERR_EP_AT89            0x02  /* check after AT89 path (expect 0x69) */
 
-/* DIAG_MEMOP: a = mem kind; START b=pagesize; END b=pages flushed (sat 255) */
+/*
+ * DIAG_MEMOP — flash/eeprom/read block markers (not per-byte TRACE).
+ *   START:           a=mem, b=pagesize (sat 255)
+ *   CONT|OK/FAIL:    a:b = page base address low 16 (byte addr)
+ *   END|OK/FAIL:     a=mem, b=pages flushed (sat 255)
+ */
 #define DIAG_MEM_FLASH              0
 #define DIAG_MEM_EEPROM             1
 #define DIAG_MEM_READFLASH          2
@@ -33,6 +39,15 @@
 /* DIAG_RESET flags — programmer drive intent, not pin sense */
 #define DIAG_RESET_ASSERT           0x01
 #define DIAG_RESET_RELEASE          0x02
+
+/*
+ * DIAG_ISP_PINS — after ispDisconnect (Hi-Z claim).
+ * flags: DIAG_PINS_AFTER_DISC | OK/FAIL
+ * FAIL if MOSI/SCK/RST still outputs (DDR bit set).
+ * a = DDRB & ISP mask (RST|MOSI|MISO|SCK)
+ * b = PINB & ISP mask
+ */
+#define DIAG_PINS_AFTER_DISC        0x01
 
 /* DIAG_ENABLEPROG / DIAG_CAPS sequence flags */
 #define DIAG_EP_START               0x01

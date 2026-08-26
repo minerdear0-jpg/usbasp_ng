@@ -10,6 +10,8 @@
 #define USBASP_LED_STYLE      @USBASP_LED_STYLE@
 #define USBASP_HAS_HID_UART   @USBASP_HAS_HID_UART@
 #define USBASP_HAS_DIAG       @USBASP_HAS_DIAG@
+/* Unified TRACE ring slots (power of two). Overridable per board. */
+#define USBASP_DIAG_TRACE_SLOTS @USBASP_DIAG_TRACE_SLOTS@
 /* Stringify board profile: "classic" or "hiduart" */
 #define USBASP_PROFILE_STR    "@USBASP_PROFILE@"
 

@@ -74,7 +74,13 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
     case USBASP_FUNC_READFLASH:
         if (!prog_address_newmode)
             prog_address = usbasp_read_le16(&data[2]);
-        len = prog_begin_transfer(PROG_STATE_READFLASH, usbasp_read_le16(&data[6]));
+        {
+            uint16_t nbytes = usbasp_read_le16(&data[6]);
+            diag_memop_begin(DIAG_MEM_READFLASH,
+                (uchar)(nbytes > 255u ? 255u : nbytes));
+            diag_memop_page(prog_address, 0);
+            len = prog_begin_transfer(PROG_STATE_READFLASH, nbytes);
+        }
         break;
 
     case USBASP_FUNC_READEEPROM:
@@ -275,8 +281,10 @@ uchar usbasp_isp_write(uchar *data, uchar len)
                 ispWriteFlash(prog_address, data[i], 0);
                 prog_pagecounter--;
                 if (prog_pagecounter == 0) {
-                    ispFlushPage(prog_address, data[i]);
-                    diag_memop_page();
+                    {
+                        uchar flush_fail = ispFlushPage(prog_address, data[i]);
+                        diag_memop_page(prog_address, flush_fail);
+                    }
                     prog_pagecounter = prog_pagesize;
                 }
             }
@@ -293,8 +301,8 @@ uchar usbasp_isp_write(uchar *data, uchar len)
             prog_state = PROG_STATE_IDLE;
             if ((prog_blockflags & PROG_BLOCKFLAG_LAST)
                 && (prog_pagecounter != prog_pagesize)) {
-                ispFlushPage(prog_address, data[i]);
-                diag_memop_page();
+                uchar flush_fail = ispFlushPage(prog_address, data[i]);
+                diag_memop_page(prog_address, flush_fail);
             }
             /* Close if LAST, or if no paged flushes happened (byte mode). */
             if ((prog_blockflags & PROG_BLOCKFLAG_LAST) || prog_pagesize == 0)

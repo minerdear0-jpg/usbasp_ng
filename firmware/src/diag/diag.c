@@ -5,11 +5,13 @@
 #include "diag/diag.h"
 #include "diag/diag_ring.h"
 #include "diag/diag_clock.h"
+#include "diag/diag_trigger.h"
 #include "usbasp/clock.h"
 #include "usbasp/isp.h"
 #include "usbasp/sck.h"
 #include "usbasp/prog_state.h"
 
+#include <avr/io.h>
 #include <string.h>
 
 /*
@@ -23,8 +25,36 @@ static uint8_t diag_sck_seen;
 static uint8_t diag_sck_last;
 static uint8_t diag_tr_last;
 static uint8_t diag_mem_pages;
+static uint8_t diag_mem_psize; /* pagesize from START (sat 255); 0 = byte mode */
+static uint8_t diag_mem_kind;  /* DIAG_MEM_* of open op */
 static uint8_t diag_mem_open;
+static uint8_t diag_mem_last_emitted; /* pages count at last CONT emit */
+static uint16_t diag_mem_last_base;   /* low 16 of last page/chunk base */
 static uint8_t diag_trace_inited;
+
+/* Ring is 64; full mega8 write ≈128 flushes. Keep FAIL + canary band + stride. */
+#ifndef DIAG_MEMOP_PAGE_STRIDE
+#define DIAG_MEMOP_PAGE_STRIDE 8
+#endif
+/* ATmega8 oracle canary: 8×64 B @ 0x1E00..0x1FFF */
+#define DIAG_MEMOP_CANARY_LO 0x1E00u
+#define DIAG_MEMOP_CANARY_HI 0x2000u
+
+static uint8_t diag_memop_page_emit_p(uint16_t base, uint8_t fail)
+{
+    uint16_t idx;
+
+    if (fail)
+        return 1;
+    if (diag_mem_pages <= 1)
+        return 1;
+    if (base >= DIAG_MEMOP_CANARY_LO && base < DIAG_MEMOP_CANARY_HI)
+        return 1;
+    if (diag_mem_psize == 0)
+        return 1;
+    idx = (uint16_t)(base / diag_mem_psize);
+    return (uint8_t)((idx % DIAG_MEMOP_PAGE_STRIDE) == 0);
+}
 
 extern uchar requested_sck;
 extern uchar effective_sck;
@@ -70,17 +100,35 @@ static void diag_emit_trace_begin(void)
 static void diag_emit_trace_end(void)
 {
     diag_capture_meta_t meta;
-    uint8_t end_fl;
+    uint8_t fl;
 
     diag_trace_snapshot(&meta);
-    /* START: valid LE; END: write_index LE; overflow in bit7 (not state — avoids EP_START clash). */
+    /* 4 frames — keep 6-byte wire; no schema bump.
+     * F0 START: valid LE
+     * F1 CONT:  write_index LE; overflow bit7
+     * F2 CONT:  trigger_kind, post_count; fired bit7
+     * F3 END:   trigger_index LE; frame.timestamp = trigger_timestamp
+     */
     (void)diag_try_emit(DIAG_TRACE_END, DIAG_EP_START,
         (uint8_t)(meta.valid & 0xffu),
         (uint8_t)((meta.valid >> 8) & 0xffu));
-    end_fl = (uint8_t)(DIAG_EP_END | (meta.overflow ? 0x80u : 0u));
-    (void)diag_try_emit(DIAG_TRACE_END, end_fl,
+    fl = (uint8_t)(DIAG_EP_CONT | (meta.overflow ? 0x80u : 0u));
+    (void)diag_try_emit(DIAG_TRACE_END, fl,
         (uint8_t)(meta.write_index & 0xffu),
         (uint8_t)((meta.write_index >> 8) & 0xffu));
+    fl = (uint8_t)(DIAG_EP_CONT | (meta.triggered ? 0x80u : 0u));
+    (void)diag_try_emit(DIAG_TRACE_END, fl,
+        meta.trigger_kind, meta.post_count);
+    {
+        diag_frame_t endf;
+
+        endf.type = DIAG_TRACE_END;
+        endf.flags = DIAG_EP_END;
+        endf.timestamp = meta.trigger_timestamp;
+        endf.a = (uint8_t)(meta.trigger_index & 0xffu);
+        endf.b = (uint8_t)((meta.trigger_index >> 8) & 0xffu);
+        (void)diag_trace_push(&endf);
+    }
 }
 
 void diag_emit_sck_config(void)
@@ -135,31 +183,66 @@ void diag_note_enableprog_try(uint8_t path_flags, uint8_t check)
 
 void diag_memop_begin(uint8_t mem, uint8_t pagesize)
 {
-    if (diag_mem_open)
-        return;
+    /*
+     * Coalesce successive chunks of the same mem op (avrdude may set FIRST
+     * on every WRITEFLASH block; READFLASH is many setups).
+     * Switching kind (esp. WRITE→READ verify) finishes the previous op.
+     */
+    if (diag_mem_open) {
+        if (diag_mem_kind == mem)
+            return;
+        diag_memop_end(diag_mem_kind);
+    }
     diag_mem_open = 1;
+    diag_mem_kind = mem;
     diag_mem_pages = 0;
+    diag_mem_psize = pagesize;
+    diag_mem_last_emitted = 0;
+    diag_mem_last_base = 0;
     (void)diag_try_emit(DIAG_MEMOP, DIAG_EP_START, mem, pagesize);
 }
 
-void diag_memop_page(void)
+void diag_memop_page(uint32_t address, uint8_t fail)
 {
+    uint32_t base = address;
+    uint8_t flags;
+    uint16_t base16;
+
     if (diag_mem_pages < 255)
         diag_mem_pages++;
-    if (diag_mem_open) {
-        (void)diag_try_emit(DIAG_MEMOP,
-            (uint8_t)(DIAG_EP_END | DIAG_EP_RESULT_OK),
-            DIAG_MEM_FLASH, diag_mem_pages);
-    }
+    if (!diag_mem_open)
+        return;
+    /* Write flushes: align to page base. Read chunks: keep start address. */
+    if (diag_mem_psize != 0 && diag_mem_kind == DIAG_MEM_FLASH)
+        base = address - (address % diag_mem_psize);
+    base16 = (uint16_t)base;
+    diag_mem_last_base = base16;
+    if (!diag_memop_page_emit_p(base16, fail))
+        return;
+    diag_mem_last_emitted = diag_mem_pages;
+    flags = (uint8_t)(DIAG_EP_CONT
+        | (fail ? DIAG_EP_RESULT_FAIL : DIAG_EP_RESULT_OK));
+    (void)diag_try_emit(DIAG_MEMOP, flags,
+        (uint8_t)(base16 >> 8), (uint8_t)base16);
 }
 
 void diag_memop_end(uint8_t mem)
 {
+    (void)mem;
     if (!diag_mem_open)
         return;
+    /* Ensure last page/chunk is visible even if stride skipped it. */
+    if (diag_mem_pages != 0 && diag_mem_last_emitted != diag_mem_pages) {
+        diag_mem_last_emitted = diag_mem_pages;
+        (void)diag_try_emit(DIAG_MEMOP,
+            (uint8_t)(DIAG_EP_CONT | DIAG_EP_RESULT_OK),
+            (uint8_t)(diag_mem_last_base >> 8),
+            (uint8_t)diag_mem_last_base);
+    }
     diag_mem_open = 0;
     (void)diag_try_emit(DIAG_MEMOP,
-        (uint8_t)(DIAG_EP_END | DIAG_EP_RESULT_OK), mem, diag_mem_pages);
+        (uint8_t)(DIAG_EP_END | DIAG_EP_RESULT_OK),
+        diag_mem_kind, diag_mem_pages);
 }
 
 void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail)
@@ -201,7 +284,7 @@ void diag_on_connect(void)
         DIAG_PROFILE_COMPOSITE);
 
     fcap = DIAG_FCAP_SESSION | DIAG_FCAP_SNAPSHOT | DIAG_FCAP_TIMESTAMP
-        | DIAG_FCAP_TRACE;
+        | DIAG_FCAP_TRACE | DIAG_FCAP_TRIGGER | DIAG_FCAP_PRETRIGGER;
     bcap = 0;
 #if USBASP_HAS_SCK_JUMPER
     bcap |= BOARD_CAP_SCK_JUMPER;
@@ -223,12 +306,33 @@ void diag_on_connect(void)
     (void)diag_try_emit(DIAG_RESET, DIAG_RESET_ASSERT, 0, 0);
 }
 
+void diag_emit_isp_pins(void)
+{
+    uint8_t mask = (uint8_t)((1u << ISP_RST) | (1u << ISP_MOSI)
+        | (1u << ISP_MISO) | (1u << ISP_SCK));
+    uint8_t ddr = (uint8_t)(ISP_DDR & mask);
+    uint8_t pin = (uint8_t)(ISP_IN & mask);
+    uint8_t drive = (uint8_t)((1u << ISP_RST) | (1u << ISP_MOSI)
+        | (1u << ISP_SCK));
+    uint8_t flags = DIAG_PINS_AFTER_DISC;
+
+    /* Hi-Z claim: RST/MOSI/SCK must not remain outputs. */
+    if ((ddr & drive) != 0)
+        flags |= DIAG_EP_RESULT_FAIL;
+    else
+        flags |= DIAG_EP_RESULT_OK;
+    (void)diag_try_emit(DIAG_ISP_PINS, flags, ddr, pin);
+}
+
 void diag_on_disconnect(void)
 {
     diag_memop_end(DIAG_MEM_FLASH);
+    /* Footer first while freeze latch is still readable. */
+    diag_emit_trace_end();
     diag_reset_driven = DIAG_RESET_RELEASE;
     (void)diag_try_emit(DIAG_RESET, DIAG_RESET_RELEASE, 0, 0);
-    diag_emit_trace_end();
+    /* ispDisconnect() already ran — sample Hi-Z claim. */
+    diag_emit_isp_pins();
     (void)diag_try_emit(DIAG_SESSION_END, 0, 0, 0);
     diag_trace_idle();
 }

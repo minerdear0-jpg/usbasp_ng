@@ -16,6 +16,11 @@ set_property(CACHE BOARD PROPERTY STRINGS
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD}.cmake")
 
+# TRACE ring depth (power of two). 328P USBasp2: 128; mega8 default 64.
+if(NOT DEFINED USBASP_DIAG_TRACE_SLOTS)
+    set(USBASP_DIAG_TRACE_SLOTS 64)
+endif()
+
 set(MCU ${USBASP_MCU})
 set(F_CPU ${USBASP_F_CPU})
 
@@ -108,7 +113,7 @@ set(COMMON_SRC
     third_party/vusb/oddebug.c)
 
 if(USBASP_HAS_DIAG)
-    list(APPEND COMMON_SRC src/diag/diag.c src/diag/diag_clock.c src/diag/diag_trace.c)
+    list(APPEND COMMON_SRC src/diag/diag.c src/diag/diag_clock.c src/diag/diag_trace.c src/diag/diag_trigger.c)
 endif()
 
 if(USBASP_HAS_HID_UART)
@@ -215,7 +220,7 @@ message(STATUS "Board=${BOARD} MCU=${MCU} F_CPU=${F_CPU} profile=${USBASP_PROFIL
 message(STATUS "Flash: avrdude -c usbasp -p ${MCU} -U flash:w:${APP_NAME}.hex:i")
 message(STATUS "Fuses: hfuse=${USBASP_HFUSE} lfuse=${USBASP_LFUSE}")
 if(USBASP_HAS_DIAG)
-    message(STATUS "Diagnostics plane: USBASP_HAS_DIAG=1")
+    message(STATUS "Diagnostics plane: USBASP_HAS_DIAG=1 TRACE_SLOTS=${USBASP_DIAG_TRACE_SLOTS}")
 endif()
 if(USBASP_HAS_HID_UART)
     message(STATUS "HIDUART serial (EEPROM): ${USBASP_SERIAL}")

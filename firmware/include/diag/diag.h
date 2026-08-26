@@ -50,10 +50,13 @@ void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fa
  * SW path only — HW notes are noise before autoslow/PASS. */
 void diag_note_enableprog_try(uint8_t path_flags, uint8_t check);
 
-/* WRITEFLASH (and friends): START on FIRST, page++ on flush, END on LAST. */
+/* WRITEFLASH / READFLASH: START, CONT@page|chunk, END (kind from open op). */
 void diag_memop_begin(uint8_t mem, uint8_t pagesize);
-void diag_memop_page(void);
-void diag_memop_end(uint8_t mem);
+void diag_memop_page(uint32_t address, uint8_t fail);
+void diag_memop_end(uint8_t mem); /* mem ignored; emits stored kind */
+
+/* After ispDisconnect: DDR/PIN sample for dual-truth vs target ISP_PINS. */
+void diag_emit_isp_pins(void);
 
 /*
  * Consumer: fill out[8] with one frame (bytes 0..5) + pad/status.
@@ -72,8 +75,9 @@ uint8_t diag_poll_drain(uint8_t out[8]);
 #define diag_report_enableprog(tx, rx, fail) ((void)0)
 #define diag_note_enableprog_try(path, check) ((void)0)
 #define diag_memop_begin(mem, pagesize) ((void)0)
-#define diag_memop_page() ((void)0)
+#define diag_memop_page(addr, fail) ((void)0)
 #define diag_memop_end(mem) ((void)0)
+#define diag_emit_isp_pins() ((void)0)
 #define diag_poll_drain(out) (0)
 
 #endif

@@ -11,3 +11,5 @@ set(USBASP_HAS_3MHZ 1)
 set(USBASP_LED_STYLE USBASP_LED_PORT)
 set(USBASP_HFUSE 0xde)
 set(USBASP_LFUSE 0xff)
+# Dual-truth flash ≈89+ pages + session; 64 overflowed on live cage.
+set(USBASP_DIAG_TRACE_SLOTS 128)

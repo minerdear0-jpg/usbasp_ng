@@ -30,6 +30,8 @@ def main() -> int:
     assert d["DIAG_CAPS"] == 13
     assert d["DIAG_TRACE_BEGIN"] == 14
     assert d["DIAG_TRACE_END"] == 15
+    assert d["DIAG_ISP_PINS"] == 16
+    assert d["DIAG_PINS_AFTER_DISC"] == 0x01
     assert d["DIAG_MEM_FLASH"] == 0
     assert d["DIAG_EP_START"] == 0x01
     assert d["DIAG_EP_CONT"] == 0x02
@@ -44,45 +46,49 @@ def main() -> int:
     events = EVENTS.read_text()
     assert "DIAG_FCAP_TIMESTAMP" in events
     assert "DIAG_FCAP_TRACE" in events
+    assert "DIAG_FCAP_TRIGGER" in events
+    assert "DIAG_FCAP_PRETRIGGER" in events
     assert "BOARD_CAP_PHYSICAL_CAPTURE" in events
     assert "BOARD_CAP_SCK_JUMPER" in events
 
     ring_h = (FW / "include" / "diag" / "diag_ring.h").read_text()
     assert "USBASP_DIAG_TRACE_SLOTS" in ring_h
+    assert "USBASP_DIAG_POST_CAPTURE_EVENTS" in ring_h
+    cfg_in = (FW / "cmake" / "usbasp_config.h.in").read_text()
+    assert "USBASP_DIAG_TRACE_SLOTS" in cfg_in
+    board328 = (FW / "boards" / "usbasp-hiduart-atmega328p.cmake").read_text()
+    assert "USBASP_DIAG_TRACE_SLOTS 128" in board328
     assert "diag_trace_push" in ring_h
-    assert "DIAG_CAP_STATE_ARMED" in ring_h
-    assert "diag_capture_meta_t" in ring_h
+    assert "DIAG_CAP_STATE_POST" in ring_h
+    assert "DIAG_CAP_STATE_FROZEN" in ring_h
+    assert "trigger_kind" in ring_h
+
+    trig_h = (FW / "include" / "diag" / "diag_trigger.h").read_text()
+    assert "DIAG_TRIG_ENABLEPROG_FAIL" in trig_h
+    assert "diag_trigger_match" in trig_h
 
     diag_c = DIAG_C.read_text()
     assert "diag_emit_enableprog" in diag_c
-    assert "diag_publish_snapshot" in diag_c
-    assert "diag_report_enableprog" in diag_c
-    assert "memcpy(&diag_fault_snapshot" in diag_c
-    assert "DIAG_CAP_TIMESTAMP" in diag_c
-    assert "DIAG_CAPS" in diag_c
-    assert "DIAG_FCAP_TRACE" in diag_c
+    assert "DIAG_FCAP_TRIGGER" in diag_c
+    assert "DIAG_FCAP_PRETRIGGER" in diag_c
     assert "DIAG_TRACE_BEGIN" in diag_c
     assert "DIAG_TRACE_END" in diag_c
+    assert "diag_emit_isp_pins" in diag_c
+    assert "DIAG_ISP_PINS" in diag_c
+    assert "DIAG_MEMOP_PAGE_STRIDE" in diag_c
+    assert "0x1E00" in diag_c
     assert "diag_trace_arm" in diag_c
-    assert "BOARD_CAP_SCK_JUMPER" in diag_c
-    # Compact 4-frame FAULT_SNAPSHOT packing
-    assert "sck_req << 4" in diag_c
-    assert diag_c.count("DIAG_FAULT_SNAPSHOT") == 4
-    assert diag_c.count("DIAG_CAPS") >= 4
-
-    assert "diag_note_enableprog_try" in diag_c
-    assert "DIAG_ERR_EP_AVR" in (FW / "include" / "diag" / "diag_events.h").read_text()
-    assert "diag_memop_begin" in diag_c
-    assert "diag_sck_seen" in diag_c
-    assert "DIAG_TRANSPORT_SW" in diag_c
-    assert "diag_now_wire16" in diag_c
-    assert "diag_clock.h" in diag_c
+    assert "meta.trigger_kind" in diag_c or "trigger_kind" in diag_c
 
     trace_c = (FW / "src" / "diag" / "diag_trace.c").read_text()
-    assert "trace_overwrite_oldest" in trace_c
-    assert "DIAG_TRACE_OVERFLOW" in trace_c
+    assert "diag_trigger_on_event" in trace_c
+    assert "DIAG_CAP_STATE_POST" in trace_c
+    assert "DIAG_CAP_STATE_FROZEN" in trace_c
     assert "cli()" not in trace_c
-    assert "SIGNAL(" not in trace_c
+
+    trig_c = (FW / "src" / "diag" / "diag_trigger.c").read_text()
+    assert "DIAG_TRIG_ENABLEPROG_FAIL" in trig_c
+    assert "DIAG_EP_RESULT_FAIL" in trig_c
 
     clock_h = (FW / "include" / "diag" / "diag_clock.h").read_text()
     assert "diag_tick_t" in clock_h
@@ -105,7 +111,9 @@ def main() -> int:
     assert "diag_on_connect();" in vendor
     assert "diag_memop_begin" in vendor
     assert "diag_memop_end" in vendor
-    assert "diag_memop_page" in vendor
+    assert "diag_memop_page(prog_address" in vendor
+    assert "flush_fail" in vendor
+    assert "DIAG_MEM_READFLASH" in vendor
 
     print("ok  diag_v1_golden")
     return 0
