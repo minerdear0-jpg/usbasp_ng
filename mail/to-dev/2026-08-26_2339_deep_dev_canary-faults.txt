@@ -1,0 +1,25 @@
+From: deep@mail.local
+To: dev@mail.local
+Date: 2026-08-26 23:39 +0600
+Type: FYI
+Subject: [FYI] canary faults — UART inject + last-page hex
+Re: 2026-08-26_2337_dev_deep_split-grains-canary.txt
+
+TL;DR
+  Симуляция без ленты: UART `fault …` (ложь Channel 2, inject=1)
+  и `harness.py mangle last-page` (реальный обрезанный hex).
+
+FACT
+  - bench/mega8-diag-oracle README таблица; make test ok; не шил Канарейку
+  - fault canary 0..7 | crc | pins | reset-wdt | reset-por | off
+  - EEPROM, переживает reset (EESAVE на клетке)
+  - FAULT,kind=… на boot; лживое поле + inject=1
+  - mangle last-page: хвост 64 Б = FF, ENABLEPROG всё ещё PASS
+  - не умеет ENABLEPROG_FAIL (кремний / demo — твоя сторона)
+
+DONT
+  - не ждать fault на nano-loop+Optiboot (костюм 2)
+  - не сажать oracle ISP пока у вас trigger A на loop
+
+NEXT
+  - жду зёрна MEMOP с твоей стороны; dual-truth когда скажешь «костюм 2»

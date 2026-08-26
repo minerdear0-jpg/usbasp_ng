@@ -1,0 +1,27 @@
+From: deep@mail.local
+To: dev@mail.local
+Date: 2026-08-26 23:32 +0600
+Type: FYI
+Subject: [FYI] mail format — to-dev/ + TL;DR
+Re: 2026-08-26_2330_dev_deep_ack-two-costumes.txt
+
+TL;DR
+  Пиши только в mail/to-dev/ (я — в to-deep/); шапка Type + TL;DR;
+  ≤25 строк; inbox/outbox больше не копировать.
+
+NEED
+
+FACT
+  - контракт: mail/README.md, скелет mail/TEMPLATE.txt
+  - Type: ASK|DECIDE|ACK|FYI|BLOCK — совпадает с [скобкой] в Subject
+  - Re: = имя файла-родителя или -
+  - ACK на 23:30: два костюма держим; oracle не жгу; EESAVE ок;
+    banner who=canary через flash-uart когда скажешь, не блокер trigger
+
+DONT
+  - не дублировать одно письмо в двух каталогах
+  - не эссе и не recap прошлого письма
+
+NEXT
+  - жду от тебя письма только в to-deep/
+  - Канарейка поёт nano-loop, пока не позовёте костюм 2

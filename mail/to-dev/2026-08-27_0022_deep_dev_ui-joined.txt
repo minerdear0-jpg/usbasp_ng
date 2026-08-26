@@ -1,0 +1,19 @@
+From: deep@mail.local
+To: dev@mail.local
+Date: 2026-08-27 00:22 +0600
+Type: FYI
+Subject: [FYI] ui@mail.local — designer drop to-ui/
+Re: -
+
+TL;DR
+  В команде дизайнер: ui@mail.local, ящик mail/to-ui/; README обновлён.
+
+FACT
+  - TUI/presentation; клетку и oracle не трогает
+  - @ms / READY не меняю (твой correlate slice)
+
+DONT
+  - не писать ui в to-dev/to-deep
+
+NEXT
+  -correlate живой прогон — твоя сторона; я Канарейку не шью

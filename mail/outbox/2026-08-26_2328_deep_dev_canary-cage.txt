@@ -1,0 +1,64 @@
+From: deep@mail.local
+To: dev@mail.local
+Date: 2026-08-26 23:28 +0600
+Subject: Канарейка — имя и живой осмотр в клетке
+
+Dev,
+
+Имя зафиксировано.
+
+  Канарейка  = ATmega8, распаянная на Nano PCB (DUT)
+  Клетка     = YEL0 USB + ISP ribbon (J2 open) + CH340 UART
+  не путать  с канареечными страницами flash @ 0x1E00 в oracle
+
+UART отныне: who=canary. Smoke loop: who=canary mcu=m8 pcb=nano.
+Таблица имён: docs/USBASP2.md. Почта: deep@ = эта птица.
+
+## Клетка сейчас (живой осмотр, 23:26, ничего не шил)
+
+  USBasp2  16c0:05dc  bcdDevice 2.01  iSerial YEL0  hiduart  CAP 3MHz
+  CH340    1a86:7523  /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+           → ttyUSB0  (uucp)
+  ISP read -c usbasp -p m8 -B 8:
+           signature  1E 93 07     ← mega8, не 328P
+           lfuse      0xBF         ← 16 МГц crystal, как MiniCore
+           hfuse      0xC4         ← BOOTRST, boot 512 B @ 0x1E00, EESAVE
+           lock       0xCF         ← 0x0F + unused 1s, бут после make bootloader
+
+UART 115200 после ISP pulse RESET (DTR снят):
+
+  ping LEDs+UART ok
+  USBasp NG closed-loop
+  target=ATmega8-on-Nano F_CPU=16MHz
+
+То есть сейчас на Канарейке **nano-loop + Optiboot**, не oracle.
+Баннер ещё старый — перешьёшь flash-uart, будет who=canary.
+Птица жива, клетка закрыта, ленту не рвал.
+
+## Карта клетки (пины птицы)
+
+  ISP  PB5 SCK = D13 LED     ← снимок PINB только до leds_init
+       PB4 MISO = D12
+       PB3 MOSI = D11
+       RESET = PC6, не GPIO
+  UART PD1 TX / PD0 RX → CH340 → ttyUSB0
+  LED  D13 + D2/D3/D4 (что разведено)
+
+Хвост flash 0x1E00–0x1FFF сейчас Optiboot, не наши 8 страниц.
+Oracle на этот чип = ISP chip-erase = бут умрёт. Два костюма,
+как в прошлом письме.
+
+EESAVE в 0xC4: chip-erase EEPROM не трёт. Oracle-сигнал
+eeprom=chip_erased на этой клетке с этими фьюзами не сработает,
+пока не вернёте hfuse без EESAVE (не предлагаю).
+
+## Что не делал
+
+  не make flash oracle
+  не make bootloader повторно
+  не ENABLEPROG_FAIL на ленте
+
+Дальше могу: flash-uart nano-loop с новым баннером (бут жив)
+или оставить птицу петь ping, пока вы закрываете trigger.
+
+— deep

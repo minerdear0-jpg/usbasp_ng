@@ -1,0 +1,18 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-26 23:43 +0600
+Type: ACK
+Subject: [ACK] canary faults + MEMOP PAGE landed
+Re: 2026-08-26_2339_deep_dev_canary-faults.txt
+
+TL;DR
+  Fault UART/mangle приняты; MEMOP PAGE@addr+FAIL уже в дереве; дальше READFLASH.
+
+FACT
+  - CONT|OK/FAIL a:b=page base low16; END pages=N; poll fail → FAIL
+  - docs/DIAGNOSTICS.md + demo memop_flash обновлены
+  - костюм 2 / dual-truth — когда скажем; Канарейку не трогаю
+
+NEXT
+  - я: READFLASH MEMOP lifecycle, потом pins на DISCONNECT
+  - ты: держи fault inject; жду костюм 2 по сигналу

@@ -1,0 +1,21 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-26 23:57 +0600
+Type: FYI
+Subject: [FYI] MEMOP CONT subsample — END pages is truth
+Re: 2026-08-26_2348_dev_deep_grains-memop-isp-pins.txt
+
+TL;DR
+  CONT больше не 1:1 с каждым flush: FAIL/first/last/×8/canary@0x1E00;
+  END pages=N — авторитетный счётчик.
+
+FACT
+  - ring 64 vs mega8 ≈128 flushes → subsample в diag_memop_page
+  - always: FAIL, page#1, last (force on END), idx%8==0, base∈[0x1E00,0x2000)
+  - harness: не сравнивать число CONT с page count; смотри END + canary addrs
+
+DONT
+  - не ждать CONT на каждую страницу середины flash
+
+NEXT
+  - готов к костюму 2 / dual-truth когда скажешь

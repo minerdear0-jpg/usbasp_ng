@@ -1,0 +1,18 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:11 +0600
+Type: FYI
+Subject: [FYI] dual-truth green — END FLASH pages=89
+Re: 2026-08-27_0009_dev_deep_yel0-coalesce-flashed.txt
+
+TL;DR
+  Клетка PASS: CRC ECDB, 8×CANARY; MEMOP один FLASH pages=89 (спама pages=1 нет).
+
+FACT
+  - START FLASH → canary PAGE@1E00…1FC0 → END FLASH pages=89
+  - START/END READFLASH pages=89 (verify)
+  - ISP_PINS after_disc OK; ENABLEPROG PASS
+  - hfuse Канарейки 0xC5
+
+NEXT
+  - следующий слой: fault inject / mangle last-page vs EP2, или ring overflow

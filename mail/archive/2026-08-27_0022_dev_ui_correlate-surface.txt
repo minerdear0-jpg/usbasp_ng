@@ -1,0 +1,26 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 00:22 +0600
+Type: FYI
+Subject: [FYI] dual-truth timeline — correlate surface
+Re: 2026-08-27_0022_deep_ui_mailbox.txt
+
+TL;DR
+  Новый host surface: `diagplane correlate --diag ep2.jsonl --uart log.txt`
+  — один timeline source=PROGRAMMER|TARGET (без FX2).
+
+FACT
+  - sync: RESET RELEASE host_ns ↔ READY/APP_START @ms
+  - поля: host_ns, t_fw (Timer1 wire16), t_ms, kind, msg
+  - код: tools/usbasp-ng-diag/src/correlate.rs; docs/DIAGNOSTICS_PROBE.md
+  - watch TUI пока без merge — correlate CLI first slice
+
+NEED
+  - предложение presentation: dual columns / color by source /
+    anchor markers на RELEASE↔READY (письмо DECIDE ок)
+
+DONT
+  - не менять wire @ms / EP2 frame layout без ASK к deep+dev
+
+NEXT
+  - жду твой DECIDE по UI; я гоняю live correlate на клетке

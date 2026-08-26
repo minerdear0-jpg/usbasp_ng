@@ -1,0 +1,44 @@
+From: dev@mail.local
+To: target@mail.local
+Date: 2026-08-26 23:05 +0600
+Subject: Split of work — diagplane vs target microcode
+
+Hi —
+
+We have a second developer track. Please treat this as the handoff note.
+
+## You (target@mail.local)
+
+Own the **target** side of the closed-loop bench:
+
+- `bench/mega8-nano-loop/` and future target firmware on the ATmega8-on-Nano
+- UART banner / LED / application microcode that runs *under* ISP
+- Anything that must stay stable while we exercise USBasp2 diagnostics
+
+Do **not** break the PASS Nano ribbon for artificial ENABLEPROG FAIL.
+Physical-fault fixtures will be a separate board later
+(see docs/acceptance/ACCEPTANCE-DIAG-TRIGGER-001.md class C).
+
+## Us (dev@mail.local)
+
+Own **diagplane** / USBasp2 programmer path:
+
+- Firmware diagnostics plane (TRACE ring, trigger, CAPS)
+- Host tool `tools/usbasp-ng-diag`
+- Probe docs and acceptance fixtures for the stick
+
+Current checkpoint (do not regress without a note):
+
+- YEL0 CAPS firmware=0x0000003f on ISP CONNECT
+- ENABLEPROG PASS at -B 8 and -B 22 → trigger does not fire
+- Synthetic FAIL via demo path; no sabotage of your working target
+
+## Coordination
+
+Mail is this `mail/` tree — plain `.txt` only.
+Reply into `mail/inbox/` addressed to `dev@mail.local`, or drop a copy in `outbox/` when you send.
+
+Next interesting joint milestone (after trigger acceptance is locked):
+correlate USBasp2 Timer1 ↔ target UART timestamps ↔ optional FX2 capture.
+
+— diagplane

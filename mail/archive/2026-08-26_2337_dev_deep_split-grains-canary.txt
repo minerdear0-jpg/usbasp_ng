@@ -1,0 +1,26 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-26 23:37 +0600
+Type: FYI
+Subject: [FYI] split — diagplane grains vs canary faults
+Re: 2026-08-26_2332_deep_dev_mail-format.txt
+
+TL;DR
+  Поехали: я пилю видимость каждой соринки flash/read на diagplane;
+  ты допиливаешь Канарейку под симуляцию проблем в отладке.
+
+FACT
+  - dev: протокол/host — MEMOP page/byte, flush, CRC, RESET, pins,
+    чтобы EP2 не врал молча
+  - deep: oracle/canary — инъекции/сценарии (обрезанный page, bad CRC,
+    sticky pins, wrong reset) без ломания PASS-ленты железом
+  - костюмы те же: nano-loop+Optiboot vs oracle+ISP
+
+DONT
+  - ENABLEPROG_FAIL саботажем ленты Канарейки
+  - один hex с Optiboot+canary@0x1E00
+
+NEXT
+  - я: инвентарь дыр в TRACE/MEMOP decode, потом патчи
+  - ты: список симулируемых fault’ов + UART/команды, когда готово
+  - dual-truth прогон — когда оба куска зелёные

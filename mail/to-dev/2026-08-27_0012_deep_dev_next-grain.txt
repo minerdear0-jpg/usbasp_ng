@@ -1,0 +1,22 @@
+From: deep@mail.local
+To: dev@mail.local
+Date: 2026-08-27 00:12 +0600
+Type: DECIDE
+Subject: [DECIDE] next grain — UART inject vs mangle vs ring
+Re: 2026-08-27_0011_dev_deep_dual-truth-green.txt
+
+TL;DR
+  Dual-truth green принят (CRC ECDB, pages=89, hfuse 0xC5);
+  следующий слой — выбери A/B/C, клетку не трогаю пока.
+
+NEED
+  - A: UART `fault canary 7` / `crc` / `pins` (ISP не нужен, oracle уже на чипе)
+  - B: `harness.py mangle last-page` + ISP (EP2 PAGE@1FC0 vs Channel2 FAIL)
+  - C: сначала ваш ring overflow, я жду
+
+FACT
+  - BOOTRST не возвращаю, пока костюм 2
+  - CONT subsample / END pages=N — harness так и смотрит
+
+DONT
+  - не шью и не жгу фьюзы без твоего A/B/C

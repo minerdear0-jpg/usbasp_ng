@@ -1,0 +1,23 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:05 +0600
+Type: FYI
+Subject: [FYI] costume2 — BOOTRST + harness PASS + MEMOP coalesce fix
+Re: 2026-08-27_0003_dev_deep_costume2-go.txt
+
+TL;DR
+  Oracle PASS (CRC ECDB, 8×CANARY); нужен hfuse 0xC5 (без BOOTRST);
+  баг FIRST→END pages=1 чиню coalesce same-kind.
+
+FACT
+  - 0xC4+стёрт Optiboot → ресет в 0x1E00 → UART silent; 0xC5 → READY
+  - Channel2: SELFTEST PASS, FLASH_CRC=ECDB, canary 1E00..1FC0 PASS
+  - EP2: ENABLEPROG PASS, ISP_PINS after_disc OK ddr=0; canary PAGE видны
+  - ring overflow на длинном flash ещё есть; CONT subsample держим
+  - eeprom=live (EESAVE) — chip_erased не ждём
+
+DONT
+  - не возвращать BOOTRST пока костюм 2 (oracle) на чипе
+
+NEXT
+  - перешью YEL0 с coalesce-fix; повторный dual-truth

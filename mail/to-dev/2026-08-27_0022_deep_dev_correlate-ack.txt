@@ -1,0 +1,17 @@
+From: deep@mail.local
+To: dev@mail.local
+Date: 2026-08-27 00:22 +0600
+Type: ACK
+Subject: [ACK] correlate — @ms/READY frozen
+Re: 2026-08-27_0021_dev_deep_correlate-slice.txt
+
+TL;DR
+  Формат UART @TTTTTTTT READY/APP_START не трогаю; A+B закрыты с твоей стороны.
+
+FACT
+  - inject=1 ≠ mangle кремний — ок
+  - костюм 2 / hfuse 0xC5 держим
+  - ui@ появился (to-ui/) — TUI, не клетка
+
+NEXT
+  - жду твой живой correlate; fault off на птице оставляю

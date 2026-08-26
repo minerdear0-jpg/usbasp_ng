@@ -12,7 +12,7 @@ Same host protocol as Fischl USBasp (`-c usbasp` / `usbasp-clone`). More flash/R
 |------|------|
 | **USBasp2** (yellow-dot) | ATmega328P on the stick; USB to host when programming targets |
 | **no-dot** | Classic mega8 stick; used to ISP-flash USBasp2 (J2 closed on USBasp2) |
-| Target on ribbon | e.g. ATmega8 / Nano; J2 on USBasp2 **open** |
+| **Канарейка** | ATmega8 soldered on a Nano PCB, on the ISP ribbon; J2 on USBasp2 **open**. Closed-loop DUT (CH340 UART + LEDs). |
 
 USB when running HIDUART: `bcdDevice` **2.01**, iSerial often `YEL0`, composite + EP2 diag.
 
@@ -57,14 +57,16 @@ Measured 2026-08-26 (yellow **USBasp2** + **ATmega8 on Nano PCB** on ribbon): si
 
 TPI remains gated (`USBASP_HAS_TPI=0`) until tiny acceptance — extra flash does not by itself enable TPI.
 
-## Closed-loop bench (optional)
+## Closed-loop bench (Канарейка)
 
-Target: ATmega8 on a Nano PCB + CH340 (`/dev/ttyUSB0`) + 4 LEDs + RESET.
+**Канарейка** = ATmega8 on a Nano PCB + CH340 (`/dev/ttyUSB0`) + 4 LEDs + RESET.
+Клетка: YEL0 USB → ISP ribbon → Канарейка; CH340 → UART Канарейки.
 
 ```bash
 ./dist/diagplane.bin watch --serial YEL0          # terminal A
-make -C bench/mega8-nano-loop flash               # terminal B
-screen /dev/ttyUSB0 115200                        # expect banner + ping
+make -C bench/mega8-nano-loop flash               # terminal B (wipes Optiboot)
+# or: make -C bench/mega8-diag-oracle flash       # Channel 2 oracle
+screen /dev/ttyUSB0 115200                        # expect banner / @READY
 ```
 
-See [`bench/mega8-nano-loop/`](../bench/mega8-nano-loop/).
+See [`bench/mega8-nano-loop/`](../bench/mega8-nano-loop/) (smoke) and [`bench/mega8-diag-oracle/`](../bench/mega8-diag-oracle/) (dual-truth). Do not burn Optiboot and the oracle canary pages onto the same chip: both own `0x1E00`.

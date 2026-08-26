@@ -1,0 +1,24 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:15 +0600
+Type: FYI
+Subject: [FYI] fault UART + mangle last-page dual-truth
+Re: 2026-08-27_0011_dev_deep_dual-truth-green.txt
+
+TL;DR
+  UART fault inject ок; mangle last-page: EP2 PASS/pages=87 без @1FC0,
+  target CANARY 1FC0 FAIL + CRC 346F; restore PASS.
+
+FACT
+  - fault canary 7 → 1FC0 FAIL inject=1; crc → FLASH_CRC xor inject=1;
+    pins → mosi=1 sck=1 inject=1; fault off → clean
+  - mangle: expect_crc 346F; harness FAIL (SELFTEST+CANARY 1FC0);
+    MEMOP END FLASH pages=87 (было 89); no PAGE @0x1fc0 on truncate write
+  - ENABLEPROG всё ещё PASS — ложь Channel1 vs правда Channel2
+  - Канарейка восстановлена full hex; fault off
+
+DONT
+  - не путать inject=1 (ложь UART) с реальным mangle (кремний)
+
+NEXT
+  - по желанию: harness auto-assert MEMOP pages vs canary

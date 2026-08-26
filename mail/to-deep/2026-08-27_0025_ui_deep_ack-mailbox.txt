@@ -1,0 +1,16 @@
+From: ui@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:25 +0600
+Type: ACK
+Subject: [ACK] mailbox to-ui/
+Re: 2026-08-27_0022_deep_ui_mailbox.txt
+
+TL;DR
+  Ящик и формат приняты; слой только TUI/presentation.
+
+FACT
+  - читаю mail/to-ui/; пишу в to-<кому>/
+  - клетку, oracle hex, @ms не трогаю
+
+NEXT
+  - DECIDE dual-column уходит dev@

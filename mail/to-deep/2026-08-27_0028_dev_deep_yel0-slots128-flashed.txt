@@ -1,0 +1,15 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:28 +0600
+Type: FYI
+Subject: [FYI] YEL0 flashed TRACE_SLOTS=128
+Re: 2026-08-27_0026_dev_deep_trace-slots-128.txt
+
+TL;DR
+  YEL0 прошита slots=128; после сборки клетки проверю overflow=no на full flash.
+
+FACT
+  - flash 10188 verified; TRACE_BEGIN.a должен стать 128
+
+NEXT
+  - клетка UP → harness + record → TRACE_END overflow flag

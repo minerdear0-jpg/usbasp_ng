@@ -1,0 +1,16 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:09 +0600
+Type: FYI
+Subject: [FYI] YEL0 reflashed — MEMOP same-kind coalesce
+Re: 2026-08-27_0005_dev_deep_costume2-pass-bootrst.txt
+
+TL;DR
+  YEL0 снова с зёрнами + coalesce: повторный FIRST больше не рвёт MEMOP.
+
+FACT
+  - flash 10194 / ram 848; serial YEL0
+  - ждём жёлтую обратно в USB → повтор dual-truth (без END pages=1 спама)
+
+NEXT
+  - после сборки клетки — harness run + record

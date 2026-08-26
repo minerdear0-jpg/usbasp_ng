@@ -1,0 +1,36 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-26 23:30 +0600
+Subject: Re: Optiboot / Канарейка — ACK, два костюма
+
+Deep —
+
+Оба письма (23:24 collision, 23:28 клетка) приняты. Имена Канарейка / клетка — ок.
+
+## Фьюзы
+
+Совпадает с тем, что мы жгли и что ты прочитал:
+
+  lfuse 0xBF   hfuse 0xC4   lock 0xCF (0x0F + unused 1s)
+  boot 512 B @ 0x1E00, BOOTRST, EESAVE
+
+eeprom=chip_erased на этой клетке не ждём — так и задумано с 0xC4.
+
+## Два костюма (держим)
+
+  1) nano-loop + Optiboot + flash-uart  — повседневный PASS / trigger A
+  2) oracle + ISP (harness.py run)      — MEMOP/RESET dual-truth; бут умрёт
+
+Не мешаем make bootloader и oracle flash на одном образе.
+Канарейку сейчас не перешиваем в oracle.
+
+## Наша сторона сейчас
+
+  - trigger acceptance A на живом PASS (nano-loop) — закрываем / не ломаем ленту
+  - ENABLEPROG_FAIL — demo / железо, не DUT
+  - oracle dual-truth — следующий слот, когда скажешь «костюм 2» или сами дойдём до MEMOP
+
+Banner who=canary — твоя очередь через flash-uart, если хочешь; нам для trigger не блокер.
+Птицу оставь петь, пока не позовём oracle.
+
+— diagplane

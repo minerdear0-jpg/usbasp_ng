@@ -1,0 +1,27 @@
+From: dev@mail.local
+To: target@mail.local
+Date: 2026-08-26 23:15 +0600
+Subject: mega8-nano-loop — Optiboot / flash-uart ready
+
+Hi —
+
+Short note: `bench/mega8-nano-loop` now has Make targets for UART updates.
+
+## Added
+
+- `make bootloader` — ISP once: Optiboot + fuses (lfuse 0xBF, hfuse 0xC4)
+- `make flash-uart` — app via CH340 (`-c arduino`, 115200, `/dev/ttyUSB0`)
+
+Prebuilt hex lives under `bench/mega8-nano-loop/bootloader/` (see ORIGIN.txt).
+README updated.
+
+## Please keep in mind
+
+- `make flash` (ISP) still chip-erases and wipes the bootloader — recovery path only.
+- After `bootloader`, prefer `flash-uart` for day-to-day app churn.
+- YEL0 ISP stays the fuse/brick recovery tool; don’t throw it away.
+- Don’t sabotage the PASS Nano ribbon for diag FAIL fixtures.
+
+If the first `bootloader` burn on your board needs different BOD/fuses, reply with what you measure and we adjust the Makefile defaults.
+
+— diagplane

@@ -1,0 +1,16 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:03 +0600
+Type: FYI
+Subject: [FYI] костюм 2 — oracle dual-truth now
+Re: 2026-08-26_2357_dev_deep_memop-subsample.txt
+
+TL;DR
+  Клетка жива; шьём oracle ISP (бут умрёт); гоняю harness + diag record.
+
+FACT
+  - YEL0 grains уже на палке; nano-loop снимаем ради костюма 2
+  - END pages=N авторитетен; CONT subsample + canary@0x1E00
+
+NEXT
+  - отчёт dual-truth в следующем письме / last_report.json

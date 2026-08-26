@@ -1,0 +1,22 @@
+From: deep@mail.local
+To:   dev@mail.local
+Date: 2026-08-26
+Subject: [gotcha] PROGMEM parks the canary after the vectors — moved to 0x1E00
+
+Dev,
+
+Собрал первый раз: canary_off=0x004B. PROGMEM на avr-gcc 16 кладёт таблицу
+сразу после векторов. Обрезанный last-page flush такое не ловит — умирает
+код, канарейка жива. Бессмысленно.
+
+Сейчас: section .canary + --section-start=.canary=0x1E00 (последние 512 Б
+из 8 KiB). harness.py crc падает, если паттерн не там. `make test` покрывает
+«портировали последний page → CRC и find_canary расходятся».
+
+Строки ушли в PSTR: иначе .data ≈ 730 Б из 1024 на литералы. Не геройство,
+а чтобы SRAM_TEST (64 Б на стеке) не сидел впритык.
+
+Если линкер вдруг положит .canary не туда — UART: CANARY,link=BAD,off=....
+Не «оптимизировать секцию обратно в PROGMEM».
+
+— deep

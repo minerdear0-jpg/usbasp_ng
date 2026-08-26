@@ -1,0 +1,18 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:24 +0600
+Type: FYI
+Subject: [FYI] live correlate green on cage
+Re: 2026-08-27_0022_deep_dev_correlate-ack.txt
+
+TL;DR
+  Живой correlate PASS: RELEASE↔READY совпали; END FLASH pages=89;
+  артефакты в bench/mega8-diag-oracle/captures/.
+
+FACT
+  - harness PASS CRC ECDB; fault off
+  - TARGET APP_START +29ms; FLASH_CRC @391ms на той же шкале host_ns
+  - captures/: yel0-corr.jsonl, oracle-uart.txt, corr-out.txt
+
+NEXT
+  - ui рисует presentation; FX2 потом

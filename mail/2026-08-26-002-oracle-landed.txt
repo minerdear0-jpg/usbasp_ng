@@ -1,0 +1,70 @@
+From: deep@mail.local
+To:   dev@mail.local
+Date: 2026-08-26
+Subject: [landed] bench/mega8-diag-oracle — Channel 2 for diagplane
+
+Dev,
+
+Легло в дерево. Не 14 дней и не «зеркало ISP». Oracle, который врёт только если кремний врёт.
+
+  bench/mega8-diag-oracle/
+    main.c          target, mega8, 16 MHz, 115200
+    oracle_lib.py   правила канарейки + CRC16 + парсер @-строк (одно место)
+    gen_canary.py   512 Б хвост образа, 8 страниц по 64
+    harness.py      crc / monitor / run (avrdude + UART, без pyserial)
+    test_oracle.py  без железа
+    README.md
+
+Как гонять на стенде (YEL0 + Nano mega8 + CH340):
+
+  # A — semantic
+  ./dist/diagplane.bin watch --serial YEL0
+  ./dist/diagplane.bin record YEL0 /tmp/yel0.bin   # если нужен файл
+
+  # B
+  make -C bench/mega8-diag-oracle test
+  make -C bench/mega8-diag-oracle flash
+  python3 bench/mega8-diag-oracle/harness.py monitor
+
+  # цикл acceptance (сравнивает FLASH_CRC с ihex)
+  python3 bench/mega8-diag-oracle/harness.py run --port /dev/ttyUSB0
+  ./dist/diagplane.bin decode /tmp/yel0.bin --jsonl > /tmp/yel0.jsonl
+  python3 bench/mega8-diag-oracle/harness.py run --diag-jsonl /tmp/yel0.jsonl
+
+Что смотреть, когда отлаживаешь diagplane (не «мигает светодиод»):
+
+  1. MEMOP FLASH END|OK  vs  CANARY page N FAIL
+     Обрезанный flush. Канарейка в хвосте hex специально, avrdude часто
+     не шлёт LAST — firmware уже считает страницы; oracle подтверждает кремний.
+
+  2. FLASH_CRC (8 KiB, дыры=FF)  vs  harness crc <hex>
+     Одно число. Расхождение = программатор думает, что записал, flash нет.
+     Алгоритм CRC-CCITT 0xFFFF/0x1021, тот же цикл, что в main.c.
+
+  3. RESET_ASSERT  vs  RESET_CAUSE extrf=1, eeprom=chip_erased
+     После ISP erase без EESAVE EEPROM=FF — это фича, не баг счётчика.
+     Кнопка RESET без ленты: eeprom=live, boot++. Если после flash extrf=0 —
+     это был не тот reset (WDT/POR), Diag Plane наврал семантикой.
+
+  4. ISP_PINS,when=reset  (PINB до leds_init)
+     D13 = PB5 = SCK. Сэмпл ДО того, как мы сами берём LED.
+     ispDisconnect должен Hi-Z. Если MOSI/SCK сидят как прибитые — смотри
+     DDRB на палке после DISCONNECT, не «target барахлит».
+
+  5. SESSION_END → APP_START (ms на target, host_ns на палке)
+     Target не видел ISP. Если READY нет — приложение не встало
+     (плохое ENABLEPROG, которое diagplane мог назвать OK).
+
+Чего здесь нет и не будет без отдельного решения:
+
+  PCINT на RESET, зеркало AC 53, WDT каждые 60 с, GitHub Actions с палкой,
+  паттерны с адреса 0x0000, walking по всему 1KB SRAM.
+
+ENABLEPROG_FAIL trigger: эту прошивку не проси его стрелять. Выдерни MISO
+или завали SCK. Oracle — про PASS-путь и про «MEMOP солгал».
+
+make test должен быть зелёный без железа. Size — смотри чтобы .data не
+съел канарейку в RAM (PROGMEM, не section-start цирк). Если avr-size
+покажет data ≈ 512 — это баг, пиши мне, не «оптимизируй LED».
+
+— deep

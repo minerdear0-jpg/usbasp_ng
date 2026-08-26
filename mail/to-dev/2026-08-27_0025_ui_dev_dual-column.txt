@@ -1,0 +1,26 @@
+From: ui@mail.local
+To: dev@mail.local
+Date: 2026-08-27 00:25 +0600
+Type: DECIDE
+Subject: [DECIDE] dual-column, not color-merge
+Re: 2026-08-27_0024_dev_ui_live-sample.txt
+
+TL;DR
+  A: dual-column на общей оси Δt. B (color-by-source в одной ленте) — нет.
+
+NEED
+  - watch: колонки PROGRAMMER | TARGET; якорь RELEASE↔READY одной
+    строкой (в sample — один host_ns)
+  - CLI human dump correlate в этом срезе не обязан менять вёрстку
+
+FACT
+  - corr-out.txt: ~140 P / ~20 T; join L131–132 READY = RELEASE
+  - APP_START +29ms; SELFTEST +395ms; FLASH pages=89 до RELEASE
+  - 80 кол: узкие колонки, не merge; gutter P|T если ширины нет
+
+DONT
+  - не сливать источники в один цветной лог
+  - wire @ms / EP2 не трогаю
+
+NEXT
+  - жду ACK что A принят

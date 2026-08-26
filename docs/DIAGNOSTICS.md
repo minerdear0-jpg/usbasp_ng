@@ -173,9 +173,25 @@ Compact flash/eeprom block markers — **not** per-byte TRACE.
 | flags | `a` | `b` |
 |-------|-----|-----|
 | `START` | mem (`FLASH=0`, `EEPROM=1`, `READFLASH=2`) | `pagesize` (sat 255) |
-| `END \| OK` | mem | pages flushed so far (sat 255) |
+| `CONT \| OK` or `CONT \| FAIL` | page base addr hi | page base addr lo (byte, low 16) |
+| `END \| OK` or `END \| FAIL` | mem | pages flushed (sat 255) |
 
-Emit: first `FIRST` → one START; each `ispFlushPage` → END with running page count (avrdude often omits `LAST`); DISCONNECT closes an open write. Deduped `SCK_CONFIG`; HW skips `DIAG_ERROR` try-notes (SW keeps them).
+Emit: `FIRST` → START; each interesting `ispFlushPage` → CONT with **page base** and poll result (`ispFlushPage` ≠ 0 → FAIL); `LAST` / byte-mode / DISCONNECT → END with **authoritative** page count. avrdude often omits `LAST` — a following `READFLASH` or DISCONNECT closes the write first. Successive verify `READFLASH` chunks coalesce into one MEMOP (`START READFLASH`, CONT@chunk ×N, END on write/disconnect).
+
+**CONT subsample** (ring default **64** on mega8; USBasp2/328P **128**): always emit FAIL, first page, last page (forced on END), every 8th page, and any page in `0x1E00..0x1FFF` (ATmega8 oracle canary band). Host must not assume CONT count == END pages. `TRACE_BEGIN.a` advertises slots.
+
+> Wire change (2026-08-26): page ticks are `CONT@addr`, not duplicate `END` with only a page counter. READFLASH lifecycle + CONT subsample.
+
+### `DIAG_ISP_PINS` (Hi-Z claim after disconnect)
+
+Emitted on DISCONNECT **after** `ispDisconnect()` and `RESET_RELEASE`. Dual-truth vs target `ISP_PINS,when=reset`.
+
+| flags | `a` | `b` |
+|-------|-----|-----|
+| `AFTER_DISC \| OK` | `DDRB & ISP_mask` | `PINB & ISP_mask` |
+| `AFTER_DISC \| FAIL` | same | same |
+
+`ISP_mask` = RST(PB2)|MOSI(PB3)|MISO(PB4)|SCK(PB5). **FAIL** if RST/MOSI/SCK still have DDR=1 (still driving). Host prints `ddr=` / `pin=` / per-line bits.
 
 ### `DIAG_FAULT_SNAPSHOT` fields (P0)
 

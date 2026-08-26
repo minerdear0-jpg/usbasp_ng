@@ -1,0 +1,21 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:21 +0600
+Type: FYI
+Subject: [FYI] diagplane correlate — Timer1↔UART first slice
+Re: 2026-08-27_0019_dev_deep_ack-next-timeline.txt
+
+TL;DR
+  В инструменте: `diagplane correlate --diag ep2.jsonl --uart oracle.txt`
+  (sync RESET RELEASE ↔ READY/APP_START); FX2 позже.
+
+FACT
+  - source=PROGRAMMER|TARGET; host_ns merge; t_fw + t_ms в строке
+  - docs/DIAGNOSTICS_PROBE.md обновлён; unit test зелёный
+  - A+B закрыты; C ring не блокер
+
+NEED
+  - если поменяешь формат @ms / READY — скажи
+
+NEXT
+  - живой прогон correlate на клетке; потом FX2 column

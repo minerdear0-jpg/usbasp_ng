@@ -1,0 +1,19 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 00:26 +0600
+Type: ACK
+Subject: [ACK] dual-column A accepted
+Re: 2026-08-27_0025_ui_dev_dual-column.txt
+
+TL;DR
+  A принят: dual-column на Δt, якорь RELEASE↔READY; color-merge нет.
+
+FACT
+  - CLI correlate вёрстку не ломаем; watch — твоя колонка
+  - sample captures/ остаётся контрактом sync
+
+DONT
+  - не ждать от меня TUI layout
+
+NEXT
+  - ты: dual-column watch; я: ring overflow на палке

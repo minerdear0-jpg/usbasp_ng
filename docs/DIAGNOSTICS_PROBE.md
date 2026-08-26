@@ -67,9 +67,9 @@ monotonic timestamp (Timer1 logical time) — done (`diag_clock`)
       ↓
 capability bits — done (live YEL0 acceptance passed)
       ↓
-unified TRACE ring + capture metadata — **this PR** (no trigger predicate)
+unified TRACE ring + capture metadata — done
       ↓
-trigger engine (predicate only — ring already holds history)
+trigger predicates + POST → FROZEN — **this PR**
       ↓
 HID EP2 stream (versioned wire as needed)
       ↓
@@ -149,22 +149,17 @@ diag_try_emit / trace_event  →  TRACE RING  →  diag_trace_drain  →  HID EP
 - **Ownership:** producer and consumer both main-context (`hiduart_poll`); no `cli()` on the hot path.
 - Host: decode/replay keep `overflow=YES`; TUI shows TRACE slots + overflow.
 
-### 4. Trigger engine (after TRACE ring)
+### 4. Trigger engine — landed (ENABLEPROG_FAIL first)
 
-Not `TRACE=everything`. Predicate only; storage already exists:
-
-- `event == ENABLEPROG && result == FAIL`
-- `transport == SW`
-- `SCK_ID == 7` (`-B 22`)
-- combinations
+Predicate layer only: `diag_trigger_match()` after `diag_trace_push()` so the firing event is in the capture. Default: `DIAG_TRIG_ENABLEPROG_FAIL`.
 
 ```text
-TRACE RING (always running)
-     └── trigger predicate → capture lifecycle → FROZEN (pre-N / post-N)
+ARMED → (match) → POST_CAPTURE → (N=USBASP_DIAG_POST_CAPTURE_EVENTS, default 16) → FROZEN
 ```
 
-First killer use-case historically: SW SCK ENABLEPROG (gate closed on USBasp2 for signature PASS; still the template for capture-mode science).
+`TRACE_END` (4 frames) reports: valid, write_index, overflow, triggered, kind, post_count, trigger_index, trigger_timestamp.
 
+Non-intrusive: no extra ISP/GPIO/USB for the match.
 ### 5. Raw ISP capture (bounded)
 
 Per-transaction `{T, TX, RX, transport}` — **not** every SCK edge in normal mode. Optional `DIAG_MODE_CAPTURE` may add instrumentation; must advertise:
@@ -179,19 +174,20 @@ A measuring instrument must say when it perturbs the DUT timing.
 
 Host: `usbasp-ng-diag capabilities` → map. Gate UI/features on **capability bits**, never `firmware >= …`.
 
-Two bitsets (LE `uint32`, advertised in `DIAG_CAPS` after HELLO):
+Two bitsets (LE `uint32`, advertised in `DIAG_CAPS` after HELLO on **ISP CONNECT** — not USB plug-in):
 
 **Firmware (diagnostics):** `SESSION`, `SNAPSHOT`, `TIMESTAMP`, `TRACE`, `TRIGGER`, `PRETRIGGER`, `SCK_STATS`  
 **Board (physical):** `TARGET_UART`, `SCK_JUMPER`, `PHYSICAL_CAPTURE`
 
-Today (USBasp2 / YEL0): TIMESTAMP **yes**; TRACE **yes** (ring + metadata); TRIGGER/PRETRIGGER **no**; `PHYSICAL_CAPTURE` **no**.
+Today (USBasp2 / YEL0): TIMESTAMP / TRACE / TRIGGER / PRETRIGGER **yes**; SCK_STATS **no**; `PHYSICAL_CAPTURE` **no**. Firmware mask `0x0000003F`.
 
-```text
+```bash
 usbasp-ng-diag capabilities --demo capabilities_yel0
-usbasp-ng-diag capabilities --serial YEL0   # re-plug if EP2 already drained
+# live: start listener first, then avrdude (CAPS on CONNECT)
+usbasp-ng-diag capabilities --serial YEL0 --timeout 30
 ```
 
-Expect after TRACE PR: firmware `0x0000000F`, TRACE ✓, TRIGGER ✗.
+Acceptance: [ACCEPTANCE-DIAG-TRIGGER-001](acceptance/ACCEPTANCE-DIAG-TRIGGER-001.md).
 
 ### Timestamp note
 
@@ -199,7 +195,7 @@ Expect after TRACE PR: firmware `0x0000000F`, TRACE ✓, TRIGGER ✗.
 
 ### 7. Target monitor (UART) — tagged, separate source
 
-Closed-loop bench (mega8-on-Nano + ttyUSB) is real: [USBASP2.md](USBASP2.md), `bench/mega8-nano-loop/`.
+Closed-loop bench (**Канарейка** = mega8-on-Nano + ttyUSB) is real: [USBASP2.md](USBASP2.md), `bench/mega8-nano-loop/`, `bench/mega8-diag-oracle/`.
 
 In the probe architecture, target UART is a **board capability** under Diagnostics, always tagged:
 
@@ -208,6 +204,9 @@ source=PROGRAMMER | source=TARGET
 ```
 
 Never merge into one unlabeled stream.
+
+**Host (first slice):** `diagplane correlate --diag ep2.jsonl --uart oracle.txt`  
+aligns target `@ms` onto `host_ns` using **RESET RELEASE ↔ READY/APP_START** (Timer1 path). FX2/PulseView physical edges come later — same `T` in the event, third column.
 
 ### 8. Snapshot-now
 
@@ -250,4 +249,4 @@ So ENABLEPROG, FAULT_SNAPSHOT, TRACE, TARGET_UART, SCK_STATS can grow without ye
 2. **Do** grow features behind `USBASP_HAS_DIAG` + diag caps on **USBasp2** boards.  
 3. **Do** keep L1 USBasp sacred.  
 4. **Do** pass live YEL0 `capabilities` acceptance before TRACE code. *(done)*  
-5. Next: **trigger predicate** only — ring + metadata already exist.
+5. Next: richer predicates / host-selectable arm only if needed — cycle ARM→trigger→post→freeze→replay is closed.

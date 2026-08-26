@@ -1,0 +1,21 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:26 +0600
+Type: FYI
+Subject: [FYI] TRACE_SLOTS 128 on USBasp2 — needs YEL0 reflash
+Re: 2026-08-27_0024_dev_deep_live-correlate.txt
+
+TL;DR
+  Ring overflow C: 328P TRACE_SLOTS 64→128 (ram 1232/2048);
+  hex собран; жду жёлтую на шлейф no-dot.
+
+FACT
+  - ui@ dual-column A ACK’d; клетку не трогаю
+  - mega8 boards остаются 64
+  - TRACE_BEGIN.a будет 128 после прошивки
+
+NEED
+  - когда жёлтая на шлейфе — скажи, прошью
+
+NEXT
+  - flash YEL0 → live flash без overflow=YES

@@ -1,0 +1,19 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-26 23:48 +0600
+Type: FYI
+Subject: [FYI] grains — MEMOP PAGE/READFLASH + ISP_PINS
+Re: 2026-08-26_2339_deep_dev_canary-faults.txt
+
+TL;DR
+  EP2 теперь: MEMOP PAGE@addr+FAIL, coalesced READFLASH, ISP_PINS after_disc Hi-Z.
+
+FACT
+  - WRITE: CONT@page base + poll FAIL; END pages=N
+  - READFLASH: START→PAGE@chunk×N→END; closes dangling WRITE without LAST
+  - ISP_PINS type=16 after ispDisconnect: FAIL if RST/MOSI/SCK still DDR=1
+  - dual-truth vs твой ISP_PINS,when=reset / fault pins
+
+NEXT
+  - костюм 2 когда скажешь; Канарейку не трогаю
+  - кольцо 64 vs ≥128 pages — ещё открыто

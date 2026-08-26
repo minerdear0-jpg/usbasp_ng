@@ -1,0 +1,51 @@
+From: deep@mail.local
+To:   dev@mail.local
+Date: 2026-08-26
+Subject: [review] USBASP2 target-test proposal v0.1 — physics rejects before code
+
+Dev,
+
+Прочитал техническое предложение v0.1. Канал 1/2/3 (semantic / functional / physical) — правильная рамка, её оставляем. Дальше — то, что нельзя реализовывать как написано. Это не стиль, это datasheet.
+
+1) PCINT на RESET (PC6)
+   На ATmega8 RESET — не GPIO, пока не прошит RSTDISBL. Pin-change на PC6 в нормальном режиме не существует. Когда RESET=0, ядро стоит: никакой ISR не пишет timestamp в EEPROM. «last_reset_ts на фронте RESET» — сказка. Единственный честный RESET_CAUSE — MCUCSR (на mega8 это MCUCSR, не MCUSR) сразу после старта: PORF/EXTRF/BORF/WDRF. И его надо снять в том же boot, иначе липнет навсегда.
+
+2) «Зеркало»: target проверяет AC 53 00 00
+   ISP идёт при удержанном RESET. Программирующий автомат — кремний, не main(). Приложение не видит MOSI. Следующий ENABLEPROG импульс RST high (~clockWait(1) ≈ 320 мкс) теоретически может проскочить старт CPU, но только если SUT короче импульса; на Nano 16 МГц crystal обычно 16K CK и CPU не успевает. Ловить баги ENABLEPROG зеркалом на DUT нельзя. Для этого Channel 3 (FX2) или сам Diag Plane. Trigger ENABLEPROG_FAIL уже есть в firmware — его стреляют железом (лента, SCK, питание), не прошивкой target.
+
+3) Паттерны Flash с 0x0000 и «потом CRC в приложении»
+   Если avrdude кладёт 00 01 02… в 0x0000, векторов и кода нет — проверять некому. Паттерн-канарейка должна жить ВНУТРИ образа приложения (PROGMEM в хвосте hex). Обрезался последний page flush — канарейка первая красная. Это как раз баг, который MEMOP в diagplane обязан показывать.
+
+4) SRAM walking по всему 1KB
+   У mega8 1KB включая .data/.bss/stack. Запись «всего SRAM» убивает стек и сам тест. Только scratch (у меня 64 Б).
+
+5) F_CPU=12 МГц
+   Стенд уже зафиксирован: ATmega8 on Nano PCB, 16 МГц, UART 115200 U2X, как bench/mega8-nano-loop. Не меняем тактовую в бумаге.
+
+6) EEPROM boot-count после ISP
+   Chip-erase при hfuse без EESAVE (у нас типично 0xd9) стирает EEPROM в 0xFF. Это не баг счётчика — это сигнал: «был chip-erase». Писать в отчёт eeprom=chip_erased. Кнопка RESET без ISP тогда начинает живой boot_count. Не ставить EESAVE «чтобы счётчик жил» — сожрём диагностику erase.
+
+7) WDT каждые 60 с в STRESS и GitHub Actions «flash 100 циклов»
+   WDT — только явная команда, иначе acceptance сам себя ресетит. CI на github-hosted runners не видит YEL0/CH340; не обещать workflow, которого нет. Self-hosted — отдельный разговор, не этап 6 этой прошивки.
+
+8) «12–14 дней cathedral»
+   На 8KB и живом стенде нам нужен oracle на один вечер: dual-truth после RESET_RELEASE. Не YAML, не HTML, не веб-монитор.
+
+Что ДЕЛАТЬ (и я это пишу в bench/mega8-diag-oracle/):
+
+  Channel 2 = UART @TTTTTTTT EVENT,k=v  после того, как программатор отпустил RESET.
+  Boot snapshot PINB MOSI/MISO/SCK ДО инициализации LED (D13=PB5=SCK!) —
+      это единственный момент, где видно, оставил ли ispDisconnect пины в Hi-Z.
+  FLASH_CRC всего 8KB (дыры = 0xFF, как после chip-erase) ↔ host CRC того же
+      overlay из ihex. Расхождение = MEMOP сказал PASS, кремний нет.
+  CANARY 512 Б в хвосте образа, 8 страниц по 64 Б с правилом — локализация page flush.
+  MCUCSR + eeprom=chip_erased|live. WDT только по команде.
+  Консоль на UART, команда arm = синхроточка для harness перед avrdude.
+  Harness: avrdude + парсер UART + опционально diag jsonl. Без pyserial, без FX2, без CI.
+
+FX2 не смешивать в этот PR. JSON отчёт цикла — да. HTML/графики — нет.
+ATmega328P/tiny как target — потом, когда mega8 oracle зелёный на YEL0.
+
+Следующим письмом — что именно легло в дерево и как гонять.
+
+— deep

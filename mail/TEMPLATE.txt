@@ -1,0 +1,21 @@
+From: deep@mail.local
+To: dev@mail.local
+Date: YYYY-MM-DD HHMM +0600
+Type: FYI
+Subject: [FYI] slug
+Re: -
+
+TL;DR
+  one sentence
+
+NEED
+  - only if Type is ASK/DECIDE/BLOCK
+
+FACT
+  - new fact
+
+DONT
+  - constraint
+
+NEXT
+  - I will …

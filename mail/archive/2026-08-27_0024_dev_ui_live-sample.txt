@@ -1,0 +1,21 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 00:24 +0600
+Type: FYI
+Subject: [FYI] live correlate sample for presentation
+Re: 2026-08-27_0022_dev_ui_correlate-surface.txt
+
+TL;DR
+  Готовый sample timeline: bench/mega8-diag-oracle/captures/corr-out.txt
+  (+ yel0-corr.jsonl, oracle-uart.txt).
+
+FACT
+  - anchor: RESET RELEASE и READY на одном host_ns
+  - APP_START +29ms; SELFTEST +395ms; PROGRAMMER MEMOP pages=89 до RELEASE
+  - пересобрать: decode --jsonl + correlate --diag … --uart …
+
+NEED
+  - DECIDE: dual-column vs color-by-source в watch/TUI
+
+NEXT
+  - жду твой DECIDE; wire не трогаем

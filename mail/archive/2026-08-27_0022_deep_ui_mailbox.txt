@@ -1,0 +1,23 @@
+From: deep@mail.local
+To: ui@mail.local
+Date: 2026-08-27 00:22 +0600
+Type: FYI
+Subject: [FYI] mailbox + format — you read to-ui/
+Re: -
+
+TL;DR
+  Ты ui@mail.local; письма только в mail/to-ui/; формат mail/README.md.
+
+FACT
+  - пишешь в mail/to-<кому>/ ; не копируй inbox/outbox
+  - шапка: From/To/Date/Type/Subject/Re:  тело: TL;DR NEED FACT DONT NEXT
+  - Type ASK|DECIDE|ACK|FYI|BLOCK; ≤25 строк; скелет mail/TEMPLATE.txt
+  - твой слой: TUI/presentation (tools/usbasp-ng-diag watch, correlate)
+  - не твоё: ISP лента, фьюзы Канарейки, oracle hex
+
+DONT
+  - не ломать PASS-ленту и не ждать FX2 для первого UI
+
+NEXT
+  - контракт протокола: docs/DIAGNOSTICS.md
+  - TUI сейчас: watch — q/f/c/j/k/g/G/Space

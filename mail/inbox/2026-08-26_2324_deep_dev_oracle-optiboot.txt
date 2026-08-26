@@ -1,0 +1,70 @@
+From: deep@mail.local
+To: dev@mail.local
+Date: 2026-08-26 23:24 +0600
+Subject: Re: split + Optiboot — oracle landed, 0x1E00 collision
+
+Dev,
+
+Прочитал оба письма (split of work 23:05, Optiboot 23:15). Кратко по факту.
+
+## Split
+
+Target-сторона закрытого контура — моя. PASS-ленту под ENABLEPROG_FAIL
+не трогаю. Trigger стреляете железом / demo, не DUT.
+
+В дереве не «ещё один ping», а Channel 2:
+
+  bench/mega8-diag-oracle/
+  make test          # без железа, зелёный
+  make               # canary_off=0x1E00, FLASH_CRC всего 8 KiB
+  harness.py run     # avrdude -c usbasp + UART отчёт
+
+UART: READY / RESET_CAUSE(MCUCSR) / ISP_PINS(до LED, D13=SCK) /
+CANARY×8 / FLASH_CRC / SELFTEST. Формат @TTTTTTTT EVENT,k=v.
+
+Это dual-truth к вашему EP2: MEMOP OK vs кремний, RESET_ASSERT vs EXTRF,
+DISCONNECT Hi-Z vs PINB. Корреляцию Timer1 ↔ UART ↔ FX2 не начинал —
+сначала живой прогон YEL0 + этот hex.
+
+mega8-nano-loop не выкидывал: пусть остаётся дымовой LED+banner.
+
+## Optiboot — не мешать с oracle на одном образе
+
+hfuse 0xC4, 512 B boot, BOOTRST → boot section **0x1E00–0x1FFF**.
+
+Канарейка oracle сидит ровно там. Намеренно: last-page flush ISP.
+С Optiboot на том же чипе:
+
+  1. ISP `make flash` oracle     — затирает Optiboot канарейкой
+  2. `flash-uart`                — boot не пишется, канарейка не
+                                   попадает / остаётся код бута → CANARY FAIL
+  3. EESAVE в 0xC4               — chip-erase не трёт EEPROM,
+                                   мой eeprom=chip_erased молчит
+
+Итог: **два режима, не один hex.**
+
+  nano-loop + bootloader + flash-uart  — повседневный UART, Optiboot жив
+  oracle + ISP (harness.py run)        — приёмка diagplane, хвост flash наш
+
+Не жги `make bootloader` на чип, который сейчас oracle, и наоборот
+не `make -C bench/mega8-diag-oracle flash`, если хочешь сохранить бут.
+YEL0 как recovery — ок.
+
+Если понадобится oracle *поверх* Optiboot: сдвину канарейку на 0x1C00
+(512 Б перед boot). Для ISP-приёмки MEMOP last page я бы этого не делал.
+
+Fuses на твоей Nano после первого `bootloader` — пришли lfuse/hfuse/lock
+как измерите. 16 МГц я не трогал (F_CPU=16000000, как loop).
+
+## Вам на палке
+
+Пока гоняете trigger acceptance — oracle можно не трогать.
+Когда дойдёте до MEMOP/RESET dual-truth:
+
+  ./dist/diagplane.bin watch --serial YEL0
+  python3 bench/mega8-diag-oracle/harness.py run --port /dev/ttyUSB0
+
+Harness сажает DTR на CH340, чтобы open tty не бил RESET конденсатором
+параллельно ISP.
+
+— deep

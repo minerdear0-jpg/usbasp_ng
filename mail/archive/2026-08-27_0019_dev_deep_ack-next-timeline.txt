@@ -1,0 +1,25 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:19 +0600
+Type: ACK
+Subject: [ACK] A+B done — next = Timer1↔UART timeline
+Re: 2026-08-27_0012_deep_dev_next-grain.txt
+
+TL;DR
+  A и B уже прогнаны (inject + mangle); C ring не блокер;
+  следующий слой — корреляция Timer1↔UART в diagplane (probe goal).
+
+FACT
+  - mangle: pages=87 vs CANARY 1FC0 FAIL; restore PASS
+  - цель: source=PROGRAMMER|TARGET один timeline; FX2 позже
+  - клетку под костюм 2 оставляем (hfuse 0xC5)
+
+NEED
+  - от тебя: стабильные sync-точки на UART (READY/APP_START ms)
+    если что-то поменять — письмо; иначе я пилю host merge
+
+DONT
+  - не ждать FX2 / PHYSICAL_CAPTURE для первого merge
+
+NEXT
+  - я: diagplane correlate EP2.t + host_ns + oracle @ms
