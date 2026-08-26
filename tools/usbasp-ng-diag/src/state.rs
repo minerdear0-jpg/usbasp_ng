@@ -73,6 +73,10 @@ pub struct AppState {
     pub memop_pages: Vec<(u16, bool)>,
     pub memop_end_pages: Option<u8>,
     pub memop_end_ok: Option<bool>,
+    pub last_flash_pages: Option<u8>,
+    pub last_flash_ok: Option<bool>,
+    pub last_verify_pages: Option<u8>,
+    pub last_verify_ok: Option<bool>,
     pub pins_ok: Option<bool>,
     pub pins_ddr: Option<u8>,
     pub pins_pin: Option<u8>,
@@ -345,6 +349,18 @@ impl AppState {
                     self.memop_kind = Some(f.a);
                     self.memop_end_pages = Some(f.b);
                     self.memop_end_ok = Some(f.flags & EP_FAIL == 0);
+                    let ok = f.flags & EP_FAIL == 0;
+                    match f.a {
+                        MEM_FLASH | MEM_EEPROM => {
+                            self.last_flash_pages = Some(f.b);
+                            self.last_flash_ok = Some(ok);
+                        }
+                        MEM_READFLASH => {
+                            self.last_verify_pages = Some(f.b);
+                            self.last_verify_ok = Some(ok);
+                        }
+                        _ => {}
+                    }
                 }
             }
             ISP_PINS => {
@@ -370,6 +386,10 @@ impl AppState {
         self.memop_pages.clear();
         self.memop_end_pages = None;
         self.memop_end_ok = None;
+        self.last_flash_pages = None;
+        self.last_flash_ok = None;
+        self.last_verify_pages = None;
+        self.last_verify_ok = None;
         self.pins_ok = None;
         self.pins_ddr = None;
         self.pins_pin = None;

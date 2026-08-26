@@ -1,8 +1,8 @@
 [package]
 name = "usbasp-ng-diag"
-version = "0.3.0"
+version = "0.1.0"
 edition = "2021"
-description = "USBasp NG Diagnostics Plane host tool (USBASP-NG DIAG v1)"
+description = "diagplane — USBasp NG Diagnostics Plane host (protocol versioned separately)"
 license = "GPL-2.0-or-later"
 publish = false
 

@@ -1,6 +1,13 @@
-# usbasp-ng-diag
+# usbasp-ng-diag (diagplane)
 
-Host tool for the USBasp NG **Diagnostics Plane** (HID EP2, DIAG v1).
+Host tool for the USBasp NG **Diagnostics Plane** (HID EP2).
+
+Versions (independent):
+
+- **diagplane** — this client (`Cargo.toml` / `diagplane --version`)
+- **protocol** — EP2 wire schema (`DIAG_SCHEMA_V1` = 1)
+
+TUI header shows both, e.g. `diagplane 0.1.0  protocol 1`.
 
 ```bash
 cargo build --release

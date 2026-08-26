@@ -21,7 +21,7 @@ use crate::capture::CaptureFile;
 use crate::correlate::{self, TimelineEvent};
 use crate::demo;
 use crate::decoder::type_name;
-use crate::protocol::{DiagFrame, EP2_IN, MEM_EEPROM, MEM_FLASH, MEM_READFLASH};
+use crate::protocol::{DiagFrame, EP2_IN};
 use crate::scene::{
     diagnosis, dual_rows, is_wire_fragment, phases, programmer_rows, rel_label, DiagTone,
     PhaseMark, ViewRow,
@@ -263,15 +263,18 @@ fn run_loop(
 }
 
 fn draw(f: &mut Frame, ui: &Ui) {
-    let wide = f.area().width >= 100;
-    let tall = f.area().height >= 24;
-    let inst_h = if wide && tall { 8 } else { 0 };
+    let w = f.area().width;
+    let h = f.area().height;
+    // Mockup: instruments stay visible on 80×24, not only 100×24.
+    // Bus faceplate stays put. FLASH rails on the right on 16:9 (~110+ cols).
+    let inst_h = if h >= 22 && w >= 80 { 7 } else { 0 };
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
-            Constraint::Length(5),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
             Constraint::Length(inst_h),
             Constraint::Min(5),
             Constraint::Length(1),
@@ -279,17 +282,18 @@ fn draw(f: &mut Frame, ui: &Ui) {
         .split(f.area());
 
     draw_header(f, chunks[0], ui);
-    draw_diag(f, chunks[1], ui);
+    draw_banner(f, chunks[1], ui);
+    draw_phases(f, chunks[2], ui);
     if inst_h > 0 {
-        draw_instruments(f, chunks[2], ui);
+        draw_instruments(f, chunks[3], ui);
     }
     if ui.show_caps {
-        draw_caps(f, chunks[3], ui);
+        draw_caps(f, chunks[4], ui);
     } else {
-        draw_timeline(f, chunks[3], ui);
+        draw_timeline(f, chunks[4], ui);
     }
     let help = Paragraph::new(ui.status.as_str()).style(Style::default().fg(Color::DarkGray));
-    f.render_widget(help, chunks[4]);
+    f.render_widget(help, chunks[5]);
 }
 
 fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
@@ -298,41 +302,37 @@ fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
         (Some(id), _) => format!("HW SCK id={id}"),
         _ => "SCK —".into(),
     };
-    let dual = if ui.uart_path.is_some() { " DUAL " } else { "" };
-    let title = Paragraph::new(Line::from(vec![
+    let mut spans = vec![
         Span::styled(
-            " diagplane ",
+            format!(" {} ", crate::version::banner_short()),
             Style::default()
                 .fg(Color::Black)
                 .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(format!("  {}  {sck} ", ui.source_label)),
-        if ui.faults_only {
-            Span::styled(" FAULTS ", Style::default().fg(Color::Black).bg(Color::Red))
-        } else {
-            Span::styled(" ALL ", Style::default().fg(Color::Black).bg(Color::Green))
-        },
-        if ui.follow {
-            Span::styled(
-                " FOLLOW ",
-                Style::default().fg(Color::Black).bg(Color::Yellow),
-            )
-        } else {
-            Span::raw(" paused ")
-        },
-        if ui.wire {
-            Span::styled(" WIRE ", Style::default().fg(Color::Black).bg(Color::Magenta))
-        } else {
-            Span::raw("")
-        },
-        Span::styled(dual, Style::default().fg(Color::Cyan)),
-    ]))
-    .block(Block::default().borders(Borders::ALL).title("watch"));
-    f.render_widget(title, area);
+        Span::raw(format!("  {}  {sck}", ui.source_label)),
+    ];
+    if ui.uart_path.is_some() {
+        spans.push(Span::styled(
+            "  DUAL",
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        ));
+    }
+    if ui.follow {
+        spans.push(Span::styled("  follow", Style::default().fg(Color::DarkGray)));
+    } else {
+        spans.push(Span::styled("  paused", Style::default().fg(Color::Yellow)));
+    }
+    if ui.wire {
+        spans.push(Span::styled("  WIRE", Style::default().fg(Color::Magenta)));
+    }
+    if ui.faults_only {
+        spans.push(Span::styled("  FAULTS", Style::default().fg(Color::Red)));
+    }
+    f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-fn draw_diag(f: &mut Frame, area: Rect, ui: &Ui) {
+fn draw_banner(f: &mut Frame, area: Rect, ui: &Ui) {
     let (tone, line) = diagnosis(&ui.state);
     let (fg, bg) = match tone {
         DiagTone::Bad => (Color::White, Color::Red),
@@ -340,156 +340,313 @@ fn draw_diag(f: &mut Frame, area: Rect, ui: &Ui) {
         DiagTone::Warn => (Color::Black, Color::Yellow),
         DiagTone::Info => (Color::Cyan, Color::Reset),
     };
-    let mut spans = vec![Span::styled(
-        format!(" {line} "),
-        Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
-    )];
-    if ui.state.trace_triggered {
+    let text = line;
+    f.render_widget(
+        Paragraph::new(Span::styled(
+            format!(" {text} "),
+            Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
+        )),
+        area,
+    );
+}
+
+fn draw_phases(f: &mut Frame, area: Rect, ui: &Ui) {
+    let mut spans = Vec::new();
+    for (i, (name, mark)) in phases(&ui.state).iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw(" "));
+        }
+        let (sym, fg, bg) = match mark {
+            PhaseMark::Ok => ("✓", Color::Black, Color::Green),
+            PhaseMark::Fail => ("×", Color::White, Color::Red),
+            PhaseMark::Active => ("▶", Color::Black, Color::Yellow),
+            PhaseMark::Idle => ("·", Color::DarkGray, Color::Reset),
+        };
         spans.push(Span::styled(
-            "  FROZEN",
-            Style::default().fg(Color::Yellow),
+            format!(" {name} {sym} "),
+            Style::default().fg(fg).bg(bg),
         ));
     }
-    let phase_line = Line::from(
-        phases(&ui.state)
-            .iter()
-            .enumerate()
-            .flat_map(|(i, (name, mark))| {
-                let (sym, style) = match mark {
-                    PhaseMark::Ok => ("✓", Style::default().fg(Color::Green)),
-                    PhaseMark::Fail => {
-                        ("×", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
-                    }
-                    PhaseMark::Active => ("▶", Style::default().fg(Color::Yellow)),
-                    PhaseMark::Idle => ("·", Style::default().fg(Color::DarkGray)),
-                };
-                let mut v = Vec::new();
-                if i > 0 {
-                    v.push(Span::raw("  "));
-                }
-                v.push(Span::styled(format!("{name} {sym}"), style));
-                v
-            })
-            .collect::<Vec<_>>(),
-    );
-    let p = Paragraph::new(vec![Line::from(spans), Line::from(""), phase_line]).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("diagnosis"),
-    );
-    f.render_widget(p, area);
+    f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
+    let show_flash = ui.state.memop_kind.is_some() && ui.state.ep_fail != Some(true);
+    // 16:9 terminal ≈ 3.3 cells/row (cell ~1:2). 120×36 is already that.
+    let bus = if show_flash && area.width >= 110 {
+        let split = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(72), Constraint::Length(32)])
+            .split(area);
+        draw_flash_map(f, split[1], ui);
+        split[0]
+    } else {
+        area
+    };
+
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Length(22),
-            Constraint::Min(28),
+            Constraint::Length(24),
+            Constraint::Min(32),
             Constraint::Length(28),
         ])
-        .split(area);
+        .split(bus);
 
     f.render_widget(
-        Paragraph::new(isp_text(&ui.state))
-            .block(Block::default().borders(Borders::ALL).title("ISP")),
+        Paragraph::new(isp_pin_lines(&ui.state)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("ISP"),
+        ),
         cols[0],
     );
-
-    let (mid, mid_title) = if ui.state.ep_fail == Some(true) || ui.state.memop_kind.is_none() {
-        (enableprog_text(&ui.state), "ENABLEPROG")
-    } else {
-        (flash_text(&ui.state), "FLASH")
-    };
     f.render_widget(
-        Paragraph::new(mid).block(Block::default().borders(Borders::ALL).title(mid_title)),
+        Paragraph::new(enableprog_lines(&ui.state)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("ENABLEPROG"),
+        ),
         cols[1],
     );
-
+    let trace_title = match ui.state.trace_slots {
+        Some(n) => format!("TRACE {n}"),
+        None => "TRACE".into(),
+    };
     f.render_widget(
-        Paragraph::new(trace_text(&ui.state))
-            .block(Block::default().borders(Borders::ALL).title("TRACE")),
+        Paragraph::new(trace_lines(&ui.state)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(trace_title),
+        ),
         cols[2],
     );
 }
 
-fn isp_text(st: &AppState) -> String {
-    let rst = if st.reset_asserted {
-        "ASSERT"
-    } else if st.saw_release {
-        "RELEASE"
-    } else {
-        "—"
-    };
-    let sck = match (st.sck_id, st.sck_sw) {
-        (Some(id), Some(true)) => format!("SW {id}"),
-        (Some(id), _) => format!("HW {id}"),
-        _ => "—".into(),
-    };
-    let pins = match st.pins_ok {
-        Some(true) => "Hi-Z OK",
-        Some(false) => "STILL DRIVING",
-        None => "MISO ?",
-    };
-    format!("RST  {rst}\nSCK  {sck}\nDISC {pins}")
+fn draw_flash_map(f: &mut Frame, area: Rect, ui: &Ui) {
+    let inner_w = area.width.saturating_sub(2);
+    f.render_widget(
+        Paragraph::new(flash_lines(&ui.state, inner_w)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("FLASH"),
+        ),
+        area,
+    );
 }
 
-fn enableprog_text(st: &AppState) -> String {
-    let fmt = |b: [u8; 4]| format!("{:02X} {:02X} {:02X} {:02X}", b[0], b[1], b[2], b[3]);
+fn pin_after_disc(st: &AppState, bit: u8) -> Option<(&'static str, Style)> {
+    // bit: 2 RST, 3 MOSI, 4 MISO, 5 SCK
+    let ddr = st.pins_ddr?;
+    let driving = ddr & (1 << bit) != 0;
+    Some(if driving {
+        ("DRIVE", Style::default().fg(Color::White).bg(Color::Red))
+    } else {
+        ("Hi-Z", Style::default().fg(Color::Black).bg(Color::Green))
+    })
+}
+
+fn pin_pair(name: &'static str, val: String, style: Style) -> (Span<'static>, Span<'static>) {
+    let name_s = Span::styled(format!("{name:<10}"), Style::default().fg(Color::DarkGray));
+    let val_s = Span::styled(format!("{val:<10}"), style);
+    (name_s, val_s)
+}
+
+fn isp_pin_lines(st: &AppState) -> Vec<Line<'static>> {
+    // Faceplate is the PROG bus, not the trailing RELEASE line.
+    // After-disc DDR (if present) overlays Hi-Z vs still-driving.
+    let in_prog = st.reset_asserted || st.ep_fail.is_some() || st.saw_reset;
+    let rst = if let Some(v) = pin_after_disc(st, 2) {
+        (v.0.to_string(), v.1)
+    } else if st.reset_asserted || (st.ep_fail == Some(true) && in_prog) {
+        (
+            "ASSERT".into(),
+            Style::default().fg(Color::Black).bg(Color::Yellow),
+        )
+    } else if st.saw_release {
+        ("RELEASE".into(), Style::default().fg(Color::Cyan))
+    } else {
+        ("—".into(), Style::default().fg(Color::DarkGray))
+    };
+    let mosi = if let Some(v) = pin_after_disc(st, 3) {
+        (v.0.to_string(), v.1)
+    } else if in_prog {
+        ("out".into(), Style::default().fg(Color::Cyan))
+    } else {
+        ("—".into(), Style::default().fg(Color::DarkGray))
+    };
+    let miso = if let Some(v) = pin_after_disc(st, 4) {
+        (v.0.to_string(), v.1)
+    } else if in_prog {
+        ("float".into(), Style::default().fg(Color::DarkGray))
+    } else {
+        ("—".into(), Style::default().fg(Color::DarkGray))
+    };
+    let sck = match (st.sck_id, st.sck_sw) {
+        (Some(id), Some(true)) => {
+            (
+                format!("SW {id}"),
+                Style::default().fg(Color::Black).bg(Color::Yellow),
+            )
+        }
+        (Some(id), _) => (format!("HW {id}"), Style::default().fg(Color::Cyan)),
+        _ => ("—".into(), Style::default().fg(Color::DarkGray)),
+    };
+    let (rst_n, rst_v) = pin_pair("RST", rst.0, rst.1);
+    let (mosi_n, mosi_v) = pin_pair("MOSI", mosi.0, mosi.1);
+    let (miso_n, miso_v) = pin_pair("MISO", miso.0, miso.1);
+    let (sck_n, sck_v) = pin_pair("SCK", sck.0, sck.1);
+    let disc = match st.pins_ok {
+        Some(true) => Span::styled(
+            "Hi-Z OK",
+            Style::default().fg(Color::Black).bg(Color::Green),
+        ),
+        Some(false) => Span::styled(
+            "STILL DRIVING",
+            Style::default().fg(Color::White).bg(Color::Red),
+        ),
+        None => Span::styled("in session", Style::default().fg(Color::DarkGray)),
+    };
+    vec![
+        Line::from(vec![rst_n, Span::raw(" "), mosi_n]),
+        Line::from(vec![rst_v, Span::raw(" "), mosi_v]),
+        Line::from(vec![miso_n, Span::raw(" "), sck_n]),
+        Line::from(vec![miso_v, Span::raw(" "), sck_v]),
+        Line::from(vec![
+            Span::styled("DISC ", Style::default().fg(Color::DarkGray)),
+            disc,
+        ]),
+    ]
+}
+
+fn hex_cell(b: u8, accent: bool, fail: bool) -> Span<'static> {
+    let style = if fail {
+        Style::default()
+            .fg(Color::White)
+            .bg(Color::Red)
+            .add_modifier(Modifier::BOLD)
+    } else if accent {
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::White).bg(Color::DarkGray)
+    };
+    Span::styled(format!(" {b:02X} "), style)
+}
+
+fn enableprog_lines(st: &AppState) -> Vec<Line<'static>> {
     match (st.ep_tx, st.ep_rx, st.ep_fail) {
         (Some(tx), Some(rx), Some(fail)) => {
-            let res = if fail { "FAIL" } else { "PASS" };
-            let echo = if rx[0] == 0x53 {
-                "echo 53 ok"
+            let echo_ok = rx[0] == 0x53;
+            let mut tx_spans = vec![Span::styled("TX  ", Style::default().fg(Color::DarkGray))];
+            for (i, b) in tx.iter().enumerate() {
+                tx_spans.push(hex_cell(*b, i == 1, false));
+                if i + 1 != tx.len() {
+                    tx_spans.push(Span::raw(" "));
+                }
+            }
+            let mut rx_spans = vec![Span::styled("RX  ", Style::default().fg(Color::DarkGray))];
+            for (i, b) in rx.iter().enumerate() {
+                rx_spans.push(hex_cell(*b, !fail && i == 1, fail && i == 0));
+                if i + 1 != rx.len() {
+                    rx_spans.push(Span::raw(" "));
+                }
+            }
+            let res = if fail {
+                Span::styled(" FAIL ", Style::default().fg(Color::White).bg(Color::Red))
             } else {
-                "echo 53 missing"
+                Span::styled(" PASS ", Style::default().fg(Color::Black).bg(Color::Green))
+            };
+            let echo = if echo_ok {
+                Span::raw("  echo 53 ok")
+            } else {
+                Span::styled(
+                    "  echo 53 missing",
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                )
             };
             let delay = st
                 .snap_delay
                 .or(st.err_delay)
                 .map(|d| format!("  delay={d}"))
                 .unwrap_or_default();
-            format!(
-                "TX  {}\nRX  {}\n{res}  {echo}{delay}",
-                fmt(tx),
-                fmt(rx)
-            )
+            vec![
+                Line::from(tx_spans),
+                Line::from(rx_spans),
+                Line::from(vec![res, echo, Span::raw(delay)]),
+                Line::from(Span::styled(
+                    "expect RX[0]=53  (programming enable)",
+                    Style::default().fg(Color::DarkGray),
+                )),
+            ]
         }
-        _ => "waiting for ENABLEPROG".into(),
+        _ => vec![Line::from(Span::styled(
+            "waiting for ENABLEPROG",
+            Style::default().fg(Color::DarkGray),
+        ))],
     }
 }
 
-fn flash_text(st: &AppState) -> String {
-    let mem = match st.memop_kind {
-        Some(MEM_FLASH) => "FLASH",
-        Some(MEM_EEPROM) => "EEPROM",
-        Some(MEM_READFLASH) => "READFLASH",
-        _ => "—",
+fn flash_lines(st: &AppState, inner_w: u16) -> Vec<Line<'static>> {
+    let psz = st.memop_pagesize.unwrap_or(0) as u16;
+    let lo = st.memop_pages.first().map(|(a, _)| *a);
+    let hi = st
+        .memop_pages
+        .last()
+        .map(|(a, _)| a.saturating_add(psz.saturating_sub(1)));
+    let range = match (lo, hi) {
+        (Some(a), Some(b)) => format!("{a:#06x}–{b:#06x}"),
+        _ => "—".into(),
     };
-    let psz = st.memop_pagesize.unwrap_or(0);
-    let end = st
+    let end_n = st
         .memop_end_pages
-        .map(|n| n.to_string())
-        .unwrap_or_else(|| "…".into());
-    let obs = st.memop_pages.len();
-    let mut bar = String::new();
-    for &(_, ok) in st.memop_pages.iter().take(24) {
-        bar.push(if ok { '#' } else { 'X' });
+        .map(|n| n as usize)
+        .unwrap_or(st.memop_pages.len());
+    let mut lines = vec![Line::from(Span::styled(
+        format!("{range}  CONT {}/{end_n}", st.memop_pages.len()),
+        Style::default().fg(Color::DarkGray),
+    ))];
+    if st.memop_pages.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "no CONT yet (END is authority)",
+            Style::default().fg(Color::DarkGray),
+        )));
+        return lines;
     }
-    if st.memop_pages.len() > 24 {
-        bar.push('…');
+    // Right rail is ~30 cols → one cell per row. Wider → pack.
+    let cell_w = 13u16;
+    let per_row = (inner_w / cell_w).max(1) as usize;
+    let mut row: Vec<Span> = Vec::new();
+    let shown = st.memop_pages.len().min(12);
+    for (i, &(addr, ok)) in st.memop_pages.iter().take(12).enumerate() {
+        let style = if ok {
+            Style::default().fg(Color::Black).bg(Color::Green)
+        } else {
+            Style::default().fg(Color::White).bg(Color::Red)
+        };
+        row.push(Span::styled(
+            format!(" {addr:#06x} {} ", if ok { "OK" } else { "FAIL" }),
+            style,
+        ));
+        if (i + 1) % per_row == 0 {
+            lines.push(Line::from(std::mem::take(&mut row)));
+        } else {
+            row.push(Span::raw(" "));
+        }
     }
-    if bar.is_empty() {
-        bar.push_str("(no CONT yet — subsample)");
+    if !row.is_empty() {
+        lines.push(Line::from(row));
     }
-    format!("{mem} pagesize={psz}  END={end}  observed={obs}\n{bar}")
+    if st.memop_pages.len() > shown {
+        lines.push(Line::from(Span::raw("…")));
+    }
+    lines
 }
 
-fn trace_text(st: &AppState) -> String {
-    let slots = st
-        .trace_slots
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "—".into());
+fn trace_lines(st: &AppState) -> Vec<Line<'static>> {
+    let slots = st.trace_slots.unwrap_or(0);
     let life = if st.trace_triggered {
         "FROZEN"
     } else if st.saw_session && !st.saw_session_end {
@@ -497,22 +654,49 @@ fn trace_text(st: &AppState) -> String {
     } else {
         "IDLE"
     };
+    let n = 16u16;
+    let t_at = if st.trace_triggered { 9 } else { n };
+    let mut bar = String::new();
+    for i in 0..n {
+        if i == t_at {
+            bar.push('T');
+        } else if i < t_at {
+            bar.push('█');
+        } else {
+            bar.push('·');
+        }
+    }
     let ov = if st.trace_overflow { "YES" } else { "no" };
     let kind = match st.trace_kind {
         Some(3) => "ENABLEPROG_FAIL",
         Some(4) => "TRACE_OVERFLOW",
         Some(0) | None => "NONE",
-        Some(k) => {
-            return format!("slots={slots}  {life}\noverflow={ov}  kind={k}");
-        }
+        Some(_) => "?",
     };
-    let post = st.trace_post.unwrap_or(0);
-    format!("slots={slots}  {life}\noverflow={ov}  kind={kind}  post={post}")
+    vec![
+        Line::from(vec![
+            Span::raw("["),
+            Span::styled(bar, Style::default().fg(Color::Cyan)),
+            Span::raw("]  "),
+            Span::styled(
+                format!(" {life} "),
+                if st.trace_triggered {
+                    Style::default().fg(Color::Black).bg(Color::Yellow)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                },
+            ),
+        ]),
+        Line::from(Span::styled(
+            format!("slots={slots}  overflow={ov}  kind={kind}  post={}", st.trace_post.unwrap_or(0)),
+            Style::default().fg(Color::DarkGray),
+        )),
+    ]
 }
 
 fn draw_caps(f: &mut Frame, area: Rect, ui: &Ui) {
     let text = match &ui.state.caps {
-        Some(adv) => adv.format_report("USBASP-NG DIAG v1"),
+        Some(adv) => adv.format_report(&crate::version::banner_short()),
         None => "Capabilities: (waiting for DIAG_CAPS — ISP CONNECT, not USB plug-in)".into(),
     };
     f.render_widget(

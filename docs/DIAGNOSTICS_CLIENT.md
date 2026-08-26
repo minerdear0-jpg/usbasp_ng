@@ -1,6 +1,17 @@
 # Diagnostics client (host)
 
-Companion to firmware [DIAGNOSTICS.md](DIAGNOSTICS.md). **Production client = Rust** (`tools/usbasp-ng-diag`); **lab = Python** under `host/`.
+Companion to firmware [DIAGNOSTICS.md](DIAGNOSTICS.md). **Production client = Rust** (`tools/usbasp-ng-diag`, binary name **diagplane**); **lab = Python** under `host/`.
+
+## Versioning
+
+Two independent lines (shown in the TUI header and `diagplane --version`):
+
+| Line | What | Where |
+|------|------|--------|
+| **diagplane** | Host tool | `tools/usbasp-ng-diag/Cargo.toml` → `version.rs` `DIAGPLANE_VERSION` |
+| **protocol** | EP2 wire schema (`DIAG_SCHEMA_V1`) | firmware `diag_events.h` + host `protocol.rs` / `version.rs` |
+
+Bump the client for UI/CLI changes without touching the wire. Bump **protocol** only for incompatible EP2/schema changes. Feature discovery remains **CAPS bits**, not version numbers.
 
 Telemetry rides **HID interrupt EP2** (composite IF2), not the USART bridge on PD0/PD1 and not `/dev/ttyUSB*`. Classic (`USBASP_HAS_DIAG=0`) has no diagnostics endpoint.
 

@@ -1,8 +1,9 @@
-//! L0 wire constants — USBASP-NG DIAG v1 (must match firmware/include/diag/).
+//! L0 wire constants — diagplane **protocol** v1 (must match firmware/include/diag/).
+//! Client (diagplane binary) version is independent: see `version.rs`.
 
 #![allow(dead_code)]
 
-pub const SCHEMA_V1: u8 = 1;
+pub const SCHEMA_V1: u8 = crate::version::PROTOCOL_VERSION;
 
 pub const HELLO: u8 = 1;
 pub const SESSION_BEGIN: u8 = 2;

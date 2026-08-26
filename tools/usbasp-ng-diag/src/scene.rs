@@ -23,6 +23,7 @@ pub enum PhaseMark {
 
 #[derive(Clone, Debug)]
 pub struct ViewRow {
+    #[allow(dead_code)]
     pub host_ns: Option<u64>,
     pub rel_ms: Option<i64>,
     pub prog: String,
@@ -33,7 +34,9 @@ pub struct ViewRow {
 }
 
 pub fn is_wire_fragment(e: &LogEvent) -> bool {
-    !e.semantic && matches!(e.ty, ENABLEPROG | FAULT_SNAPSHOT | CAPS | TRACE_END)
+    // Default watch is the scene, not EP2 chrome. `w` shows decoder frames.
+    matches!(e.ty, HELLO | CAPS | TRACE_BEGIN | TRACE_END)
+        || (!e.semantic && matches!(e.ty, ENABLEPROG | FAULT_SNAPSHOT))
 }
 
 pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
@@ -75,6 +78,19 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
                 "TRACE LOSS — dropped={} history has holes",
                 state.stats.dropped
             ),
+        );
+    }
+    if state.last_flash_ok == Some(true) && state.last_verify_ok == Some(true) {
+        let w = state.last_flash_pages.unwrap_or(0);
+        let r = state.last_verify_pages.unwrap_or(0);
+        let pins = match state.pins_ok {
+            Some(true) => " · pins Hi-Z",
+            Some(false) => " · PINS STILL DRIVING",
+            None => "",
+        };
+        return (
+            DiagTone::Ok,
+            format!("FLASH WRITE {w} pages · VERIFY READFLASH {r} OK{pins}"),
         );
     }
     if state.memop_end_ok == Some(true) {
@@ -140,7 +156,6 @@ pub fn phases(state: &AppState) -> [(&'static str, PhaseMark); 6] {
     let disc = match state.pins_ok {
         Some(false) => PhaseMark::Fail,
         Some(true) => PhaseMark::Ok,
-        None if state.saw_release => PhaseMark::Ok,
         None => PhaseMark::Idle,
     };
     [
@@ -345,7 +360,8 @@ mod tests {
         st.ingest_capture(&cap);
         let (tone, line) = diagnosis(&st);
         assert_eq!(tone, DiagTone::Ok);
-        assert!(line.contains("READFLASH") || line.contains("pages OK"), "{line}");
+        assert!(line.contains("FLASH WRITE"), "{line}");
+        assert!(line.contains("VERIFY"), "{line}");
         let ph = phases(&st);
         assert_eq!(ph[3], ("PROG", PhaseMark::Ok));
         assert_eq!(ph[4], ("FLASH", PhaseMark::Ok));

@@ -17,6 +17,7 @@ mod scene;
 mod state;
 mod tui;
 mod usb;
+mod version;
 
 use caps::CapsAdvert;
 use capture::{write_header, CaptureFile, CaptureRecord};
@@ -40,7 +41,12 @@ enum OutMode {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "usbasp-ng-diag", about = "USBasp NG Diagnostics Plane (DIAG v1)")]
+#[command(
+    name = "diagplane",
+    about = "USBasp NG Diagnostics Plane host",
+    version = concat!(env!("CARGO_PKG_VERSION"), "  protocol ", "1"),
+    long_version = version::VERSION_LONG
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -255,7 +261,7 @@ fn cmd_capabilities(
     } else {
         let h = usb::open_composite(serial)?;
         device_label = h.serial.clone();
-        eprintln!("USBASP-NG DIAG v1");
+        eprintln!("{}", version::banner_short());
         eprintln!();
         eprintln!("device:    {device_label}");
         eprintln!("transport: HIDUART (EP2)");
@@ -313,7 +319,8 @@ fn cmd_capabilities(
         bail!("no DIAG_CAPS advertisement seen");
     };
     let schema = st.hello_schema.unwrap_or(SCHEMA_V1);
-    println!("USBASP-NG DIAG v{schema}");
+    println!("{}", version::banner_short());
+    println!("device schema: {schema} (HELLO)");
     if !device_label.is_empty() {
         println!();
         println!("device: {device_label}");

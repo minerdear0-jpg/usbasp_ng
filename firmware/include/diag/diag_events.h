@@ -1,7 +1,11 @@
 #ifndef USBASP_DIAG_EVENTS_H_
 #define USBASP_DIAG_EVENTS_H_
 
-/* USBASP-NG DIAG v1 — binary wire types (host presents text). */
+/*
+ * Diagplane **protocol** schema v1 — EP2 wire types (host presents text).
+ * Host client (diagplane binary) is versioned separately; bump SCHEMA only
+ * for incompatible wire changes.
+ */
 
 #define DIAG_SCHEMA_V1              1
 
