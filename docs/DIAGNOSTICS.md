@@ -1,6 +1,8 @@
 # Diagnostics Plane (design)
 
-Architectural separation for HIDUART / research builds. **Not implemented yet.** Does not change the Fischl USBasp wire protocol. Classic stays telemetry-free.
+**PR1 skeleton + PR2 ENABLEPROG/snapshot landed** (ring, lifecycle, 4-frame ENABLEPROG, atomic fault snapshot, EP2 drain). TRACE / SCK stats still later.
+
+Architectural separation for HIDUART / research builds when `USBASP_HAS_DIAG=1`. Does not change the Fischl USBasp wire protocol. Classic stays telemetry-free (`USBASP_HAS_DIAG=0`).
 
 Companion physical truth for SW SCK remains an FX2 / Nano capture: [SOFTWARE_SCK.md](SOFTWARE_SCK.md), [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md). Telemetry is **firmware truth**; the two must be comparable, not substitutes.
 
@@ -14,6 +16,8 @@ physical    → FX2/Nano = independent truth
 ```
 
 \* Gate is **`USBASP_HAS_DIAG`**, not `profile == hiduart`. Profile selects features; later `hiduart-debug` / `hiduart-trace` can flip the same flag.
+
+**Host client architecture** (Python lab now, Rust production planned): [DIAGNOSTICS_CLIENT.md](DIAGNOSTICS_CLIENT.md).
 
 Pipeline (iron rule):
 
@@ -109,7 +113,7 @@ No idle HELLO spam. No heartbeat in P0. If needed later: separate `DIAG_HEARTBEA
 | Field | Content |
 |-------|---------|
 | `a` | schema (`1`) |
-| `b` | profile / build id (HIDUART, …) |
+| `b` | profile / build id (`DIAG_PROFILE_COMPOSITE`, …) |
 | `flags` | `DIAG_CAP_SESSION \| TRANSACTION \| SNAPSHOT` (P0); TRACE/SCK_STATS bits when present |
 
 **Not** USBasp `FUNC_GETCAPABILITIES` (127). Host must not guess features across hiduart generations.
@@ -160,7 +164,8 @@ uint8_t state;
 uint8_t result;
 uint8_t tx[4];
 uint8_t rx[4];
-/* effective_sck only if already available — do not invent in P0 */
+/* Wire field name in C is sck_req (avoid grepping as requested_sck writes). */
+/* effective_sck included when available */
 ```
 
 Multi-frame emit from **persistent** copy after `diag_publish_snapshot`.
@@ -199,7 +204,7 @@ Classic: `0` → macros no-op, no `diag.o`. HIDUART (and future variants): `1`.
 - Golden Python frame constants / decoder stubs  
 - Optional: dumb `hidraw-log` (schema-agnostic)
 
-### PR2 — ENABLEPROG + snapshot
+### PR2 — ENABLEPROG + snapshot — **done in tree**
 
 - Local TX/RX capture in `ispEnterProgrammingMode`  
 - 4-frame semantic ENABLEPROG  

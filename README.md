@@ -108,7 +108,7 @@ See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md), [docs/KNOWN_ISSUES.md](docs/
 - GETCAPABILITIES = TPI + 3 MHz bit, **not** dioannidis clock bytes
 - Default SCK 1.5 MHz with auto-slowdown (same SETISPSCK wire)
 
-**Known issues:** [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Arduino notes; SW SCK wait-for-capture = release gate; HIDUART USART not on clone ISP header; TPI off). Protocol/FSM RC1: [docs/acceptance/RC1-PROTOCOL-FSM.md](docs/acceptance/RC1-PROTOCOL-FSM.md). Planned HIDUART diagnostics plane (design): [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md).
+**Known issues:** [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Arduino notes; SW SCK wait-for-capture = release gate; HIDUART USART not on clone ISP header; TPI off). Protocol/FSM RC1: [docs/acceptance/RC1-PROTOCOL-FSM.md](docs/acceptance/RC1-PROTOCOL-FSM.md). Diagnostics plane: [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md), client: [docs/DIAGNOSTICS_CLIENT.md](docs/DIAGNOSTICS_CLIENT.md).
 
 Hex for ATmega8 clone and HIDUART: [Releases](https://github.com/minerdear0-jpg/usbasp_ng/releases). Packaging rules: [`docs/RELEASE.md`](docs/RELEASE.md) (`./scripts/pack-release.sh VERSION --hex`).
 

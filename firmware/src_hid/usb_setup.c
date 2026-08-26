@@ -3,6 +3,7 @@
 #include "usbasp/prog_state.h"
 #include "usbasp/protocol.h"
 #include "usbasp/endian.h"
+#include "diag/diag.h"
 #include "uart.h"
 
 static uchar featureReport[8];
@@ -141,9 +142,18 @@ static void hid_ep1_in(void)
 
 static void hid_ep2_in(void)
 {
+#if USBASP_HAS_DIAG
+    /* Diagnostics frames on EP2; silence when the ring is empty (no HELLO keep-alive). */
+    if (diag_poll_drain(monitorBuffer)) {
+        monitorBuffer[7] = (uchar)(prog_state | uart_state
+            | (hid_set_report ? UART_HID_SET_REPORT : 0));
+        usbSetInterrupt3(monitorBuffer, sizeof(monitorBuffer));
+    }
+#else
     monitorBuffer[7] = (uchar)(prog_state | uart_state
         | (hid_set_report ? UART_HID_SET_REPORT : 0));
     usbSetInterrupt3(monitorBuffer, sizeof(monitorBuffer));
+#endif
 }
 
 void hiduart_poll(void)

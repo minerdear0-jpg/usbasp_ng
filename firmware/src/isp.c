@@ -6,6 +6,7 @@
 #include "usbasp/protocol.h"
 #include "usbasp/prog_state.h"
 #include "usbasp/board.h"
+#include "diag/diag.h"
 
 uchar isp_hiaddr;
 
@@ -126,6 +127,14 @@ uchar ispEnterProgrammingMode(void)
     uchar autoslow = 0;
     uchar jumper = (uchar)board_sck_jumper_slow();
     uchar sck = requested_sck;
+    uint8_t tx[4];
+    uint8_t rx[4];
+
+    tx[0] = 0xAC;
+    tx[1] = 0x53;
+    tx[2] = 0x00;
+    tx[3] = 0x00;
+    rx[0] = rx[1] = rx[2] = rx[3] = 0;
 
     if (jumper) {
         sck = USBASP_ISP_SCK_8;
@@ -147,23 +156,30 @@ uchar ispEnterProgrammingMode(void)
             isp_out_clr_bit(ISP_RST);
             clockWait(62); /* ~20 ms at 320 us ticks */
 
-            spiTx(0xAC);
-            spiTx(0x53);
-            check = spiTx(0);
-            spiTx(0);
+            /* Capture last AVR enableprog exchange; no emit on timing path. */
+            rx[0] = spiTx(tx[0]);
+            rx[1] = spiTx(tx[1]);
+            check = spiTx(tx[2]);
+            rx[2] = check;
+            rx[3] = spiTx(tx[3]);
 
-            if (check == 0x53)
+            if (check == 0x53) {
+                diag_report_enableprog(tx, rx, 0);
                 return 0;
+            }
 
             /* AT89S51/52 programming-enable echo */
             isp_out_set_bit(ISP_RST);
             clockWait(5);
-            spiTx(0xAC);
-            spiTx(0x53);
-            spiTx(0);
-            check = spiTx(0);
-            if (check == 0x69)
+            rx[0] = spiTx(tx[0]);
+            rx[1] = spiTx(tx[1]);
+            rx[2] = spiTx(tx[2]);
+            check = spiTx(tx[3]);
+            rx[3] = check;
+            if (check == 0x69) {
+                diag_report_enableprog(tx, rx, 0);
                 return 0;
+            }
         } while (--tries);
 
         isp_bus.disable();
@@ -180,6 +196,7 @@ uchar ispEnterProgrammingMode(void)
         ispSetSCKOption(sck);
     }
 
+    diag_report_enableprog(tx, rx, 1);
     return 1;
 }
 

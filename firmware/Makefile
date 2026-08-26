@@ -56,6 +56,7 @@ test:
 	python3 tests/core/test_ms_os_vendor_code.py
 	python3 tests/core/test_has_tpi_gate.py
 	python3 tests/core/test_prog_session.py
+	python3 tests/core/test_diag_v1.py
 	python3 ../host/test_usbaspctl_profile.py
 
 flash: hex

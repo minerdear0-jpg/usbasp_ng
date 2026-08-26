@@ -1,0 +1,185 @@
+#include "usbasp_config.h"
+
+#if USBASP_HAS_DIAG
+
+#include "diag/diag.h"
+#include "diag/diag_ring.h"
+#include "usbasp/clock.h"
+#include "usbasp/isp.h"
+#include "usbasp/sck.h"
+#include "usbasp/prog_state.h"
+
+#include <string.h>
+
+/*
+ * Lossy SPSC diagnostics ring. Overflow: drop + overflow_pending;
+ * DIAG_TRACE_OVERFLOW is delivered from diag_poll_drain only (never
+ * pushed while the ring is full).
+ */
+
+static diag_frame_t diag_frames[DIAG_RING_SIZE];
+static volatile uint8_t diag_head; /* next write */
+static volatile uint8_t diag_tail; /* next read */
+static uint8_t diag_dropped;      /* saturating 0..255 */
+static uint8_t diag_overflow_pending;
+static uint8_t diag_tick_hi;
+static uint8_t diag_tick_last;
+static uint8_t diag_reset_driven;
+static diag_snapshot_t diag_fault_snapshot;
+
+extern uchar requested_sck;
+extern uchar effective_sck;
+
+static uint16_t diag_now(void)
+{
+    uint8_t now = TIMERVALUE;
+
+    if (now < diag_tick_last)
+        diag_tick_hi++;
+    diag_tick_last = now;
+    return ((uint16_t)diag_tick_hi << 8) | now;
+}
+
+static uint8_t diag_ring_len(void)
+{
+    return (uint8_t)(diag_head - diag_tail);
+}
+
+static uint8_t diag_transport(void)
+{
+    return (isp_bus.transfer == ispTransmit_sw)
+        ? (uint8_t)DIAG_TRANSPORT_SW
+        : (uint8_t)DIAG_TRANSPORT_HW;
+}
+
+static void diag_pack(uint8_t out[8], uint8_t type, uint8_t flags,
+                      uint16_t ts, uint8_t a, uint8_t b)
+{
+    out[0] = type;
+    out[1] = flags;
+    out[2] = (uint8_t)(ts & 0xff);
+    out[3] = (uint8_t)(ts >> 8);
+    out[4] = a;
+    out[5] = b;
+    out[6] = 0;
+    out[7] = prog_state;
+}
+
+bool diag_try_emit(uint8_t type, uint8_t flags, uint8_t a, uint8_t b)
+{
+    if (diag_ring_len() >= DIAG_RING_SIZE) {
+        if (diag_dropped < 255)
+            diag_dropped++;
+        diag_overflow_pending = 1;
+        return false;
+    }
+
+    diag_frame_t *f = &diag_frames[diag_head & (DIAG_RING_SIZE - 1)];
+    f->type = type;
+    f->flags = flags;
+    f->timestamp = diag_now();
+    f->a = a;
+    f->b = b;
+    diag_head++;
+    return true;
+}
+
+void diag_emit_sck_config(void)
+{
+    (void)diag_try_emit(DIAG_SCK_CONFIG, 0, effective_sck, diag_transport());
+}
+
+void diag_emit_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail)
+{
+    uint8_t end = (uint8_t)(DIAG_EP_END
+        | (fail ? DIAG_EP_RESULT_FAIL : DIAG_EP_RESULT_OK));
+
+    (void)diag_try_emit(DIAG_ENABLEPROG, DIAG_EP_START, tx[0], tx[1]);
+    (void)diag_try_emit(DIAG_ENABLEPROG, DIAG_EP_CONT, tx[2], tx[3]);
+    (void)diag_try_emit(DIAG_ENABLEPROG, DIAG_EP_CONT, rx[0], rx[1]);
+    (void)diag_try_emit(DIAG_ENABLEPROG, end, rx[2], rx[3]);
+}
+
+void diag_publish_snapshot(const diag_snapshot_t *s)
+{
+    /* C3: copy immediately; never retain caller pointer. */
+    memcpy(&diag_fault_snapshot, s, sizeof(diag_fault_snapshot));
+
+    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_START,
+        diag_fault_snapshot.sck_req, diag_fault_snapshot.transport);
+    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
+        diag_fault_snapshot.reset_driven, diag_fault_snapshot.state);
+    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
+        diag_fault_snapshot.result, diag_fault_snapshot.effective_sck);
+    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
+        diag_fault_snapshot.tx[0], diag_fault_snapshot.tx[1]);
+    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
+        diag_fault_snapshot.tx[2], diag_fault_snapshot.tx[3]);
+    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
+        diag_fault_snapshot.rx[0], diag_fault_snapshot.rx[1]);
+    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_END,
+        diag_fault_snapshot.rx[2], diag_fault_snapshot.rx[3]);
+}
+
+void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail)
+{
+    diag_emit_enableprog(tx, rx, fail);
+    if (!fail)
+        return;
+
+    {
+        diag_snapshot_t local;
+
+        local.sck_req = requested_sck;
+        local.effective_sck = effective_sck;
+        local.transport = diag_transport();
+        local.reset_driven = diag_reset_driven;
+        local.state = prog_state;
+        local.result = 1;
+        memcpy(local.tx, tx, 4);
+        memcpy(local.rx, rx, 4);
+        diag_publish_snapshot(&local);
+    }
+}
+
+void diag_on_connect(void)
+{
+    (void)diag_try_emit(
+        DIAG_HELLO,
+        (uint8_t)(DIAG_CAP_SESSION | DIAG_CAP_TRANSACTION | DIAG_CAP_SNAPSHOT),
+        DIAG_SCHEMA_V1,
+        DIAG_PROFILE_COMPOSITE);
+    (void)diag_try_emit(DIAG_SESSION_BEGIN, 0, requested_sck, effective_sck);
+    diag_emit_sck_config();
+    diag_reset_driven = DIAG_RESET_ASSERT;
+    (void)diag_try_emit(DIAG_RESET, DIAG_RESET_ASSERT, 0, 0);
+}
+
+void diag_on_disconnect(void)
+{
+    diag_reset_driven = DIAG_RESET_RELEASE;
+    (void)diag_try_emit(DIAG_RESET, DIAG_RESET_RELEASE, 0, 0);
+    (void)diag_try_emit(DIAG_SESSION_END, 0, 0, 0);
+}
+
+uint8_t diag_poll_drain(uint8_t out[8])
+{
+    diag_frame_t f;
+    uint16_t ts = diag_now();
+
+    if (diag_ring_len() == 0) {
+        if (!diag_overflow_pending)
+            return 0;
+        diag_pack(out, DIAG_TRACE_OVERFLOW, 0, ts, diag_dropped, 0);
+        diag_dropped = 0;
+        diag_overflow_pending = 0;
+        return 1;
+    }
+
+    f = diag_frames[diag_tail & (DIAG_RING_SIZE - 1)];
+    diag_tail++;
+    diag_pack(out, f.type, f.flags, f.timestamp, f.a, f.b);
+    return 1;
+}
+
+#endif /* USBASP_HAS_DIAG */

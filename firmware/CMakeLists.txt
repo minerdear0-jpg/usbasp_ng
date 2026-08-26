@@ -93,6 +93,10 @@ set(COMMON_SRC
     third_party/vusb/usbdrvasm.S
     third_party/vusb/oddebug.c)
 
+if(USBASP_HAS_DIAG)
+    list(APPEND COMMON_SRC src/diag/diag.c)
+endif()
+
 if(USBASP_HAS_HID_UART)
     set(APP_SRC src_hid/main.c src_hid/usb_setup.c src_hid/uart.c)
     set(APP_NAME usbasp-hiduart)
@@ -196,6 +200,9 @@ endif()
 message(STATUS "Board=${BOARD} MCU=${MCU} F_CPU=${F_CPU} profile=${USBASP_PROFILE}")
 message(STATUS "Flash: avrdude -c usbasp -p ${MCU} -U flash:w:${APP_NAME}.hex:i")
 message(STATUS "Fuses: hfuse=${USBASP_HFUSE} lfuse=${USBASP_LFUSE}")
+if(USBASP_HAS_DIAG)
+    message(STATUS "Diagnostics plane: USBASP_HAS_DIAG=1")
+endif()
 if(USBASP_HAS_HID_UART)
     message(STATUS "HIDUART serial (EEPROM): ${USBASP_SERIAL}")
 endif()

@@ -8,6 +8,7 @@
 #include "usbasp/tpi_defs.h"
 #include "usbasp/clock.h"
 #include "usbasp/board.h"
+#include "diag/diag.h"
 
 uchar requested_sck = USBASP_ISP_SCK_AUTO;
 uchar prog_state = PROG_STATE_IDLE;
@@ -52,11 +53,13 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         prog_reset_state();
         isp_apply_host_sck();
         ispConnect();
+        diag_on_connect();
         break;
 
     case USBASP_FUNC_DISCONNECT:
         ispDisconnect();
         prog_reset_state();
+        diag_on_disconnect();
         break;
 
     case USBASP_FUNC_TRANSMIT:
@@ -117,6 +120,7 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
     case USBASP_FUNC_SETISPSCK:
         requested_sck = data[2];
         isp_apply_host_sck();
+        diag_emit_sck_config();
         replyBuffer[0] = 0;
         len = 1;
         break;
