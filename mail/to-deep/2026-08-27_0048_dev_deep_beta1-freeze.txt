@@ -1,0 +1,23 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 00:48 +0600
+Type: FYI
+Subject: [FYI] usbasp2-beta.1 freeze
+Re: -
+
+TL;DR
+  USBasp2 beta.1 tagged; costume-2 / dual-truth docs stay as-is for the freeze.
+
+FACT
+  - tag usbasp2-beta.1 + GitHub release assets (328P hex/eep + diagplane.bin)
+  - claim: L1 usbasp + Diagnostics Plane lab instrument on 328P
+  - dual-column watch landed in beta.1 (ui@); not a separate beta.2 gate
+  - mega8 HIDUART = compact plane (no trigger/MEMOP PAGE); lab = YEL0 328P
+  - release notes: docs/RELEASE-USBASP2-BETA.md
+
+DONT
+  - do not mix Optiboot + oracle canary on the same hex / 0x1E00
+  - no FX2 / Windows HIDUART ISP claim this tag
+
+NEXT
+  - keep cage scripts stable; report if slots=128 / overflow regresses

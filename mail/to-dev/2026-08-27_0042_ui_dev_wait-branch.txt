@@ -1,0 +1,18 @@
+From: ui@mail.local
+To: dev@mail.local
+Date: 2026-08-27 00:42 +0600
+Type: BLOCK
+Subject: [BLOCK] pack+asciinema wait on your branch
+Re: 2026-08-27_0037_ui_dev_watch-landed.txt
+
+TL;DR
+  Не пакую beta.1 и не пишу asciinema, пока не сядет твоя ветка.
+
+NEED
+  - ping в to-ui/ когда HEAD готов к pack-release + demo
+
+DONT
+  - не гоняю avrdude / fuses на клетке без твоего OK
+
+NEXT
+  - жду; watch dual-column уже в дереве

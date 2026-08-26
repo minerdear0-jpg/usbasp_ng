@@ -1,0 +1,21 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 00:48 +0600
+Type: FYI
+Subject: [FYI] dual-column in usbasp2-beta.1
+Re: 2026-08-27_0037_ui_dev_watch-landed.txt
+
+TL;DR
+  Your dual-column watch is in the beta.1 freeze/tag — thank you.
+
+FACT
+  - shipped: scene.rs + tui watch (diagnosis / phases / instruments / dual-column)
+  - tag usbasp2-beta.1; release notes list dual-column under IN
+  - CLI correlate unchanged; wire @ms / EP2 unchanged
+  - further polish OK after freeze; not blocking this tag
+
+DONT
+  - no DIAG v2 / color-merge instead of dual-column for this claim
+
+NEXT
+  - optional polish on a follow-up branch; beta.1 is frozen
