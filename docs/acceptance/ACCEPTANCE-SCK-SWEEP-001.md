@@ -1,7 +1,7 @@
-# ACCEPTANCE-SCK-SWEEP-001 (plan)
+# ACCEPTANCE-SCK-SWEEP-001
 
-**Status:** planned — not executed  
-**Depends on:** [ACCEPTANCE-WIN11-USBASP-001](ACCEPTANCE-WIN11-USBASP-001.md) (HW ISP / WinUSB pipeline already PASS)
+**Status:** executed 2026-08-26 (Linux) — table filled; **scope capture still required** for SW FAIL  
+**Depends on:** [ACCEPTANCE-WIN11-USBASP-001](ACCEPTANCE-WIN11-USBASP-001.md)
 
 ## Goal
 
@@ -12,43 +12,47 @@ same firmware, host, USB, target, cable, protocol
 only: HW SPI  vs  SW bitbang
 ```
 
-Not Burn Bootloader. Not Arduino IDE UI. Command-line avrdude + optional scope.
+## Setup (this run)
 
-## Setup
+| Field | Value |
+|-------|--------|
+| Date | 2026-08-26 |
+| Host | Linux, **avrdude 8.2** |
+| Programmer | yellow-dot classic NG (`bcdDevice` 2.03, MS OS `0x9E`) |
+| Target | ATmega8 on ISP ribbon, signature `1E 93 07` |
+| JP3 | open (assumed; not forced closed) |
+| Programmer id | `-c usbasp` |
 
-| Role | Stick |
-|------|--------|
-| Programmer | yellow-dot classic NG (current) **or** restored no-dot |
-| Target | ATmega8 (or 328P) on ribbon with known-good signature |
-| JP3 | **open** unless a dedicated JP3 row is filled |
-| Host | Linux or Win11; record avrdude version |
-| Scope / sniffer | RST, SCK, MOSI, MISO — PASS `-B 8` vs FAIL `-B 22` minimum |
+## Results
 
-## Commands (fill results)
+| `-B` | avrdude SCK | Expected path | ENABLEPROG | signature | flash read | notes |
+|------|-------------|---------------|------------|-----------|------------|-------|
+| AUTO / omit | (default) | HW ~1.5 MHz | ✅ | `1E 93 07` | ✅ 5530 B hex | full flash:r PASS |
+| 1 | 750 kHz | HW | ✅ | `1E 93 07` | — | |
+| 8 | 93.75 kHz | HW | ✅ | `1E 93 07` | — | historical PASS |
+| 10 | 93.75 kHz | HW | ✅ | `1E 93 07` | — | still HW floor |
+| **22** | **32 kHz** | **SW** | **❌ `0x01`** | — | — | reproduces SOFTWARE_SCK |
+| 50 | 16 kHz | SW | **❌ `0x01`** | — | — | one earlier pass showed `FF FF FF` then fail; treat as SW fail |
+| 250 | 4 kHz | SW | **❌ `0x01`** | — | — | |
 
-Use one programmer id throughout (`-c usbasp` or `usbasp-clone`). Example target `atmega8`:
+### Commands used
 
 ```bash
-avrdude -c usbasp -p atmega8 -B <N> -v -U signature:r:-:h
-avrdude -c usbasp -p atmega8 -B <N> -U flash:r:/tmp/t.hex:i   # after ENABLEPROG works
+avrdude -c usbasp -p atmega8 [-B N] -U signature:r:-:h
+avrdude -c usbasp -p atmega8 -U flash:r:/tmp/usbasp-sck-auto.hex:i   # AUTO only
 ```
 
-| `-B` | Expected path | ENABLEPROG | signature | flash read | notes / measured SCK |
-|------|---------------|------------|-----------|------------|----------------------|
-| AUTO / omit | HW ~1.5 MHz | | | | |
-| 1 | HW | | | | |
-| 10 | HW / boundary | | | | |
-| 22 | **SW** | | | | historical FAIL `0x01` |
-| 50 | SW | | | | |
-| 250 | SW | | | | |
+## Conclusion (so far)
 
-Waveform: attach capture or link to issue [#1](https://github.com/minerdear0-jpg/usbasp_ng/issues/1). Background: [SOFTWARE_SCK.md](../SOFTWARE_SCK.md).
+- **HW SPI path** (AUTO, `-B 1`, `-B 8`, `-B 10`): ENABLEPROG + signature PASS; AUTO flash read PASS.  
+- **SW bitbang path** (`-B 22`, `50`, `250`): ENABLEPROG **FAIL `0x01`** (target does not answer).  
 
-## Pass criteria
+Same stick, same target, same USB — only SCK mode changes. USB/WinUSB/protocol debt is not required to explain this; **software SCK remains the open defect**.
 
-- Documented table for the rows above  
-- At least one HW row PASS and one SW row measured (PASS or FAIL with log)  
-- Scope or Nano sniffer for SW FAIL vs HW PASS if SW still fails  
+## Still needed
+
+Waveform / Nano sniffer: **PASS `-B 8`** vs **FAIL `-B 22`** on RST / SCK / MOSI / MISO.  
+Background: [SOFTWARE_SCK.md](../SOFTWARE_SCK.md). Issue: [#1](https://github.com/minerdear0-jpg/usbasp_ng/issues/1).
 
 ## Out of scope
 
