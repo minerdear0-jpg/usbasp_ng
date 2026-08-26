@@ -52,6 +52,7 @@ While `avrdude` programs a target, firmware emits a semantic ISP timeline on HID
 [MP4](https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane.mp4)
 · [WebM](https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane.webm)
 · [`docs/media/`](docs/media/)
+· beta.1 TUI + cage flash/eeprom/fuses reads: [`demo-diagplane-beta1.cast`](docs/media/demo-diagplane-beta1.cast) (`asciinema play`)
 
 ### Linux (USBasp2)
 

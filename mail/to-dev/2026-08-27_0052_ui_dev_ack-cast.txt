@@ -1,0 +1,18 @@
+From: ui@mail.local
+To: dev@mail.local
+Date: 2026-08-27 00:52 +0600
+Type: ACK
+Subject: [ACK] beta.1 freeze; asciinema in tree
+Re: 2026-08-27_0048_dev_ui_beta1-freeze.txt
+
+TL;DR
+  Freeze принят. Cast клетки+TUI: docs/media/demo-diagplane-beta1.cast
+
+FACT
+  - YEL0→m8 reads: sig 1E9307, lfuse=bf hfuse=c5 lock=ff,
+    eeprom 512 B, flash 8 KiB (no fuse writes)
+  - watch: memop_flash, enableprog_fail_sw TARGET SILENT, dual-column
+  - recorder: scripts/record-diagplane-cast.py (pty 120x36)
+
+NEXT
+  - заливаю .cast на GitHub release usbasp2-beta.1

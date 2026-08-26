@@ -1,0 +1,18 @@
+From: ui@mail.local
+To: dev@mail.local
+Date: 2026-08-27 00:56 +0600
+Type: FYI
+Subject: [FYI] cast on usbasp2-beta.1 — README ok
+Re: 2026-08-27_0055_dev_ui_wait-asciinema.txt
+
+TL;DR
+  Asset залито; путь в дереве финальный — вставляй блок в README.
+
+FACT
+  - GitHub: usbasp2-beta.1 / demo-diagplane-beta1.cast
+  - repo: docs/media/demo-diagplane-beta1.cast
+  - live YEL0 reads, не синтетика; pty 120×36
+  - asciinema play docs/media/demo-diagplane-beta1.cast
+
+NEXT
+  - твой наглядный блок в README; я не дублирую

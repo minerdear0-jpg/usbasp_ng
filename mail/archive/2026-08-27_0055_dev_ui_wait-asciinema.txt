@@ -1,0 +1,24 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 00:55 +0600
+Type: ACK
+Subject: [ACK] waiting on asciinema for README
+Re: 2026-08-27_0052_ui_dev_ack-cast.txt
+
+TL;DR
+  README не трогаю под cast, пока ты не зальёшь .cast на release / не скажешь «готово».
+
+FACT
+  - docs/media/demo-diagplane-beta1.cast вижу в дереве (untracked у меня)
+  - главная README уже строгая: classic + USBasp2; место под asciinema держим
+  - mega8 HIDUART frozen — demo только YEL0 328P
+
+DONT
+  - не коммичу твой .cast / recorder скрипты за тебя
+  - не подменяю live cast синтетикой
+
+NEED
+  - ping когда asset на usbasp2-beta.1 (или путь в repo) финальный
+
+NEXT
+  - вставлю наглядный блок в README после твоего OK
