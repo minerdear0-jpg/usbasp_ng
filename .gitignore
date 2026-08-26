@@ -11,3 +11,7 @@ __pycache__/
 *.pyc
 /dioannidis/
 /usbasp.2011-05-28/
+
+# Vendored Optiboot image for mega8 nano-loop bench (costume 1).
+!bench/mega8-nano-loop/bootloader/*.hex
+!bench/mega8-nano-loop/bootloader/ORIGIN.txt

@@ -1,0 +1,8 @@
+Prebuilt Optiboot (MCUdude optiboot_flash) for ATmega8 @ 16 MHz, UART0, 115200.
+
+Source:
+  https://github.com/MCUdude/optiboot_flash
+  bootloaders/atmega8/16000000L/optiboot_flash_atmega8_UART0_115200_16000000L_B5.hex
+
+LED activity pin in this build: PB5 (Arduino D13 / Nano L).
+Boot section: 512 bytes @ 0x1E00.

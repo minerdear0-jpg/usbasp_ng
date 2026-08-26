@@ -76,7 +76,7 @@ int main(void)
     sei();
 
     uart_puts("\r\nUSBasp NG closed-loop\r\n");
-    uart_puts("target=ATmega8-on-Nano F_CPU=16MHz\r\n");
+    uart_puts("who=canary mcu=m8 pcb=nano F_CPU=16MHz\r\n");
     uart_puts("press RESET for restart banner\r\n");
 
     for (;;) {
