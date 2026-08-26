@@ -48,6 +48,7 @@ test:
 	python3 tests/core/test_tpi.py
 	python3 tests/core/test_hiduart_desc.py
 	python3 tests/core/test_reference_not_built.py
+	python3 tests/core/test_classic_msos20.py
 
 flash: hex
 	avrdude -c $(ISP) -p $(MCU) -U flash:w:$(BUILDDIR)/$(HEX_NAME).hex:i

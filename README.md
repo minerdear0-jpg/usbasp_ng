@@ -12,26 +12,23 @@ Two separate firmware products. Same ISP/TPI wire protocol (L1/L2). Different US
 
 ```
 firmware
-   ├─ usbasp          classic — 2011 USB topology, avrdude `-c usbasp`
+   ├─ usbasp          classic — one vendor interface + WinUSB metadata, avrdude `-c usbasp`
    └─ usbasp-hiduart  USBHID  — composite vendor + HID UART + WCID
 ```
 
 | | Classic (`usbasp`) | USBHID (`usbasp-hiduart`) |
 |---|---|---|
-| USB shape | Vendor class `0xFF`, control EP0 only, no serial string — same as Fischl 2011 | Composite: WinUSB/WCID vendor interface + HID UART (interrupt IN/OUT) + BOS / MS OS 2.0 |
-| Host programmer | Stock avrdude `-c usbasp` (libusb or libwinusb) | Same FUNC 1–16 / 127, but Windows MSVC avrdude (libwinusb) often cannot open a composite device — use a MinGW/libusb avrdude |
+| USB shape | Vendor class `0xFF`, EP0 only, no serial; BOS + MS OS 2.0 → WinUSB | Composite: WinUSB vendor IF0 + HID UART (interrupt IN/OUT) |
+| Host programmer | Stock avrdude `-c usbasp` (libusb / WinUSB). Arduino IDE programmer **USBasp** | Same FUNC 1–16 / 127. Windows MSVC avrdude may not open composite — MinGW/libusb or use classic |
 | Extra function | Programmer only | HID UART on the MCU USART (debug console without a second USB-serial dongle); 4-char iSerial in EEPROM |
-| Size (ATmega8, v0.1.2) | ~4942 B | ~6896 B |
-| Role | Drop-in for clones that must keep looking like 2011 USBasp | Forward path for new work |
+| Size (ATmega8) | ~5358 B | ~6816 B |
+| Role | Default image: Windows 10/11 x64 without Zadig; Linux/macOS libusb | UART console on the same stick |
 
-**Why USBHID is the more promising product.** Classic L0 is frozen on purpose: any extra interface would break host stacks that bind a single vendor device (old libusb-win32 INF, WinUSB-on-one-interface, some GUI tools). USBHID already pays that cost and then unlocks the features cheap USBasp clones never had:
+**Windows / Arduino:** flash **classic**. Goal is Device Manager → Microsoft WinUSB, then `avrdude -c usbasp` and Arduino **USBasp** / Burn Bootloader — no Zadig, no libusbK, no INF. Details: [`docs/WINDOWS.md`](docs/WINDOWS.md), [`docs/ARDUINO.md`](docs/ARDUINO.md). ARM64 is best-effort.
 
-- **WCID / Microsoft OS 2.0** — Windows can bind WinUSB without a third-party INF; OS 2.0 descriptors behave better on USB 3.0 ports than the old OS 1.0 WCID hack.
-- **HID UART** — the same stick is a debug serial path (HID class is ubiquitous; no extra CDC ACM stack on a 12 MHz V-USB ATmega8).
-- **Per-unit serial** — several programmers on one host stay distinguishable.
-- **Room to grow** — new host-side features go on HID reports / WCID properties while ISP/TPI stay the avrdude contract. Classic must not grow BOS, HID, or EEPROM serial ([`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)).
+USBHID adds HID UART; it is not required for Arduino. Classic must not grow HID, interrupt endpoints, or EEPROM serial. BOS/MS OS 2.0 on classic is host-driver metadata only ([`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)).
 
-Use classic when the stick must be an invisible replacement for 2011 firmware. Prefer USBHID for new flashing, Windows without INF, and on-stick UART.
+Use classic as the drop-in programmer. Use USBHID when you also want the on-stick UART.
 
 ## Build
 
@@ -105,21 +102,15 @@ HIDUART USB serial is 4 characters in EEPROM (`make BOARD=usbasp-hiduart-atmega8
 
 ## Compatibility
 
-See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md). Short version:
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) and [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md). Short version:
 
 - VID/PID `16c0:05dc`, FUNC 1–16 and 127
 - GETCAPABILITIES = TPI + 3 MHz bit, **not** dioannidis clock bytes
 - Default SCK 1.5 MHz with auto-slowdown (same SETISPSCK wire)
 
-**Known bug:** software SCK ENABLEPROG `0x01` (`-B 22` / JP3 8 kHz) on this clone pair — [report](docs/SOFTWARE_SCK.md). Hardware SPI (`-B 8` and faster) works. Captures of `-B 8` vs `-B 22` welcome.
+**Known issues:** [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Arduino 1.8 + avrdude 6.3 vs WinUSB; software SCK; TPI untested).
 
-Contract tests (no hardware):
-
-```text
-cd firmware && make test
-```
-
-Hex for ATmega8 clone and HIDUART: [Releases](https://github.com/minerdear0-jpg/usbasp_ng/releases). `v0.1.2` classic (~4942 B) and HIDUART (~6896 B).
+Hex for ATmega8 clone and HIDUART: [Releases](https://github.com/minerdear0-jpg/usbasp_ng/releases).
 
 Still waiting on silicon (not blocking the protocol): ATmega328P ISP target, ATtiny10 TPI (`-p t10`). Checklists: [`hw-smoke-atmega328p.txt`](firmware/tests/compatibility/avrdude/hw-smoke-atmega328p.txt), [`hw-smoke-tpi.txt`](firmware/tests/compatibility/avrdude/hw-smoke-tpi.txt).
 

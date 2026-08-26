@@ -10,16 +10,18 @@ L0–L2 must not change without an explicit compatibility review.
 | PID | `0x05dc` |
 | Device class | `0xFF` (vendor), as Fischl 2011 |
 | Interface class | `0` (V-USB default; vendor is on the device, not the interface) |
-| bcdUSB | `1.10`, low speed |
+| bcdUSB | `2.01` (BOS; still **low speed** on the wire) |
+| bcdDevice | `2.02` (WinUSB bind; not Fischl `2.00`, not HIDUART `2.01`) |
 | Configuration | 1 |
-| Interfaces | 1 vendor interface, **no** extra HID/WCID interfaces |
+| Interfaces | 1 vendor interface, **no** extra class interfaces |
 | Endpoints | Control EP0 only (`bNumEndpoints = 0`) |
 | Serial string | none (`iSerial = 0`) |
 | Max power | 50 mA (2011) |
+| Host driver metadata | BOS + MS OS 2.0 Compatible ID `WINUSB` (not USBasp FUNC) |
 
-Classic must keep the original USBasp **device/interface topology** enough that existing host stacks (avrdude + libusb / libusb-win32 / WinUSB-on-single-interface) still bind the same way.
+Classic must keep the original USBasp **device/interface topology** (one vendor interface, EP0 only). BOS / MS OS 2.0 is **driver-binding metadata** for Windows; L1 FUNC 1–16 / 127 is unchanged. See [WINDOWS.md](WINDOWS.md).
 
-`usbasp-hiduart` is a **separate product**: composite vendor + HID. It keeps L1/L2 ISP/TPI behaviour and the stock avrdude VID/PID `16c0:05dc`. It is **not** an L0 topology match. Windows MSVC avrdude (libwinusb) may not open it; use a MinGW/libusb build. WCID WINUSB + `DeviceInterfaceGUIDs` apply only to vendor IF0; HID IF1/IF2 bind by class. `bcdDevice` is 2.01 so Windows UsbFlags does not share classic 2.00.
+`usbasp-hiduart` is a **separate product**: composite vendor + HID. It keeps L1/L2 ISP/TPI behaviour and the stock avrdude VID/PID `16c0:05dc`. It is **not** an L0 topology match. Windows MSVC avrdude (libwinusb) may not open the composite; use a MinGW/libusb build or prefer classic for Arduino. WCID WINUSB + `DeviceInterfaceGUIDs` apply only to vendor IF0; HID IF1/IF2 bind by class. `bcdDevice` is 2.01 so Windows UsbFlags does not share classic 2.02.
 
 ## L1 USB wire protocol
 
@@ -75,7 +77,7 @@ Waveform proof for ENABLEPROG at `-B 22` is still open: [SOFTWARE_SCK.md](SOFTWA
 
 ## L3 Host compatibility
 
-Classic target: **current avrdude** `-c usbasp` with the stock programmer definition (no custom avrdude.conf).
+Classic target: **current avrdude** `-c usbasp` (Fischl vendor/product strings) or `-c usbasp-clone` (VID/PID only). No custom avrdude.conf.
 
 Acceptance (hardware):
 
@@ -96,7 +98,8 @@ Measured on ATmega8 clones (no-dot programmer, yellow-dot target / USB DUT):
 - yellow as ISP target (no-dot programmer): EEPROM 512 B read; 16-byte write+verify+restore `0xFF`; `-B 0.25` → 3 MHz signature OK
 - yellow NG as programmer, no-dot as target: EEPROM read 512 B (`0xFF`); SETISPSCK `-B 8` / `-B 0.5` / `-B 0.25` (3 MHz) signature OK. JP3 closed → 8 kHz software SCK, ENABLEPROG `0x01` (same SW-SCK bug).
 - GETCAPABILITIES `01 00 00 01`
-- classic L0 USB: one interface, EP0 only, no HID/BOS; HIDUART is USB 2.01 composite (not L0), same VID/PID, `bcdDevice` 2.01
+- classic L0 USB: one interface, EP0 only; BOS + MS OS 2.0 WinUSB; `bcdDevice` 2.02. HIDUART is USB 2.01 composite (not L0), same VID/PID, `bcdDevice` 2.01
+- **Win11 x64 2026-08-26:** yellow classic, libusbK uninstalled → WinUSB immediately; AVRDUDESS latest `-c usbasp-clone` read flash+EEPROM of the other mega8. See [WINDOWS.md](WINDOWS.md).
 - HIDUART yellow-dot: iSerial `YEL0`; ISP read of no-dot through composite (flash 4018 B, EEPROM 512 B `0xFF`, `-B 8`/`0.5`/`0.25`); UART loopback PD0–PD1
 
 ## Capability bytes (GETCAPABILITIES)
@@ -116,4 +119,6 @@ TPI (FUNC 11–16) is compiled and advertised (`USBASP_CAP_TPI`). It is **not** 
 
 ## What classic must not grow
 
-BOS, MS OS 2.0, WCID, HID, serial EEPROM, composite descriptors — those belong only in `src_hid/` / hiduart boards.
+HID interfaces, interrupt endpoints, serial EEPROM, composite configurations — those belong only in `src_hid/` / hiduart boards.
+
+Classic **may** include BOS + MS OS 2.0 so Windows binds WinUSB without Zadig. That is not an L1/L2 protocol change.

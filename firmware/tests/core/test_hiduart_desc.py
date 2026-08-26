@@ -34,7 +34,7 @@ def test_msos20_winusb_only_if0():
 def test_hiduart_bcddevice_not_classic():
     cmake = (FW / "CMakeLists.txt").read_text()
     assert 'set(USB_CFG_DEVICE_VERSION "0x01, 0x02")' in cmake
-    assert 'set(USB_CFG_DEVICE_VERSION "0x00, 0x02")' in cmake
+    assert 'set(USB_CFG_DEVICE_VERSION "0x02, 0x02")' in cmake
     proto = (FW / "include" / "usbasp" / "protocol.h").read_text()
     assert "0x16c0" in proto and "0x05dc" in proto
 

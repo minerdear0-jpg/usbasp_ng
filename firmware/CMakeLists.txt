@@ -49,7 +49,7 @@ if(USBASP_HAS_HID_UART)
     set(USB_CFG_DESCR_PROPS_STRING_SERIAL_NUMBER "(USB_PROP_IS_EEPROM | USB_PROP_EEPROM_STRING_LENGTH(4))")
     set(USB_CFG_DESCR_PROPS_UNKNOWN "USB_PROP_IS_DYNAMIC")
     set(USB_CFG_SERIAL_BLOCK "")
-    # 2.01 so Win11 UsbFlags differs from classic 2.00; VID/PID stay 16c0:05dc
+    # 2.01 so Win11 UsbFlags differs from classic WinUSB 2.02; VID/PID stay 16c0:05dc
     set(USB_CFG_DEVICE_VERSION "0x01, 0x02")
 else()
     set(USB_CFG_HAVE_INTRIN_ENDPOINT 0)
@@ -63,12 +63,14 @@ else()
     set(USB_CFG_DEVICE_CLASS "0xff")
     set(USB_CFG_INTERFACE_CLASS 0)
     set(USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH 0)
-    set(USB_CFG_DESCR_PROPS_DEVICE 0)
+    # bcdUSB 2.01 (device desc) + BOS/MS OS 2.0 WinUSB. Topology still 1 IF, EP0.
+    # bcdDevice 2.02: not Fischl 2.00 cache, not HIDUART 2.01 composite.
+    set(USB_CFG_DESCR_PROPS_DEVICE "USB_PROP_LENGTH(18)")
     set(USB_CFG_DESCR_PROPS_CONFIGURATION 0)
     set(USB_CFG_DESCR_PROPS_STRING_SERIAL_NUMBER 0)
-    set(USB_CFG_DESCR_PROPS_UNKNOWN 0)
+    set(USB_CFG_DESCR_PROPS_UNKNOWN "USB_PROP_IS_DYNAMIC")
     set(USB_CFG_SERIAL_BLOCK "")
-    set(USB_CFG_DEVICE_VERSION "0x00, 0x02")
+    set(USB_CFG_DEVICE_VERSION "0x02, 0x02")
 endif()
 
 configure_file(
@@ -95,7 +97,7 @@ if(USBASP_HAS_HID_UART)
     set(APP_SRC src_hid/main.c src_hid/usb_setup.c src_hid/uart.c)
     set(APP_NAME usbasp-hiduart)
 else()
-    set(APP_SRC src/main.c src/usb_setup.c)
+    set(APP_SRC src/main.c src/usb_setup.c src/usb/ms_os_20.c)
     set(APP_NAME usbasp)
 endif()
 
