@@ -15,13 +15,14 @@ cargo build --release
 ./target/release/usbasp-ng-diag watch --demo enableprog_fail_sw
 ./target/release/usbasp-ng-diag watch --file capture.bin
 ./target/release/usbasp-ng-diag watch --serial YEL0
+./target/release/usbasp-ng-diag watch --diag ep2.jsonl --uart oracle.txt
 ./target/release/usbasp-ng-diag monitor YEL0
 ./target/release/usbasp-ng-diag capabilities --demo capabilities_yel0
 # live CAPS = ISP CONNECT (start this, then avrdude)
 ./target/release/usbasp-ng-diag capabilities --serial YEL0 --timeout 30
 ```
 
-TUI keys: `q` quit, `f` faults filter, `c` capabilities panel, `j`/`k` scroll, `g`/`G` top/bottom, `Space` follow.
+TUI keys: `q` quit, `w` wire frames, `f` faults, `c` capabilities, `j`/`k` scroll, `g`/`G` top/bottom, `Space` follow. Dual-column when `--uart` is set (yellow row = RESET RELEASE ↔ READY).
 
 Live `capabilities`: device on USB alone is not a diag session — see [ACCEPTANCE-DIAG-TRIGGER-001](../../docs/acceptance/ACCEPTANCE-DIAG-TRIGGER-001.md).
 

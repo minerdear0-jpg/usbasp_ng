@@ -1,4 +1,4 @@
-//! Ratatui watch UI for captures / demo / live EP2.
+//! Ratatui watch UI: diagnosis + phases + instruments + dual-column timeline.
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -7,18 +7,25 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState};
+use ratatui::Frame;
 use ratatui::Terminal;
 use std::io::{self, Stdout};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::capture::CaptureFile;
+use crate::correlate::{self, TimelineEvent};
 use crate::demo;
-use crate::protocol::{DiagFrame, EP2_IN};
+use crate::decoder::type_name;
+use crate::protocol::{DiagFrame, EP2_IN, MEM_EEPROM, MEM_FLASH, MEM_READFLASH};
+use crate::scene::{
+    diagnosis, dual_rows, is_wire_fragment, phases, programmer_rows, rel_label, DiagTone,
+    PhaseMark, ViewRow,
+};
 use crate::state::{AppState, Level};
 use crate::usb::CompositeHandle;
 
@@ -26,6 +33,7 @@ pub enum WatchSource {
     File(PathBuf),
     Demo(String),
     Live { serial: String },
+    Jsonl(PathBuf),
 }
 
 struct Ui {
@@ -33,74 +41,104 @@ struct Ui {
     source_label: String,
     faults_only: bool,
     show_caps: bool,
-    list_state: ListState,
+    wire: bool,
+    table_state: TableState,
     follow: bool,
     status: String,
+    uart_path: Option<PathBuf>,
+    timeline: Vec<TimelineEvent>,
 }
 
 impl Ui {
-    fn new(source_label: String, state: AppState) -> Self {
-        let mut list_state = ListState::default();
-        if !state.events.is_empty() {
-            list_state.select(Some(state.events.len().saturating_sub(1)));
-        }
-        Self {
+    fn new(source_label: String, state: AppState, uart_path: Option<PathBuf>) -> Self {
+        let mut table_state = TableState::default();
+        table_state.select(Some(0));
+        let mut ui = Self {
             state,
             source_label,
             faults_only: false,
             show_caps: false,
-            list_state,
+            wire: false,
+            table_state,
             follow: true,
-            status: "q quit  f faults  c caps  j/k scroll  g/G top/bot  Space follow".into(),
+            status: "q quit  w wire  f faults  c caps  j/k  g/G  Space follow".into(),
+            uart_path,
+            timeline: Vec::new(),
+        };
+        ui.refresh_timeline();
+        ui.jump_bot();
+        ui
+    }
+
+    fn refresh_timeline(&mut self) {
+        let Some(path) = &self.uart_path else {
+            self.timeline.clear();
+            return;
+        };
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let prog: Vec<(u64, String, String)> = self
+            .state
+            .events
+            .iter()
+            .filter(|e| self.wire || !is_wire_fragment(e))
+            .map(|e| (e.host_ns, type_name(e.ty).to_string(), e.text.clone()))
+            .collect();
+        if let Ok(ev) = correlate::merge_programmer_and_uart(prog, &text) {
+            self.timeline = ev;
         }
     }
 
-    fn visible_indices(&self) -> Vec<usize> {
-        self.state
-            .events
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| !self.faults_only || e.is_fault)
-            .map(|(i, _)| i)
-            .collect()
+    fn rows(&self) -> Vec<ViewRow> {
+        if self.uart_path.is_some() && !self.timeline.is_empty() {
+            let t0 = self.state.events.first().map(|e| e.host_ns);
+            dual_rows(&self.timeline, t0, self.faults_only)
+        } else {
+            programmer_rows(&self.state, self.wire, self.faults_only)
+        }
     }
 
     fn scroll_rel(&mut self, delta: isize) {
         self.follow = false;
-        let vis = self.visible_indices();
-        if vis.is_empty() {
-            self.list_state.select(None);
+        let n = self.rows().len();
+        if n == 0 {
+            self.table_state.select(None);
             return;
         }
-        let cur = self.list_state.selected().unwrap_or(0);
-        let cur_vis = vis.iter().position(|&i| i == cur).unwrap_or(0);
-        let next = cur_vis
-            .saturating_add_signed(delta)
-            .min(vis.len().saturating_sub(1));
-        self.list_state.select(Some(vis[next]));
+        let cur = self.table_state.selected().unwrap_or(0);
+        let next = cur.saturating_add_signed(delta).min(n.saturating_sub(1));
+        self.table_state.select(Some(next));
     }
 
     fn jump_top(&mut self) {
         self.follow = false;
-        let vis = self.visible_indices();
-        self.list_state.select(vis.first().copied());
+        if self.rows().is_empty() {
+            self.table_state.select(None);
+        } else {
+            self.table_state.select(Some(0));
+        }
     }
 
     fn jump_bot(&mut self) {
         self.follow = true;
-        let vis = self.visible_indices();
-        self.list_state.select(vis.last().copied());
+        let n = self.rows().len();
+        if n == 0 {
+            self.table_state.select(None);
+        } else {
+            self.table_state.select(Some(n - 1));
+        }
     }
 
     fn on_new_events(&mut self) {
+        self.refresh_timeline();
         if self.follow {
-            let vis = self.visible_indices();
-            self.list_state.select(vis.last().copied());
+            self.jump_bot();
         }
     }
 }
 
-pub fn run(source: WatchSource) -> Result<()> {
+pub fn run(source: WatchSource, uart: Option<PathBuf>) -> Result<()> {
     let (label, state, live) = match source {
         WatchSource::File(path) => {
             let cap = CaptureFile::load(&path)?;
@@ -114,6 +152,12 @@ pub fn run(source: WatchSource) -> Result<()> {
             st.ingest_capture(&cap);
             (format!("demo:{name}"), st, None)
         }
+        WatchSource::Jsonl(path) => {
+            let text = std::fs::read_to_string(&path)?;
+            let mut st = AppState::default();
+            st.ingest_jsonl(&text)?;
+            (format!("jsonl:{}", path.display()), st, None)
+        }
         WatchSource::Live { serial } => {
             let handle = crate::usb::open_composite(&serial)?;
             (
@@ -124,7 +168,7 @@ pub fn run(source: WatchSource) -> Result<()> {
         }
     };
 
-    let mut ui = Ui::new(label, state);
+    let mut ui = Ui::new(label, state, uart);
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -148,7 +192,6 @@ fn run_loop(
     loop {
         terminal.draw(|f| draw(f, ui))?;
 
-        // Live USB poll (short)
         if let Some(h) = live.as_mut() {
             match h
                 .handle
@@ -171,6 +214,8 @@ fn run_loop(
                     ui.status = format!("USB error: {e} (q to quit)");
                 }
             }
+        } else if ui.uart_path.is_some() {
+            ui.refresh_timeline();
         }
 
         let wait = if live.is_some() {
@@ -188,6 +233,10 @@ fn run_loop(
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
                     KeyCode::Char('f') => {
                         ui.faults_only = !ui.faults_only;
+                        ui.on_new_events();
+                    }
+                    KeyCode::Char('w') => {
+                        ui.wire = !ui.wire;
                         ui.on_new_events();
                     }
                     KeyCode::Char('c') => {
@@ -213,116 +262,335 @@ fn run_loop(
     Ok(())
 }
 
-fn draw(f: &mut ratatui::Frame, ui: &Ui) {
+fn draw(f: &mut Frame, ui: &Ui) {
+    let wide = f.area().width >= 100;
+    let tall = f.area().height >= 24;
+    let inst_h = if wide && tall { 8 } else { 0 };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
+            Constraint::Length(5),
+            Constraint::Length(inst_h),
             Constraint::Min(5),
-            Constraint::Length(if ui.show_caps { 12 } else { 4 }),
-            Constraint::Length(2),
+            Constraint::Length(1),
         ])
         .split(f.area());
 
+    draw_header(f, chunks[0], ui);
+    draw_diag(f, chunks[1], ui);
+    if inst_h > 0 {
+        draw_instruments(f, chunks[2], ui);
+    }
+    if ui.show_caps {
+        draw_caps(f, chunks[3], ui);
+    } else {
+        draw_timeline(f, chunks[3], ui);
+    }
+    let help = Paragraph::new(ui.status.as_str()).style(Style::default().fg(Color::DarkGray));
+    f.render_widget(help, chunks[4]);
+}
+
+fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
+    let sck = match (ui.state.sck_id, ui.state.sck_sw) {
+        (Some(id), Some(true)) => format!("SW SCK id={id}"),
+        (Some(id), _) => format!("HW SCK id={id}"),
+        _ => "SCK —".into(),
+    };
+    let dual = if ui.uart_path.is_some() { " DUAL " } else { "" };
     let title = Paragraph::new(Line::from(vec![
         Span::styled(
-            " usbasp-ng-diag ",
+            " diagplane ",
             Style::default()
                 .fg(Color::Black)
                 .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(format!("  {}  ", ui.source_label)),
+        Span::raw(format!("  {}  {sck} ", ui.source_label)),
         if ui.faults_only {
             Span::styled(" FAULTS ", Style::default().fg(Color::Black).bg(Color::Red))
         } else {
             Span::styled(" ALL ", Style::default().fg(Color::Black).bg(Color::Green))
         },
         if ui.follow {
-            Span::styled(" FOLLOW ", Style::default().fg(Color::Black).bg(Color::Yellow))
+            Span::styled(
+                " FOLLOW ",
+                Style::default().fg(Color::Black).bg(Color::Yellow),
+            )
         } else {
             Span::raw(" paused ")
         },
-        if ui.show_caps {
-            Span::styled(" CAPS ", Style::default().fg(Color::Black).bg(Color::Magenta))
+        if ui.wire {
+            Span::styled(" WIRE ", Style::default().fg(Color::Black).bg(Color::Magenta))
         } else {
             Span::raw("")
         },
+        Span::styled(dual, Style::default().fg(Color::Cyan)),
     ]))
     .block(Block::default().borders(Borders::ALL).title("watch"));
-    f.render_widget(title, chunks[0]);
+    f.render_widget(title, area);
+}
 
-    let vis = ui.visible_indices();
-    let items: Vec<ListItem> = vis
-        .iter()
-        .map(|&i| {
-            let e = &ui.state.events[i];
-            let style = match e.level {
-                Level::Error => Style::default().fg(Color::Red),
-                Level::Warn => Style::default().fg(Color::Yellow),
-                Level::Info => Style::default().fg(Color::Cyan),
-                Level::Debug => Style::default().fg(Color::DarkGray),
+fn draw_diag(f: &mut Frame, area: Rect, ui: &Ui) {
+    let (tone, line) = diagnosis(&ui.state);
+    let (fg, bg) = match tone {
+        DiagTone::Bad => (Color::White, Color::Red),
+        DiagTone::Ok => (Color::Black, Color::Green),
+        DiagTone::Warn => (Color::Black, Color::Yellow),
+        DiagTone::Info => (Color::Cyan, Color::Reset),
+    };
+    let mut spans = vec![Span::styled(
+        format!(" {line} "),
+        Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
+    )];
+    if ui.state.trace_triggered {
+        spans.push(Span::styled(
+            "  FROZEN",
+            Style::default().fg(Color::Yellow),
+        ));
+    }
+    let phase_line = Line::from(
+        phases(&ui.state)
+            .iter()
+            .enumerate()
+            .flat_map(|(i, (name, mark))| {
+                let (sym, style) = match mark {
+                    PhaseMark::Ok => ("✓", Style::default().fg(Color::Green)),
+                    PhaseMark::Fail => {
+                        ("×", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+                    }
+                    PhaseMark::Active => ("▶", Style::default().fg(Color::Yellow)),
+                    PhaseMark::Idle => ("·", Style::default().fg(Color::DarkGray)),
+                };
+                let mut v = Vec::new();
+                if i > 0 {
+                    v.push(Span::raw("  "));
+                }
+                v.push(Span::styled(format!("{name} {sym}"), style));
+                v
+            })
+            .collect::<Vec<_>>(),
+    );
+    let p = Paragraph::new(vec![Line::from(spans), Line::from(""), phase_line]).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("diagnosis"),
+    );
+    f.render_widget(p, area);
+}
+
+fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(22),
+            Constraint::Min(28),
+            Constraint::Length(28),
+        ])
+        .split(area);
+
+    f.render_widget(
+        Paragraph::new(isp_text(&ui.state))
+            .block(Block::default().borders(Borders::ALL).title("ISP")),
+        cols[0],
+    );
+
+    let (mid, mid_title) = if ui.state.ep_fail == Some(true) || ui.state.memop_kind.is_none() {
+        (enableprog_text(&ui.state), "ENABLEPROG")
+    } else {
+        (flash_text(&ui.state), "FLASH")
+    };
+    f.render_widget(
+        Paragraph::new(mid).block(Block::default().borders(Borders::ALL).title(mid_title)),
+        cols[1],
+    );
+
+    f.render_widget(
+        Paragraph::new(trace_text(&ui.state))
+            .block(Block::default().borders(Borders::ALL).title("TRACE")),
+        cols[2],
+    );
+}
+
+fn isp_text(st: &AppState) -> String {
+    let rst = if st.reset_asserted {
+        "ASSERT"
+    } else if st.saw_release {
+        "RELEASE"
+    } else {
+        "—"
+    };
+    let sck = match (st.sck_id, st.sck_sw) {
+        (Some(id), Some(true)) => format!("SW {id}"),
+        (Some(id), _) => format!("HW {id}"),
+        _ => "—".into(),
+    };
+    let pins = match st.pins_ok {
+        Some(true) => "Hi-Z OK",
+        Some(false) => "STILL DRIVING",
+        None => "MISO ?",
+    };
+    format!("RST  {rst}\nSCK  {sck}\nDISC {pins}")
+}
+
+fn enableprog_text(st: &AppState) -> String {
+    let fmt = |b: [u8; 4]| format!("{:02X} {:02X} {:02X} {:02X}", b[0], b[1], b[2], b[3]);
+    match (st.ep_tx, st.ep_rx, st.ep_fail) {
+        (Some(tx), Some(rx), Some(fail)) => {
+            let res = if fail { "FAIL" } else { "PASS" };
+            let echo = if rx[0] == 0x53 {
+                "echo 53 ok"
+            } else {
+                "echo 53 missing"
             };
-            ListItem::new(Line::from(Span::styled(
-                format!("{}  {}", e.host_ns, e.text),
-                style,
-            )))
-        })
-        .collect();
+            let delay = st
+                .snap_delay
+                .or(st.err_delay)
+                .map(|d| format!("  delay={d}"))
+                .unwrap_or_default();
+            format!(
+                "TX  {}\nRX  {}\n{res}  {echo}{delay}",
+                fmt(tx),
+                fmt(rx)
+            )
+        }
+        _ => "waiting for ENABLEPROG".into(),
+    }
+}
 
-    // Map selected absolute index → visible row for ListState
-    let mut list_state = ListState::default();
-    if let Some(sel) = ui.list_state.selected() {
-        if let Some(row) = vis.iter().position(|&i| i == sel) {
-            list_state.select(Some(row));
+fn flash_text(st: &AppState) -> String {
+    let mem = match st.memop_kind {
+        Some(MEM_FLASH) => "FLASH",
+        Some(MEM_EEPROM) => "EEPROM",
+        Some(MEM_READFLASH) => "READFLASH",
+        _ => "—",
+    };
+    let psz = st.memop_pagesize.unwrap_or(0);
+    let end = st
+        .memop_end_pages
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "…".into());
+    let obs = st.memop_pages.len();
+    let mut bar = String::new();
+    for &(_, ok) in st.memop_pages.iter().take(24) {
+        bar.push(if ok { '#' } else { 'X' });
+    }
+    if st.memop_pages.len() > 24 {
+        bar.push('…');
+    }
+    if bar.is_empty() {
+        bar.push_str("(no CONT yet — subsample)");
+    }
+    format!("{mem} pagesize={psz}  END={end}  observed={obs}\n{bar}")
+}
+
+fn trace_text(st: &AppState) -> String {
+    let slots = st
+        .trace_slots
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "—".into());
+    let life = if st.trace_triggered {
+        "FROZEN"
+    } else if st.saw_session && !st.saw_session_end {
+        "ARMED"
+    } else {
+        "IDLE"
+    };
+    let ov = if st.trace_overflow { "YES" } else { "no" };
+    let kind = match st.trace_kind {
+        Some(3) => "ENABLEPROG_FAIL",
+        Some(4) => "TRACE_OVERFLOW",
+        Some(0) | None => "NONE",
+        Some(k) => {
+            return format!("slots={slots}  {life}\noverflow={ov}  kind={k}");
+        }
+    };
+    let post = st.trace_post.unwrap_or(0);
+    format!("slots={slots}  {life}\noverflow={ov}  kind={kind}  post={post}")
+}
+
+fn draw_caps(f: &mut Frame, area: Rect, ui: &Ui) {
+    let text = match &ui.state.caps {
+        Some(adv) => adv.format_report("USBASP-NG DIAG v1"),
+        None => "Capabilities: (waiting for DIAG_CAPS — ISP CONNECT, not USB plug-in)".into(),
+    };
+    f.render_widget(
+        Paragraph::new(text).block(Block::default().borders(Borders::ALL).title("capabilities")),
+        area,
+    );
+}
+
+fn draw_timeline(f: &mut Frame, area: Rect, ui: &Ui) {
+    let rows_data = ui.rows();
+    let dual = ui.uart_path.is_some();
+    let n = rows_data.len();
+
+    let mut state = ui.table_state.clone();
+    if let Some(sel) = state.selected() {
+        if n == 0 {
+            state.select(None);
+        } else if sel >= n {
+            state.select(Some(n - 1));
         }
     }
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(format!("events ({})", vis.len())),
-        )
-        .highlight_style(Style::default().add_modifier(Modifier::REVERSED))
-        .highlight_symbol("▶ ");
-    f.render_stateful_widget(list, chunks[1], &mut list_state);
-
-    let summary = if ui.show_caps {
-        match &ui.state.caps {
-            Some(adv) => adv.format_report("USBASP-NG DIAG v1"),
-            None => "Capabilities: (waiting for DIAG_CAPS — re-plug or use demo capabilities_yel0)"
-                .into(),
-        }
+    let header = if dual {
+        Row::new(["Δt", "PROGRAMMER", "TARGET"]).style(Style::default().add_modifier(Modifier::BOLD))
     } else {
-        let s = &ui.state.stats;
-        let caps_line = ui
-            .state
-            .caps
-            .as_ref()
-            .map(|c| c.summary_line())
-            .unwrap_or_else(|| "caps: —".into());
-        let slots = ui
-            .state
-            .trace_slots
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "—".into());
-        let ov = if ui.state.trace_overflow { "YES" } else { "no" };
-        let trig = if ui.state.trace_triggered { "YES" } else { "no" };
-        format!(
-            "ENABLEPROG PASS={} FAIL={}   SNAPSHOT FAIL={}   ERROR={}   OVERFLOW={} dropped={}\n{caps_line}\nTRACE slots={slots}  overflow={ov}  triggered={trig}",
-            s.enableprog_pass, s.enableprog_fail, s.snapshot_fail, s.errors, s.overflows, s.dropped
-        )
+        Row::new(["Δt", "EVENT"]).style(Style::default().add_modifier(Modifier::BOLD))
     };
-    let summary = Paragraph::new(summary)
-        .block(Block::default().borders(Borders::ALL).title(if ui.show_caps {
-            "capabilities"
-        } else {
-            "summary"
-        }));
-    f.render_widget(summary, chunks[2]);
 
-    let help = Paragraph::new(ui.status.as_str())
-        .style(Style::default().fg(Color::DarkGray));
-    f.render_widget(help, chunks[3]);
+    let table_rows: Vec<Row> = rows_data
+        .iter()
+        .map(|r| {
+            let style = if r.is_anchor {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else if r.is_fault {
+                Style::default().fg(Color::Red)
+            } else {
+                match r.level {
+                    Level::Error => Style::default().fg(Color::Red),
+                    Level::Warn => Style::default().fg(Color::Yellow),
+                    Level::Info => Style::default().fg(Color::Cyan),
+                    Level::Debug => Style::default().fg(Color::DarkGray),
+                }
+            };
+            let dt = rel_label(r.rel_ms);
+            if dual {
+                Row::new(vec![
+                    Cell::from(dt),
+                    Cell::from(r.prog.clone()),
+                    Cell::from(r.target.clone()),
+                ])
+                .style(style)
+            } else {
+                Row::new(vec![Cell::from(dt), Cell::from(r.prog.clone())]).style(style)
+            }
+        })
+        .collect();
+
+    let widths = if dual {
+        vec![
+            Constraint::Length(9),
+            Constraint::Percentage(48),
+            Constraint::Percentage(48),
+        ]
+    } else {
+        vec![Constraint::Length(9), Constraint::Min(20)]
+    };
+    let title = if dual {
+        format!("timeline dual ({n})  yellow = RELEASE↔READY")
+    } else {
+        format!("timeline ({n})")
+    };
+    let table = Table::new(table_rows, widths)
+        .header(header)
+        .block(Block::default().borders(Borders::ALL).title(title))
+        .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
+        .highlight_symbol("▶ ");
+    f.render_stateful_widget(table, area, &mut state);
 }

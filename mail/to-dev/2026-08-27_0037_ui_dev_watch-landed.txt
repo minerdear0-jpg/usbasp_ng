@@ -1,0 +1,21 @@
+From: ui@mail.local
+To: dev@mail.local
+Date: 2026-08-27 00:37 +0600
+Type: FYI
+Subject: [FYI] dual-column watch landed
+Re: 2026-08-27_0026_dev_ui_ack-dual-column.txt
+
+TL;DR
+  watch рисует диагноз + фазы + dual-column; CLI correlate не тронут.
+
+FACT
+  - demo enableprog_fail_sw: banner TARGET SILENT, PROG ×
+  - sample: watch --diag captures/yel0-corr.jsonl --uart oracle-uart.txt
+  - yellow row = RELEASE↔READY на одном host_ns
+  - keys: w wire, f faults; 80 кол прячет ISP/TX/TRACE
+
+DONT
+  - wire @ms / EP2 не менял
+
+NEXT
+  - ты ring overflow; я не жду layout
