@@ -4,6 +4,8 @@
 
 Formal record: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md). Baseline HW ISP/WinUSB: [ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md).
 
+Optional later: HIDUART **Diagnostics Plane** (binary ENABLEPROG TX/RX + fault snapshot) as *firmware* truth beside the scope — design only, classic stays clean: [DIAGNOSTICS.md](DIAGNOSTICS.md). Not a substitute for capture.
+
 RST PORTB RMW already uses `cli`/`SREG` (same as MOSI/SCK); that wrap did not fix the symptom.
 
 **Wanted:** a capture (FX2 `fx2lafw` / PulseView, or Nano 328P sniffer) of **PASS `-B 8`** vs **FAIL `-B 22`**. Attach to [issue #1](https://github.com/minerdear0-jpg/usbasp_ng/issues/1) or a PR.

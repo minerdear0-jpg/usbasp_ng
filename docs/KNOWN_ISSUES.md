@@ -42,6 +42,8 @@ Typical USBasp clone breakouts are **ISP 6-pin only** (MOSI/MISO/SCK/RST/VCC/GND
 
 Release default remains **classic**. SW SCK (`-B 22` / ~32 kHz ENABLEPROG) stays the open functional gate: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
 
+Future HIDUART research feature (not classic, not printf-on-AVR): binary **Diagnostics Plane** — [DIAGNOSTICS.md](DIAGNOSTICS.md). Independent of target UART bridge.
+
 ## USB execution model
 
 Documented invariant (INT0 vs `usbPoll`): [USB_EXECUTION.md](USB_EXECUTION.md).

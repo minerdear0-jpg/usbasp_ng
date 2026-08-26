@@ -26,3 +26,7 @@ overrun / reset / guards               RST/SCK/MOSI/MISO
 `usbasp_isp_write()` used `if (WRITEFLASH) … else EEPROM`. When `prog_nbytes` hit 0 mid-packet, state became IDLE and the **same** USB OUT packet continued in the `else` → EEPROM writes. Fix: `else if (WRITEEEPROM)` + `break` when nbytes exhausted.
 
 Tests: `firmware/tests/core/test_prog_session.py`.
+
+## Out of this track
+
+HIDUART **Diagnostics Plane** (binary telemetry / TRACE) is a separate post-RC1 research design: [../DIAGNOSTICS.md](../DIAGNOSTICS.md). Classic stays telemetry-free. Does not replace SCK capture.
