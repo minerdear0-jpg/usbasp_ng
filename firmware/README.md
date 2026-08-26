@@ -1,13 +1,22 @@
 # Firmware
 
-CMake + board profile. See the repository [README](../README.md).
+CMake + board profile. See the repository [README](../README.md) for classic vs USBHID.
+
+Lightweight build from the repo root:
+
+```text
+../scripts/build.sh
+../scripts/build.sh hiduart
+```
+
+Or from this directory:
 
 ```text
 cmake -S . -B build/usbasp-atmega8-clone -G Ninja -DBOARD=usbasp-atmega8-clone
 cmake --build build/usbasp-atmega8-clone
 ```
 
-`src/` is classic USBasp only. `src_hid/` is the HIDUART product and is not compiled into `usbasp`.
+`src/` is classic USBasp only. `src_hid/` is the USBHID (HIDUART) product and is not compiled into `usbasp`.
 
 Still open on silicon (does not block firmware work):
 

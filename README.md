@@ -6,25 +6,53 @@ Firmware for the cheap, widespread USBasp AVR programmer.
 - **ISP/TPI internals:** dioannidis / nerdralph fixes, without their composite USB identity on the default image
 - **Build:** CMake + avr-gcc, one **board profile** per configure
 
-## Two products
+## Classic vs USBHID
+
+Two separate firmware products. Same ISP/TPI wire protocol (L1/L2). Different USB identity (L0). Classic sources never mention HID; USBHID lives in `firmware/src_hid/` only.
 
 ```
 firmware
-   ├─ usbasp          classic — L0 topology of 2011, avrdude `-c usbasp`
-   └─ usbasp-hiduart  separate composite device (HID UART + WCID)
+   ├─ usbasp          classic — 2011 USB topology, avrdude `-c usbasp`
+   └─ usbasp-hiduart  USBHID  — composite vendor + HID UART + WCID
 ```
 
-Classic sources never mention HID. HID lives in `firmware/src_hid/` only.
+| | Classic (`usbasp`) | USBHID (`usbasp-hiduart`) |
+|---|---|---|
+| USB shape | Vendor class `0xFF`, control EP0 only, no serial string — same as Fischl 2011 | Composite: WinUSB/WCID vendor interface + HID UART (interrupt IN/OUT) + BOS / MS OS 2.0 |
+| Host programmer | Stock avrdude `-c usbasp` (libusb or libwinusb) | Same FUNC 1–16 / 127, but Windows MSVC avrdude (libwinusb) often cannot open a composite device — use a MinGW/libusb avrdude |
+| Extra function | Programmer only | HID UART on the MCU USART (debug console without a second USB-serial dongle); 4-char iSerial in EEPROM |
+| Size (ATmega8, v0.1.2) | ~4942 B | ~6896 B |
+| Role | Drop-in for clones that must keep looking like 2011 USBasp | Forward path for new work |
+
+**Why USBHID is the more promising product.** Classic L0 is frozen on purpose: any extra interface would break host stacks that bind a single vendor device (old libusb-win32 INF, WinUSB-on-one-interface, some GUI tools). USBHID already pays that cost and then unlocks the features cheap USBasp clones never had:
+
+- **WCID / Microsoft OS 2.0** — Windows can bind WinUSB without a third-party INF; OS 2.0 descriptors behave better on USB 3.0 ports than the old OS 1.0 WCID hack.
+- **HID UART** — the same stick is a debug serial path (HID class is ubiquitous; no extra CDC ACM stack on a 12 MHz V-USB ATmega8).
+- **Per-unit serial** — several programmers on one host stay distinguishable.
+- **Room to grow** — new host-side features go on HID reports / WCID properties while ISP/TPI stay the avrdude contract. Classic must not grow BOS, HID, or EEPROM serial ([`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)).
+
+Use classic when the stick must be an invisible replacement for 2011 firmware. Prefer USBHID for new flashing, Windows without INF, and on-stick UART.
 
 ## Build
 
-Needs `avr-gcc`, `avr-libc`, CMake, Ninja.
+Needs `avr-gcc`, `avr-libc`, CMake, and either Ninja or `make`.
+
+Lightweight (from the repo root; reuses an existing build dir, otherwise Ninja if present):
+
+```text
+./scripts/build.sh                 # classic ATmega8 clone
+./scripts/build.sh hiduart         # USBHID composite
+SERIAL=YEL0 ./scripts/build.sh usbhid
+./scripts/build.sh --help
+```
+
+Hex lands in `firmware/build/<board>/usbasp.hex` or `usbasp-hiduart.hex`.
+
+Full wrapper (tests, flash, every board) still lives in `firmware/`:
 
 ```text
 cd firmware
 make BOARD=usbasp-atmega8-clone
-# hex: firmware/build/usbasp-atmega8-clone/usbasp.hex
-
 make BOARD=usbasp-atmega88
 make BOARD=usbasp-atmega8-usbisp
 make BOARD=usbasp-hiduart-atmega8
@@ -32,14 +60,14 @@ make all-boards
 make test
 ```
 
-Or:
+Or CMake directly (Ninja if you have it):
 
 ```text
-cmake -S firmware -B build/clone -G Ninja -DBOARD=usbasp-atmega8-clone
-cmake --build build/clone
+cmake -S firmware -B firmware/build/clone -G Ninja -DBOARD=usbasp-atmega8-clone
+cmake --build firmware/build/clone
 ```
 
-Board files: [`firmware/boards/`](firmware/boards/). They set MCU, F_CPU, LED style, SCK jumper, 3 MHz, classic vs hiduart. Do not pile ad-hoc `-DTHIS=1` flags.
+Board files: [`firmware/boards/`](firmware/boards/). They set MCU, F_CPU, LED style, SCK jumper, 3 MHz, classic vs USBHID. Do not pile ad-hoc `-DTHIS=1` flags.
 
 ## Flash (another programmer, J2 / RESET)
 
