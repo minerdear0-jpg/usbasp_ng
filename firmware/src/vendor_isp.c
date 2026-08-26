@@ -260,6 +260,7 @@ uchar usbasp_isp_write(uchar *data, uchar len)
 
     board_led_isp_activity();
     for (i = 0; i < len; i++) {
+        /* Never fall through WRITEFLASH → EEPROM when nbytes ends mid-packet. */
         if (prog_state == PROG_STATE_WRITEFLASH) {
             if (prog_pagesize == 0) {
                 ispWriteFlash(prog_address, data[i], 1);
@@ -271,8 +272,10 @@ uchar usbasp_isp_write(uchar *data, uchar len)
                     prog_pagecounter = prog_pagesize;
                 }
             }
-        } else {
+        } else if (prog_state == PROG_STATE_WRITEEEPROM) {
             ispWriteEEPROM((uint16_t)prog_address, data[i]);
+        } else {
+            break;
         }
 
         if (prog_nbytes)
@@ -285,6 +288,8 @@ uchar usbasp_isp_write(uchar *data, uchar len)
                 ispFlushPage(prog_address, data[i]);
             }
             retVal = 1;
+            prog_address++;
+            break; /* ignore remainder of this USB OUT packet */
         }
 
         prog_address++;

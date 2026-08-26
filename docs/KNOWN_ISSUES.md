@@ -14,9 +14,7 @@ PCs that previously used Zadig/libusbK for `16c0:05dc` may keep that association
 
 ## Software SCK ENABLEPROG (`-B 22` / slow ids)
 
-**Status:** open; separate from WinUSB/HW ISP acceptance.
-
-HW SPI path is proven on Windows ([ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md)). SW bitbang still fails ENABLEPROG on the bench. Controlled sweep + scope: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md), [SOFTWARE_SCK.md](SOFTWARE_SCK.md).
+**Status:** SW-SCK isolated — HW PASS, SW ENABLEPROG `0x01`. Root cause unknown; **capture next**, not more firmware guesses. [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
 
 ## TPI
 

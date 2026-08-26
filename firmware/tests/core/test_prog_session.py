@@ -45,12 +45,20 @@ def test_wire_address_types():
 
 def test_tpi_read_decrements_nbytes():
     """TPI READ must mirror FLASH/EEPROM: nbytes + IDLE completion."""
-    start = VENDOR.index("PROG_STATE_TPI_READ")
-    # First occurrence in usbasp_isp_read
     block = VENDOR[VENDOR.index("if (prog_state == PROG_STATE_TPI_READ)") :]
     block = block[: block.index("board_led_isp_activity")]
     assert "prog_nbytes" in block
     assert "PROG_STATE_IDLE" in block
+
+
+def test_write_stops_at_nbytes_boundary():
+    """Data-stage overrun: do not continue packet as EEPROM after FLASH nbytes=0."""
+    start = VENDOR.index("uchar usbasp_isp_write")
+    body = VENDOR[start : VENDOR.index("return retVal;", start) + 20]
+    assert "else if (prog_state == PROG_STATE_WRITEEEPROM)" in body
+    assert "break; /* ignore remainder of this USB OUT packet */" in body
+    # Must not use bare else { ispWriteEEPROM after WRITEFLASH without state check
+    assert "if (prog_state == PROG_STATE_WRITEFLASH)" in body
 
 
 def main() -> int:
@@ -58,6 +66,7 @@ def main() -> int:
     test_nbytes_zero_guard()
     test_wire_address_types()
     test_tpi_read_decrements_nbytes()
+    test_write_stops_at_nbytes_boundary()
     print("ok  prog_session")
     return 0
 
