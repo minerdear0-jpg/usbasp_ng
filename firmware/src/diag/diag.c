@@ -32,7 +32,8 @@ static uint8_t diag_mem_last_emitted; /* pages count at last CONT emit */
 static uint16_t diag_mem_last_base;   /* low 16 of last page/chunk base */
 static uint8_t diag_trace_inited;
 
-/* Ring is 64; full mega8 write ≈128 flushes. Keep FAIL + canary band + stride. */
+#if USBASP_DIAG_MEMOP_PAGES
+/* Ring is finite; full mega8 write ≈128 flushes. Keep FAIL + canary + stride. */
 #ifndef DIAG_MEMOP_PAGE_STRIDE
 #define DIAG_MEMOP_PAGE_STRIDE 8
 #endif
@@ -55,6 +56,7 @@ static uint8_t diag_memop_page_emit_p(uint16_t base, uint8_t fail)
     idx = (uint16_t)(base / diag_mem_psize);
     return (uint8_t)((idx % DIAG_MEMOP_PAGE_STRIDE) == 0);
 }
+#endif
 
 extern uchar requested_sck;
 extern uchar effective_sck;
@@ -204,6 +206,12 @@ void diag_memop_begin(uint8_t mem, uint8_t pagesize)
 
 void diag_memop_page(uint32_t address, uint8_t fail)
 {
+#if !USBASP_DIAG_MEMOP_PAGES
+    (void)address;
+    (void)fail;
+    if (diag_mem_pages < 255)
+        diag_mem_pages++;
+#else
     uint32_t base = address;
     uint8_t flags;
     uint16_t base16;
@@ -224,6 +232,7 @@ void diag_memop_page(uint32_t address, uint8_t fail)
         | (fail ? DIAG_EP_RESULT_FAIL : DIAG_EP_RESULT_OK));
     (void)diag_try_emit(DIAG_MEMOP, flags,
         (uint8_t)(base16 >> 8), (uint8_t)base16);
+#endif
 }
 
 void diag_memop_end(uint8_t mem)
@@ -231,6 +240,7 @@ void diag_memop_end(uint8_t mem)
     (void)mem;
     if (!diag_mem_open)
         return;
+#if USBASP_DIAG_MEMOP_PAGES
     /* Ensure last page/chunk is visible even if stride skipped it. */
     if (diag_mem_pages != 0 && diag_mem_last_emitted != diag_mem_pages) {
         diag_mem_last_emitted = diag_mem_pages;
@@ -239,6 +249,7 @@ void diag_memop_end(uint8_t mem)
             (uint8_t)(diag_mem_last_base >> 8),
             (uint8_t)diag_mem_last_base);
     }
+#endif
     diag_mem_open = 0;
     (void)diag_try_emit(DIAG_MEMOP,
         (uint8_t)(DIAG_EP_END | DIAG_EP_RESULT_OK),
@@ -248,6 +259,9 @@ void diag_memop_end(uint8_t mem)
 void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail)
 {
     diag_emit_enableprog(tx, rx, fail);
+#if !USBASP_HAS_DIAG_TRIGGER
+    (void)fail;
+#else
     if (!fail)
         return;
 
@@ -265,13 +279,11 @@ void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fa
         memcpy(local.rx, rx, 4);
         diag_publish_snapshot(&local);
     }
+#endif
 }
 
 void diag_on_connect(void)
 {
-    uint32_t fcap;
-    uint32_t bcap;
-
     diag_ensure_trace();
     diag_trace_arm();
 
@@ -283,20 +295,28 @@ void diag_on_connect(void)
         DIAG_SCHEMA_V1,
         DIAG_PROFILE_COMPOSITE);
 
-    fcap = DIAG_FCAP_SESSION | DIAG_FCAP_SNAPSHOT | DIAG_FCAP_TIMESTAMP
-        | DIAG_FCAP_TRACE | DIAG_FCAP_TRIGGER | DIAG_FCAP_PRETRIGGER;
-    bcap = 0;
+#if USBASP_HAS_DIAG_TRIGGER
+    {
+        uint32_t fcap;
+        uint32_t bcap;
+
+        fcap = DIAG_FCAP_SESSION | DIAG_FCAP_SNAPSHOT | DIAG_FCAP_TIMESTAMP
+            | DIAG_FCAP_TRACE;
+        fcap |= DIAG_FCAP_TRIGGER | DIAG_FCAP_PRETRIGGER;
+        bcap = 0;
 #if USBASP_HAS_SCK_JUMPER
-    bcap |= BOARD_CAP_SCK_JUMPER;
+        bcap |= BOARD_CAP_SCK_JUMPER;
 #endif
-    (void)diag_try_emit(DIAG_CAPS, DIAG_EP_START,
-        (uint8_t)(fcap & 0xffu), (uint8_t)((fcap >> 8) & 0xffu));
-    (void)diag_try_emit(DIAG_CAPS, DIAG_EP_CONT,
-        (uint8_t)((fcap >> 16) & 0xffu), (uint8_t)((fcap >> 24) & 0xffu));
-    (void)diag_try_emit(DIAG_CAPS, DIAG_EP_CONT,
-        (uint8_t)(bcap & 0xffu), (uint8_t)((bcap >> 8) & 0xffu));
-    (void)diag_try_emit(DIAG_CAPS, DIAG_EP_END,
-        (uint8_t)((bcap >> 16) & 0xffu), (uint8_t)((bcap >> 24) & 0xffu));
+        (void)diag_try_emit(DIAG_CAPS, DIAG_EP_START,
+            (uint8_t)(fcap & 0xffu), (uint8_t)((fcap >> 8) & 0xffu));
+        (void)diag_try_emit(DIAG_CAPS, DIAG_EP_CONT,
+            (uint8_t)((fcap >> 16) & 0xffu), (uint8_t)((fcap >> 24) & 0xffu));
+        (void)diag_try_emit(DIAG_CAPS, DIAG_EP_CONT,
+            (uint8_t)(bcap & 0xffu), (uint8_t)((bcap >> 8) & 0xffu));
+        (void)diag_try_emit(DIAG_CAPS, DIAG_EP_END,
+            (uint8_t)((bcap >> 16) & 0xffu), (uint8_t)((bcap >> 24) & 0xffu));
+    }
+#endif
 
     diag_emit_trace_begin();
 
@@ -308,6 +328,9 @@ void diag_on_connect(void)
 
 void diag_emit_isp_pins(void)
 {
+#if !USBASP_DIAG_MEMOP_PAGES
+    return;
+#else
     uint8_t mask = (uint8_t)((1u << ISP_RST) | (1u << ISP_MOSI)
         | (1u << ISP_MISO) | (1u << ISP_SCK));
     uint8_t ddr = (uint8_t)(ISP_DDR & mask);
@@ -322,6 +345,7 @@ void diag_emit_isp_pins(void)
     else
         flags |= DIAG_EP_RESULT_OK;
     (void)diag_try_emit(DIAG_ISP_PINS, flags, ddr, pin);
+#endif
 }
 
 void diag_on_disconnect(void)

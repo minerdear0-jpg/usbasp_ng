@@ -12,6 +12,10 @@
 #define USBASP_HAS_DIAG       @USBASP_HAS_DIAG@
 /* Unified TRACE ring slots (power of two). Overridable per board. */
 #define USBASP_DIAG_TRACE_SLOTS @USBASP_DIAG_TRACE_SLOTS@
+/* 1 = full trigger engine (328P lab). 0 = stub (mega8/88 flash budget). */
+#define USBASP_HAS_DIAG_TRIGGER @USBASP_HAS_DIAG_TRIGGER@
+/* 1 = MEMOP PAGE@addr subsample + ISP_PINS grains (328P). */
+#define USBASP_DIAG_MEMOP_PAGES @USBASP_DIAG_MEMOP_PAGES@
 /* Stringify board profile: "classic" or "hiduart" */
 #define USBASP_PROFILE_STR    "@USBASP_PROFILE@"
 

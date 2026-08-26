@@ -81,6 +81,10 @@ static void trace_clear_trigger_latch(void)
 
 void diag_trigger_on_event(const diag_frame_t *frame, uint16_t write_index)
 {
+#if !USBASP_HAS_DIAG_TRIGGER
+    (void)frame;
+    (void)write_index;
+#else
     const diag_trigger_t *cfg;
 
     if (!frame)
@@ -117,6 +121,7 @@ void diag_trigger_on_event(const diag_frame_t *frame, uint16_t write_index)
         if (post_left == 0)
             trace_state = DIAG_CAP_STATE_FROZEN;
     }
+#endif
 }
 
 void diag_trace_init(void)
@@ -173,6 +178,15 @@ void diag_trace_snapshot(diag_capture_meta_t *meta)
 
 bool diag_trace_push(const diag_frame_t *frame)
 {
+#if !USBASP_HAS_DIAG_TRIGGER
+    /* Compact boards: lossy ring only (no freeze / post / trigger). */
+    if (!frame)
+        return false;
+    if (trace_len() >= USBASP_DIAG_TRACE_SLOTS)
+        trace_overwrite_oldest();
+    trace_write_slot(frame);
+    return true;
+#else
     diag_frame_t ov;
     uint8_t is_meta;
     uint8_t is_trailer;
@@ -237,6 +251,7 @@ bool diag_trace_push(const diag_frame_t *frame)
         diag_trigger_on_event(frame, wi_after);
 
     return true;
+#endif
 }
 
 uint8_t diag_trace_drain(uint8_t out[8])

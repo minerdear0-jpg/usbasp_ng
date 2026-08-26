@@ -76,9 +76,11 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
             prog_address = usbasp_read_le16(&data[2]);
         {
             uint16_t nbytes = usbasp_read_le16(&data[6]);
+#if USBASP_HAS_DIAG && USBASP_DIAG_MEMOP_PAGES
             diag_memop_begin(DIAG_MEM_READFLASH,
                 (uchar)(nbytes > 255u ? 255u : nbytes));
             diag_memop_page(prog_address, 0);
+#endif
             len = prog_begin_transfer(PROG_STATE_READFLASH, nbytes);
         }
         break;
@@ -105,8 +107,10 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         prog_pagesize += (uint16_t)(((uint16_t)data[5] & 0xF0) << 4);
         if (prog_blockflags & PROG_BLOCKFLAG_FIRST) {
             prog_pagecounter = prog_pagesize;
+#if USBASP_HAS_DIAG
             diag_memop_begin(DIAG_MEM_FLASH,
                 (uchar)(prog_pagesize > 255u ? 255u : prog_pagesize));
+#endif
         }
         len = prog_begin_transfer(PROG_STATE_WRITEFLASH, usbasp_read_le16(&data[6]));
         break;
@@ -134,6 +138,7 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         len = 1;
         break;
 
+#if USBASP_HAS_TPI
     case USBASP_FUNC_TPI_CONNECT:
         tpi_dly_cnt = usbasp_read_le16(&data[2]);
         isp_out_set_bit(ISP_RST);
@@ -178,6 +183,7 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         prog_address = usbasp_read_le16(&data[2]);
         len = prog_begin_transfer(PROG_STATE_TPI_WRITE, usbasp_read_le16(&data[6]));
         break;
+#endif
 
     case USBASP_FUNC_GETCAPABILITIES:
         /* Advertise TPI only when board profile enables it after silicon proof. */
@@ -209,10 +215,14 @@ uchar usbasp_isp_read(uchar *data, uchar len)
 
     if (prog_state != PROG_STATE_READFLASH
         && prog_state != PROG_STATE_READEEPROM
-        && prog_state != PROG_STATE_TPI_READ) {
+#if USBASP_HAS_TPI
+        && prog_state != PROG_STATE_TPI_READ
+#endif
+        ) {
         return 0xff;
     }
 
+#if USBASP_HAS_TPI
     if (prog_state == PROG_STATE_TPI_READ) {
         if (prog_nbytes && len > prog_nbytes)
             len = (uchar)prog_nbytes;
@@ -226,6 +236,7 @@ uchar usbasp_isp_read(uchar *data, uchar len)
             prog_state = PROG_STATE_IDLE;
         return len;
     }
+#endif
 
     board_led_isp_activity();
     for (i = 0; i < len; i++) {
@@ -251,10 +262,14 @@ uchar usbasp_isp_write(uchar *data, uchar len)
 
     if (prog_state != PROG_STATE_WRITEFLASH
         && prog_state != PROG_STATE_WRITEEEPROM
-        && prog_state != PROG_STATE_TPI_WRITE) {
+#if USBASP_HAS_TPI
+        && prog_state != PROG_STATE_TPI_WRITE
+#endif
+        ) {
         return 0xff;
     }
 
+#if USBASP_HAS_TPI
     if (prog_state == PROG_STATE_TPI_WRITE) {
         if (prog_nbytes && len > prog_nbytes)
             len = (uchar)prog_nbytes;
@@ -270,6 +285,7 @@ uchar usbasp_isp_write(uchar *data, uchar len)
         }
         return 0;
     }
+#endif
 
     board_led_isp_activity();
     for (i = 0; i < len; i++) {
@@ -281,10 +297,12 @@ uchar usbasp_isp_write(uchar *data, uchar len)
                 ispWriteFlash(prog_address, data[i], 0);
                 prog_pagecounter--;
                 if (prog_pagecounter == 0) {
-                    {
-                        uchar flush_fail = ispFlushPage(prog_address, data[i]);
-                        diag_memop_page(prog_address, flush_fail);
-                    }
+                    uchar flush_fail = ispFlushPage(prog_address, data[i]);
+#if USBASP_HAS_DIAG && USBASP_DIAG_MEMOP_PAGES
+                    diag_memop_page(prog_address, flush_fail);
+#else
+                    (void)flush_fail;
+#endif
                     prog_pagecounter = prog_pagesize;
                 }
             }
@@ -302,11 +320,18 @@ uchar usbasp_isp_write(uchar *data, uchar len)
             if ((prog_blockflags & PROG_BLOCKFLAG_LAST)
                 && (prog_pagecounter != prog_pagesize)) {
                 uchar flush_fail = ispFlushPage(prog_address, data[i]);
+#if USBASP_HAS_DIAG && USBASP_DIAG_MEMOP_PAGES
                 diag_memop_page(prog_address, flush_fail);
+#else
+                (void)flush_fail;
+#endif
             }
             /* Close if LAST, or if no paged flushes happened (byte mode). */
-            if ((prog_blockflags & PROG_BLOCKFLAG_LAST) || prog_pagesize == 0)
+            if ((prog_blockflags & PROG_BLOCKFLAG_LAST) || prog_pagesize == 0) {
+#if USBASP_HAS_DIAG
                 diag_memop_end(DIAG_MEM_FLASH);
+#endif
+            }
             retVal = 1;
             prog_address++;
             break; /* ignore remainder of this USB OUT packet */

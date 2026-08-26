@@ -33,6 +33,8 @@ typedef struct {
 
 #if USBASP_HAS_DIAG
 
+#if USBASP_HAS_DIAG_TRIGGER
+
 void diag_trigger_init(void);
 void diag_trigger_set(const diag_trigger_t *cfg);
 void diag_trigger_get(diag_trigger_t *out);
@@ -46,9 +48,25 @@ bool diag_trigger_match(const diag_frame_t *frame, const diag_trigger_t *cfg);
 /* Active config (for ring lifecycle). */
 const diag_trigger_t *diag_trigger_cfg(void);
 
+#else /* compact: no trigger engine */
+
+static inline void diag_trigger_init(void) {}
+static inline void diag_trigger_set(const diag_trigger_t *cfg) { (void)cfg; }
+static inline void diag_trigger_get(diag_trigger_t *out) { (void)out; }
+static inline void diag_trigger_set_enableprog_fail(void) {}
+static inline bool diag_trigger_match(const diag_frame_t *frame, const diag_trigger_t *cfg)
+{
+    (void)frame;
+    (void)cfg;
+    return false;
+}
+static inline const diag_trigger_t *diag_trigger_cfg(void) { return 0; }
+
+#endif
+
 /*
  * Called after a successful non-meta ring push while ARMED/POST.
- * May advance ARMED → POST → FROZEN.
+ * May advance ARMED → POST → FROZEN. (no-op on compact boards)
  */
 void diag_trigger_on_event(const diag_frame_t *frame, uint16_t write_index);
 

@@ -10,3 +10,5 @@ set(USBASP_HAS_3MHZ 1)
 set(USBASP_LED_STYLE USBASP_LED_PORT)
 set(USBASP_HFUSE 0xdd)
 set(USBASP_LFUSE 0xff)
+# Compact Diagnostics Plane: no trigger engine / MEMOP page grains (flash wall).
+set(USBASP_DIAG_TRACE_SLOTS 32)

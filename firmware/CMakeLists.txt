@@ -11,8 +11,10 @@ set_property(CACHE BOARD PROPERTY STRINGS
     usbasp-atmega8-clone
     usbasp-atmega8-usbisp
     usbasp-atmega88
+    usbasp-atmega328p
     usbasp-hiduart-atmega8
-    usbasp-hiduart-atmega88)
+    usbasp-hiduart-atmega88
+    usbasp-hiduart-atmega328p)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD}.cmake")
 
@@ -23,6 +25,22 @@ endif()
 
 set(MCU ${USBASP_MCU})
 set(F_CPU ${USBASP_F_CPU})
+
+# Lab-sized diag (trigger + MEMOP page grains) fits 328P; mega8/88 stay compact.
+if(NOT DEFINED USBASP_HAS_DIAG_TRIGGER)
+    if(MCU STREQUAL "atmega328p" OR MCU STREQUAL "atmega328")
+        set(USBASP_HAS_DIAG_TRIGGER 1)
+    else()
+        set(USBASP_HAS_DIAG_TRIGGER 0)
+    endif()
+endif()
+if(NOT DEFINED USBASP_DIAG_MEMOP_PAGES)
+    if(MCU STREQUAL "atmega328p" OR MCU STREQUAL "atmega328")
+        set(USBASP_DIAG_MEMOP_PAGES 1)
+    else()
+        set(USBASP_DIAG_MEMOP_PAGES 0)
+    endif()
+endif()
 
 # Arch-specific crt/lib path when avr-libc is under /usr/lib/avr (no /usr/avr).
 if(USBASP_AVR_LIBC_PREFIX)
@@ -107,13 +125,19 @@ set(COMMON_SRC
     src/sck.c
     src/isp.c
     src/vendor_isp.c
-    src/tpi.S
     third_party/vusb/usbdrv.c
     third_party/vusb/usbdrvasm.S
     third_party/vusb/oddebug.c)
 
+if(USBASP_HAS_TPI)
+    list(APPEND COMMON_SRC src/tpi.S)
+endif()
+
 if(USBASP_HAS_DIAG)
-    list(APPEND COMMON_SRC src/diag/diag.c src/diag/diag_clock.c src/diag/diag_trace.c src/diag/diag_trigger.c)
+    list(APPEND COMMON_SRC src/diag/diag.c src/diag/diag_clock.c src/diag/diag_trace.c)
+    if(USBASP_HAS_DIAG_TRIGGER)
+        list(APPEND COMMON_SRC src/diag/diag_trigger.c)
+    endif()
 endif()
 
 if(USBASP_HAS_HID_UART)
@@ -220,7 +244,7 @@ message(STATUS "Board=${BOARD} MCU=${MCU} F_CPU=${F_CPU} profile=${USBASP_PROFIL
 message(STATUS "Flash: avrdude -c usbasp -p ${MCU} -U flash:w:${APP_NAME}.hex:i")
 message(STATUS "Fuses: hfuse=${USBASP_HFUSE} lfuse=${USBASP_LFUSE}")
 if(USBASP_HAS_DIAG)
-    message(STATUS "Diagnostics plane: USBASP_HAS_DIAG=1 TRACE_SLOTS=${USBASP_DIAG_TRACE_SLOTS}")
+    message(STATUS "Diagnostics plane: USBASP_HAS_DIAG=1 TRACE_SLOTS=${USBASP_DIAG_TRACE_SLOTS} TRIGGER=${USBASP_HAS_DIAG_TRIGGER} MEMOP_PAGES=${USBASP_DIAG_MEMOP_PAGES}")
 endif()
 if(USBASP_HAS_HID_UART)
     message(STATUS "HIDUART serial (EEPROM): ${USBASP_SERIAL}")
