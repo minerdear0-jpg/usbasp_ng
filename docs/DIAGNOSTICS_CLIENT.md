@@ -4,6 +4,14 @@ Companion to firmware [DIAGNOSTICS.md](DIAGNOSTICS.md). **Production client = Ru
 
 Telemetry rides **HID interrupt EP2** (composite IF2), not the USART bridge on PD0/PD1 and not `/dev/ttyUSB*`. Classic (`USBASP_HAS_DIAG=0`) has no diagnostics endpoint.
 
+Release asset **`diagplane.bin`** = portable Linux x86-64 build of the same tool ([Releases](https://github.com/minerdear0-jpg/usbasp_ng/releases), packaging [`RELEASE.md`](RELEASE.md)):
+
+```bash
+chmod +x diagplane.bin
+./diagplane.bin watch --demo enableprog_fail_sw
+./diagplane.bin monitor YEL0
+```
+
 ## Align with firmware contracts
 
 | TZ wording | Actual contract |
@@ -35,6 +43,9 @@ cd tools/usbasp-ng-diag && cargo build --release
 ./target/release/usbasp-ng-diag demo enableprog_fail_sw --jsonl | lnav
 ./target/release/usbasp-ng-diag decode capture.bin --jsonl > capture.jsonl
 ./target/release/usbasp-ng-diag decode capture.bin --faults
+./target/release/usbasp-ng-diag watch --demo enableprog_fail_sw
+./target/release/usbasp-ng-diag watch --file capture.bin
+./target/release/usbasp-ng-diag watch --serial YEL0
 ```
 
 ### Capture header (`USBDIAGv`)
@@ -73,8 +84,8 @@ Python lab: `python3 host/usbasp-trace.py capture.bin --jsonl` or `--faults`.
 ```text
 L0 Wire          DiagFrame (6 B) + USB report pad
 L1 Protocol      decoded human / JSON lines
-L2 Application   AppState reducer   # P2
-L3 Presentation  stdout / JSON / TUI
+L2 Application   AppState reducer (`state.rs`) + TUI `watch`
+L3 Presentation  stdout / JSON / JSONL / TUI
 ```
 
 ## Status
@@ -84,8 +95,8 @@ L3 Presentation  stdout / JSON / TUI
 | Firmware PR1–PR3 + MEMOP | done |
 | Client P0 record/decode/monitor | done |
 | Client P1 replay/demo + header + `--jsonl`/`--faults` | done |
+| Client P2 TUI `watch` | done |
 | Golden parity Python↔Rust | `host/golden/diag/` |
-| Client P2 TUI | open |
 | FX2 physical oracle | open ([SOFTWARE_SCK.md](SOFTWARE_SCK.md)) |
 
 Success: bugs reproducible from `.bin` / `demo` without hardware.

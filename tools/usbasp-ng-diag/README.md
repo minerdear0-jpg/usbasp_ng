@@ -12,15 +12,19 @@ cargo build --release
 ./target/release/usbasp-ng-diag demo enableprog_fail_sw --faults
 ./target/release/usbasp-ng-diag demo enableprog_fail_sw --jsonl | lnav
 ./target/release/usbasp-ng-diag decode capture.bin --faults
-./target/release/usbasp-ng-diag decode capture.bin --jsonl | lnav
+./target/release/usbasp-ng-diag watch --demo enableprog_fail_sw
+./target/release/usbasp-ng-diag watch --file capture.bin
+./target/release/usbasp-ng-diag watch --serial YEL0
 ./target/release/usbasp-ng-diag monitor YEL0
-./target/release/usbasp-ng-diag monitor YEL0 --json
 ```
 
-New recordings write a 16-byte `USBDIAGv` header; legacy captures still decode.
+TUI keys: `q` quit, `f` faults filter, `j`/`k` scroll, `g`/`G` top/bottom, `Space` follow.
+
+Release asset: **`diagplane.bin`** (Linux x86-64, musl static) — same CLI. Build locally: `../../scripts/build-diagplane.sh`.
 
 - `--jsonl` — lnav-ready JSON Lines on stdout  
 - `--faults` — ERROR / OVERFLOW / FAIL + summary  
+- `watch` — ratatui console UI (file / demo / live)  
 
 Contracts: [`docs/DIAGNOSTICS.md`](../../docs/DIAGNOSTICS.md), client notes: [`docs/DIAGNOSTICS_CLIENT.md`](../../docs/DIAGNOSTICS_CLIENT.md).
 

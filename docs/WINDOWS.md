@@ -4,20 +4,20 @@
 
 Classic stays **one vendor-specific interface, EP0 only**. USBasp FUNC 1–16 / 127 is unchanged. Windows binds WinUSB via BOS + Microsoft OS 2.0 (`WINUSB`). MS OS layout decision and Win11 A/B: [USB_WINDOWS.md](USB_WINDOWS.md).
 
-Use **classic** for Arduino and for MSVC avrdude. HIDUART is composite — different story (see below).
+Use **classic** for Arduino and for Windows ISP (AVRDUDESS / avrdude). HIDUART is a Linux diagnostics stick — drivers may install on Windows, programming does not.
 
 ## Compatibility matrix
 
 | Host | Tool | Driver | Classic NG | HIDUART |
 |------|------|--------|------------|---------|
-| Win10/11 x64 | avrdude 8.x MSVC | WinUSB | ✅ bench | ⚠️ prefer MinGW/libusb |
-| Win10/11 x64 | avrdude 8.x MinGW | WinUSB | ✅ | ✅ / check |
-| Win10/11 x64 | AVRDUDESS (current) | WinUSB | ✅ bench (`usbasp-clone`) | ⚠️ |
+| Win10/11 x64 | avrdude 8.x MSVC | WinUSB | ✅ `usbasp` / `usbasp-clone` | ❌ ISP unreliable (drivers may still bind) |
+| Win10/11 x64 | avrdude 8.x MinGW | WinUSB | ✅ | ❌ / unsupported for daily use |
+| Win10/11 x64 | AVRDUDESS (current) | WinUSB | ✅ `usbasp` and `usbasp-clone` | ❌ drivers OK, programming does not work properly |
 | Win10/11 x64 | Arduino IDE 1.8.19 bundled avrdude **6.3** | WinUSB | see [ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md); not a matrix expansion | ❌ |
-| Win10/11 x64 | Arduino IDE + replaced avrdude 8.x MSVC | WinUSB | ✅ expected | use classic |
-| Linux | current avrdude | libusb | ✅ | ✅ |
-| macOS | current avrdude | libusb | ✅ | ✅ |
-| Win11 ARM64 | current | WinUSB | ⚠️ best-effort | ⚠️ |
+| Win10/11 x64 | Arduino IDE + replaced avrdude 8.x MSVC | WinUSB | ✅ expected | ❌ use classic |
+| Linux | current avrdude | libusb | ✅ | ✅ lab / diagnostics |
+| macOS | current avrdude | libusb | ✅ | ⚠️ |
+| Win11 ARM64 | current | WinUSB | ⚠️ best-effort | ❌ |
 
 Details for the Arduino 6.3 failure: [ARDUINO.md](ARDUINO.md), [KNOWN_ISSUES.md](KNOWN_ISSUES.md). Helper: [`arduino/replace-avrdude.ps1`](../arduino/replace-avrdude.ps1).
 
@@ -55,9 +55,9 @@ USBasp is USB, not a COM port. AVRDUDESS **115200** is irrelevant; use `-B` / SC
 
 ## HIDUART on Windows
 
-Composite: vendor IF0 + HID. MSVC avrdude/libwinusb often cannot open it. Prefer classic for programming on Windows, or MinGW/libusb avrdude. HID UART uses the built-in HID class driver (no Zadig).
+**Not supported as a Windows programmer.** Composite (vendor IF0 + HID): Device Manager often shows drivers installed correctly, but AVRDUDESS / typical avrdude builds do **not** program targets reliably. Flash **classic** for Windows ISP. Use HIDUART on Linux for the Diagnostics Plane.
 
-Cheap clone PCBs do not route USART PD0/PD1 to the ISP header — HIDUART is not a ribbon-cable target console. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+Kits that include a small TXD/RXD adapter board can reach USART pins; the ISP ribbon alone still is not a target console. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## ARM64
 

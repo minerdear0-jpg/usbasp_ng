@@ -6,20 +6,24 @@
 # Never: .git/, firmware/build/, __pycache__/, *.obj, *.elf, *.hex
 #
 # Firmware HEX assets are separate files in dist/, not inside the source zip.
+# Host client: dist/diagplane.bin via --diag (see scripts/build-diagplane.sh).
 #
 # Usage:
-#   ./scripts/pack-release.sh [VERSION] [--hex]
+#   ./scripts/pack-release.sh [VERSION] [--hex] [--diag]
 #   VERSION defaults to `git describe --tags --always`
-#   --hex also builds classic/HIDUART hex for atmega8 + atmega88
+#   --hex  classic/HIDUART hex for atmega8 + atmega88
+#   --diag portable Linux x86-64 host client → dist/diagplane.bin
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 BUILD_HEX=0
+BUILD_DIAG=0
 VERSION=""
 for arg in "$@"; do
   case "$arg" in
     --hex) BUILD_HEX=1 ;;
+    --diag) BUILD_DIAG=1 ;;
     -*)
       echo "unknown option: $arg" >&2
       exit 2
@@ -82,7 +86,12 @@ if [[ "$BUILD_HEX" -eq 1 ]]; then
   done
 fi
 
+if [[ "$BUILD_DIAG" -eq 1 ]]; then
+  echo "==> diagplane.bin (Linux x86-64)"
+  "${ROOT}/scripts/build-diagplane.sh" "${DIST}/diagplane.bin"
+fi
+
 echo "==> dist/"
-ls -la "$DIST"/usbasp-ng-*"${SAFE}"* "$DIST"/usbasp-ng-*.hex "$DIST"/usbasp-ng-*.eep 2>/dev/null || ls -la "$DIST"
-echo "Done. Attach source zip + hex files as separate GitHub release assets."
-echo "Do not upload a working-tree dump. Prefer: ./scripts/pack-release.sh ${SAFE} --hex"
+ls -la "$DIST"/usbasp-ng-*"${SAFE}"* "$DIST"/usbasp-ng-*.hex "$DIST"/usbasp-ng-*.eep "$DIST"/diagplane.bin 2>/dev/null || ls -la "$DIST"
+echo "Done. Attach source zip + hex + diagplane.bin as separate GitHub release assets."
+echo "Do not upload a working-tree dump. Prefer: ./scripts/pack-release.sh ${SAFE} --hex --diag"

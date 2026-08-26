@@ -1,0 +1,52 @@
+name: diagplane
+
+on:
+  push:
+    paths:
+      - "tools/usbasp-ng-diag/**"
+      - "scripts/build-diagplane.sh"
+      - ".github/workflows/diagplane.yml"
+  pull_request:
+    paths:
+      - "tools/usbasp-ng-diag/**"
+      - "scripts/build-diagplane.sh"
+      - ".github/workflows/diagplane.yml"
+  workflow_dispatch:
+
+jobs:
+  linux-x86_64:
+    name: diagplane.bin (musl static)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools build-essential pkg-config
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Build diagplane.bin
+        run: ./scripts/build-diagplane.sh dist/diagplane.bin
+
+      - name: Smoke (decode demo path)
+        run: |
+          test -x dist/diagplane.bin
+          file dist/diagplane.bin | grep -E 'static|LSB'
+          # Fully static musl binary: ldd should fail
+          if ldd dist/diagplane.bin 2>/dev/null; then
+            echo "ERROR: expected static binary, got dynamic deps" >&2
+            exit 1
+          fi
+          dist/diagplane.bin demo --list
+          dist/diagplane.bin demo enableprog_fail_sw --faults | head -20
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagplane-linux-x86_64
+          path: dist/diagplane.bin
+          if-no-files-found: error

@@ -26,9 +26,9 @@ FUNC 11–16 remain compiled. Board profiles set `USBASP_HAS_TPI=0`, so GETCAPAB
 
 Best-effort only. avrdude documents ARM64 USB limits.
 
-## HIDUART on Windows MSVC avrdude
+## HIDUART on Windows (AVRDUDESS / avrdude)
 
-Composite device: prefer MinGW/libusb avrdude, or use **classic** for Arduino / WinUSB-only hosts.
+**Status:** drivers often bind (WinUSB IF0 + HID), but **ISP programming does not work properly** on typical Windows hosts (confirmed with AVRDUDESS). Use **classic** for Windows (`-c usbasp` and `-c usbasp-clone` both OK). HIDUART remains a Linux diagnostics stick.
 
 ## HIDUART USART on cheap clones (hardware)
 

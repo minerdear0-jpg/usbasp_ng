@@ -1,6 +1,5 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use rusb::{Direction, TransferType};
 use std::fs::File;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -12,6 +11,9 @@ mod decoder;
 mod demo;
 mod jsonl;
 mod protocol;
+mod state;
+mod tui;
+mod usb;
 
 use capture::{write_header, CaptureFile, CaptureRecord};
 use decoder::{format_frame, reassemble_enableprog, reassemble_fault_snapshot};
@@ -19,6 +21,7 @@ use jsonl::{
     emit_jsonl_frame, emit_jsonl_semantic, enableprog_failed, snapshot_failed, FaultStats,
 };
 use protocol::*;
+use tui::WatchSource;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum OutMode {
@@ -86,6 +89,18 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// TUI watch: file / demo / live EP2
+    Watch {
+        /// Live USB iSerial (empty = first composite)
+        #[arg(long, default_value = "")]
+        serial: String,
+        /// Load a capture.bin
+        #[arg(long, conflicts_with = "demo")]
+        file: Option<PathBuf>,
+        /// Load a demo scenario
+        #[arg(long, conflicts_with = "file")]
+        demo: Option<String>,
+    },
     /// Record EP2 → .bin (writes USBDIAGv header)
     Record {
         #[arg(default_value = "")]
@@ -143,6 +158,20 @@ fn main() -> Result<()> {
             out_mode(json, jsonl, faults),
         ),
         Cmd::Monitor { serial, json } => cmd_monitor(&serial, json),
+        Cmd::Watch {
+            serial,
+            file,
+            demo,
+        } => {
+            let src = if let Some(path) = file {
+                WatchSource::File(path)
+            } else if let Some(name) = demo {
+                WatchSource::Demo(name)
+            } else {
+                WatchSource::Live { serial }
+            };
+            tui::run(src)
+        }
         Cmd::Record { serial, out } => cmd_record(&serial, &out),
     }
 }
@@ -345,67 +374,19 @@ fn print_capture(
     Ok(())
 }
 
-fn open_composite(want_serial: &str) -> Result<(rusb::DeviceHandle<rusb::GlobalContext>, String)> {
-    for dev in rusb::devices().context("list USB")?.iter() {
-        let desc = match dev.device_descriptor() {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
-        if desc.vendor_id() != VID || desc.product_id() != PID {
-            continue;
-        }
-        let ver = desc.device_version();
-        if ver.major() == 2 && ver.minor() == 3 {
-            continue;
-        }
-        let Ok(handle) = dev.open() else {
-            continue;
-        };
-        let ser = handle
-            .read_serial_number_string_ascii(&desc)
-            .unwrap_or_default();
-        if !want_serial.is_empty() && ser != want_serial {
-            continue;
-        }
-        let _ = handle.detach_kernel_driver(IF_MONITOR);
-        handle
-            .claim_interface(IF_MONITOR)
-            .context("claim IF2")?;
-        let config = dev.active_config_descriptor().context("config")?;
-        let mut found = false;
-        for iface in config.interfaces() {
-            for id in iface.descriptors() {
-                if id.interface_number() != IF_MONITOR {
-                    continue;
-                }
-                for ep in id.endpoint_descriptors() {
-                    if ep.address() == EP2_IN
-                        && ep.transfer_type() == TransferType::Interrupt
-                        && ep.direction() == Direction::In
-                    {
-                        found = true;
-                    }
-                }
-            }
-        }
-        if !found {
-            bail!("no interrupt IN 0x82 on IF2");
-        }
-        return Ok((handle, ser));
-    }
-    bail!("no composite USBasp 16c0:05dc (diag) found");
-}
-
 fn cmd_monitor(serial: &str, json: bool) -> Result<()> {
-    let (handle, ser) = open_composite(serial)?;
+    let h = usb::open_composite(serial)?;
     if !json {
-        println!("USBasp NG Diagnostics  serial={ser:?}  schema=DIAG v1");
+        println!("USBasp NG Diagnostics  serial={:?}  schema=DIAG v1", h.serial);
     }
     let mut buf = [0u8; 8];
     let mut ep_buf = Vec::new();
     let mut snap_buf = Vec::new();
     loop {
-        match handle.read_interrupt(EP2_IN, &mut buf, Duration::from_millis(1000)) {
+        match h
+            .handle
+            .read_interrupt(EP2_IN, &mut buf, Duration::from_millis(1000))
+        {
             Ok(n) if n >= 6 => {
                 let Some(f) = DiagFrame::from_report(&buf[..n]) else {
                     continue;
@@ -476,14 +457,20 @@ fn humantime_now() -> String {
 }
 
 fn cmd_record(serial: &str, out: &PathBuf) -> Result<()> {
-    let (handle, ser) = open_composite(serial)?;
-    eprintln!("recording serial={ser:?} → {out:?} (USBDIAGv header)");
+    let h = usb::open_composite(serial)?;
+    eprintln!(
+        "recording serial={:?} → {out:?} (USBDIAGv header)",
+        h.serial
+    );
     let mut file = File::create(out).with_context(|| format!("create {out:?}"))?;
     write_header(&mut file)?;
     let mut buf = [0u8; 8];
     let mut n = 0u64;
     loop {
-        match handle.read_interrupt(EP2_IN, &mut buf, Duration::from_millis(1000)) {
+        match h
+            .handle
+            .read_interrupt(EP2_IN, &mut buf, Duration::from_millis(1000))
+        {
             Ok(k) if k >= 6 => {
                 let ns = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
