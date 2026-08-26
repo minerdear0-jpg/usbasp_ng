@@ -1,6 +1,6 @@
 # Diagnostics Plane (design)
 
-**PR1 skeleton + PR2 ENABLEPROG/snapshot landed** (ring, lifecycle, 4-frame ENABLEPROG, atomic fault snapshot, EP2 drain). TRACE / SCK stats still later.
+**RC (PR1–PR3).** Lifecycle + ENABLEPROG + compact fault snapshot + last-try `DIAG_ERROR` (check + `sck_sw_delay`) + `SCK_CONFIG` each SCK step. Ring 32. Classic remains `USBASP_HAS_DIAG=0`.
 
 Architectural separation for HIDUART / research builds when `USBASP_HAS_DIAG=1`. Does not change the Fischl USBasp wire protocol. Classic stays telemetry-free (`USBASP_HAS_DIAG=0`).
 
@@ -49,7 +49,7 @@ Target UART bridge is a separate board capability (`BOARD_HAS_TARGET_UART`). Sto
  *   no ISR producer in P0
  */
 volatile uint8_t head, tail;
-diag_frame_t frames[16];
+diag_frame_t frames[DIAG_RING_SIZE]; /* 32, power of two */
 ```
 
 Cheap single-producer/single-consumer. No locks. Document in `diag_ring.h`.
@@ -156,19 +156,16 @@ Capture TX/RX **inside** `ispEnterProgrammingMode` without calling `diag_try_emi
 
 ### `DIAG_FAULT_SNAPSHOT` fields (P0)
 
-```c
-uint8_t requested_sck;
-uint8_t transport;     /* HW / SW */
-uint8_t reset_driven;  /* last semantic assert/release state if known */
-uint8_t state;
-uint8_t result;
-uint8_t tx[4];
-uint8_t rx[4];
-/* Wire field name in C is sck_req (avoid grepping as requested_sck writes). */
-/* effective_sck included when available */
-```
+RAM copy (`diag_snapshot_t`) still holds full TX/RX + `sw_delay`. Wire emit is **4 frames** (compact):
 
-Multi-frame emit from **persistent** copy after `diag_publish_snapshot`.
+| # | flags | `a` | `b` |
+|---|-------|-----|-----|
+| 0 | `START` | `(sck_req << 4) \| (effective_sck & 0x0f)` | `transport` |
+| 1 | `CONT` | `reset_driven` | `state` |
+| 2 | `CONT` | `tx[0]` | `tx[1]` |
+| 3 | `END \| OK/FAIL` | `rx[0]` | `sw_delay` |
+
+Full TX/RX also on `ENABLEPROG`; last-try notes on `DIAG_ERROR`. Emit from **persistent** copy after `diag_publish_snapshot`.
 
 ## Levels
 
@@ -204,14 +201,21 @@ Classic: `0` → macros no-op, no `diag.o`. HIDUART (and future variants): `1`.
 - Golden Python frame constants / decoder stubs  
 - Optional: dumb `hidraw-log` (schema-agnostic)
 
-### PR2 — ENABLEPROG + snapshot — **done in tree**
+### PR2 — ENABLEPROG + snapshot — **done**
 
 - Local TX/RX capture in `ispEnterProgrammingMode`  
 - 4-frame semantic ENABLEPROG  
 - Persistent fault snapshot + publish (C3)  
 - Deferred overflow accounting on drain  
 
-Then bench HIDUART `-B 8` vs `-B 22` for firmware truth; FX2 remains physical oracle.
+### PR3 / RC — forensics + ring headroom — **done**
+
+- Last-try `DIAG_ERROR` (check + `sck_sw_delay`) per SCK step  
+- `SCK_CONFIG` on each ENABLEPROG step  
+- Compact 4-frame `FAULT_SNAPSHOT` (END: `rx[0]` + `sw_delay` + OK/FAIL)  
+- Ring size 32  
+
+Bench HIDUART `-B 8` vs `-B 22` for firmware truth; FX2 remains physical oracle.
 
 ## Out of P0 / do not expand
 

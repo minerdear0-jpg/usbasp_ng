@@ -17,6 +17,10 @@
 #define DIAG_TRACE_OVERFLOW         10
 #define DIAG_ERROR                  11
 
+/* DIAG_ERROR flags — ENABLEPROG attempt note (B8/B22 forensics) */
+#define DIAG_ERR_EP_AVR             0x01  /* check after AC 53 00 00 (expect 0x53) */
+#define DIAG_ERR_EP_AT89            0x02  /* check after AT89 path (expect 0x69) */
+
 /* DIAG_RESET flags — programmer drive intent, not pin sense */
 #define DIAG_RESET_ASSERT           0x01
 #define DIAG_RESET_RELEASE          0x02

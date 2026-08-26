@@ -40,9 +40,19 @@ def main() -> int:
     assert "diag_report_enableprog" in diag_c
     assert "memcpy(&diag_fault_snapshot" in diag_c
     assert "DIAG_CAP_SESSION | DIAG_CAP_TRANSACTION | DIAG_CAP_SNAPSHOT" in diag_c
+    # Compact 4-frame FAULT_SNAPSHOT packing
+    assert "sck_req << 4" in diag_c
+    assert diag_c.count("DIAG_FAULT_SNAPSHOT") == 4
+
+    assert "diag_note_enableprog_try" in diag_c
+    assert "DIAG_ERR_EP_AVR" in (FW / "include" / "diag" / "diag_events.h").read_text()
+    assert "DIAG_RING_SIZE 32" in (FW / "include" / "diag" / "diag_ring.h").read_text()
 
     isp = ISP.read_text()
     assert "diag_report_enableprog" in isp
+    assert "diag_note_enableprog_try" in isp
+    assert "diag_emit_sck_config" in isp
+    assert "if (tries == 1)" in isp
     sw = isp[isp.index("ispTransmit_sw") : isp.index("ispTransmit_hw")]
     assert "diag_" not in sw
 

@@ -1,121 +1,64 @@
 # Diagnostics client (host)
 
-Companion to firmware [DIAGNOSTICS.md](DIAGNOSTICS.md). **Production client = Rust** (`usbasp-ng-diag`); **lab = Python** under `host/`.
+Companion to firmware [DIAGNOSTICS.md](DIAGNOSTICS.md). **Production client = Rust** (`tools/usbasp-ng-diag`); **lab = Python** under `host/`.
 
 Telemetry rides **HID interrupt EP2** (composite IF2), not the USART bridge on PD0/PD1 and not `/dev/ttyUSB*`. Classic (`USBASP_HAS_DIAG=0`) has no diagnostics endpoint.
 
 ## Align with firmware contracts
 
-The 2026-08-26 client TZ is accepted with these corrections (do not reintroduce):
-
 | TZ wording | Actual contract |
 |------------|-----------------|
 | “HID UART as telemetry channel” | **EP2 IN** diagnostics frames; EP1 stays optional UART bridge |
-| “Actual SCK frequency via timer” | **P2** only; P0/PR1 report `SCK_CONFIG` id + HW/SW |
+| “Actual SCK frequency via timer” | **P2** only; RC reports `SCK_CONFIG` id + HW/SW |
 | “RESET LOW/HIGH” | **`RESET_ASSERT` / `RESET_RELEASE`** (drive intent) |
-| ENABLEPROG packing | **Four** 6-byte frames (`START`/`CONT`/`END|RESULT`) — firmware PR2 |
-| Capture file | Lab recorder today: `uint64_le host_ns` + 8-byte USB report; freeze a versioned header later for Rust |
+| ENABLEPROG packing | **Four** 6-byte frames (`START`/`CONT`/`END\|RESULT`) |
+| FAULT_SNAPSHOT | **Four** compact frames; END carries `rx[0]` + `sw_delay` + OK/FAIL |
+| Capture file | `uint64_le host_ns` + 8-byte USB report (no versioned header yet) |
 
 Ideal final function (TRIZ): *presentation works without the stick* — via `file` / `replay` / `demo` sources.
 
-## Dual toolchain
+## Dual toolchain (RC)
 
 ```text
-Python (lab)                         Rust (production)
+Python (lab)                         Rust (production P0)
 host/usbasp-hidraw-log.py            usbasp-ng-diag record
 host/usbasp-trace.py                 usbasp-ng-diag decode
 host/usbasp-diag-monitor.py          usbasp-ng-diag monitor [--json]
-golden fixtures                      same fixtures in CI
+host/golden/diag/                    same fixtures (parity test)
 ```
 
 | | Python | Rust |
 |--|--------|------|
 | Role | Forensic, golden, bench | Single binary, end-user |
-| Deps | pyusb (lab machines) | clap, hidapi, serde, anyhow |
-| TUI | not required | ratatui = **P2**, not P0 |
+| Deps | pyusb (lab machines) | clap, rusb, serde, anyhow |
+| TUI | not required | ratatui = **P2**, not RC |
 
-Do **not** start with TUI. Do **not** bind UI to HID.
+```bash
+cd tools/usbasp-ng-diag && cargo build --release
+./target/release/usbasp-ng-diag monitor YEL0
+./target/release/usbasp-ng-diag decode capture.bin
+```
 
 ## Layers L0–L3
 
 ```text
 L0 Wire          DiagFrame (6 B) + USB report pad
-L1 Protocol      DecodedEvent (type-safe)
-L2 Application   AppState = reduce(state, event)   # P1/P2
+L1 Protocol      decoded human / JSON lines
+L2 Application   AppState reducer   # P1+
 L3 Presentation  stdout / JSON / TUI
 ```
 
-Dependencies only downward. Sources implement the same stream of L0 frames:
+## RC status
 
-- HID (live EP2)
-- File (`.bin` capture)
-- Stdin
-- Synthetic (demo scenarios)
+| Item | Status |
+|------|--------|
+| Firmware PR1 lifecycle | done |
+| Firmware PR2 ENABLEPROG + snapshot | done (4-frame compact snapshot) |
+| Firmware PR3 forensics | done (last-try `DIAG_ERROR`, SCK_CONFIG/step, ring 32) |
+| Client P0 record/decode/monitor | Python + Rust |
+| Golden parity Python↔Rust | `host/golden/diag/` |
+| Client P1 replay/demo | open |
+| Client P2 TUI | open |
+| FX2 physical oracle | open ([SOFTWARE_SCK.md](SOFTWARE_SCK.md)) |
 
-## Planned Rust layout
-
-```text
-tools/usbasp-ng-diag/          # when Rust toolchain is available
-  Cargo.toml
-  src/
-    main.rs
-    cli.rs
-    protocol.rs                # L0 only
-    decoder.rs                 # L0 → L1
-    events.rs
-    state.rs                   # L2 reducer (P1+)
-    source/{hid,file,synthetic}.rs
-    formatter.rs
-    recorder.rs
-    tui.rs                     # P2
-  tests/golden_*
-```
-
-### P0 commands (Rust)
-
-1. `record capture.bin` — HID → raw frames (+ metadata header when schema frozen)  
-2. `decode capture.bin` — `.bin` → human events  
-3. `monitor` / `monitor --json` — live HID → decoder → stdout  
-
-### P1
-
-`replay` (`--speed`, `--step`), `demo --scenario …`, golden vector CI, fault-oriented formatting.
-
-### P2
-
-`monitor --watch` (ratatui), full `AppState` reducer, interactive replay.
-
-## Lab status (now)
-
-| Tool | Role |
-|------|------|
-| [`host/usbasp-hidraw-log.py`](../host/usbasp-hidraw-log.py) | Dumb recorder (host ns + 8 B) |
-| [`host/usbasp-trace.py`](../host/usbasp-trace.py) | Offline decode |
-| [`host/usbasp-diag-monitor.py`](../host/usbasp-diag-monitor.py) | Live EP2 → human lines |
-
-Firmware PR1 emits: `HELLO`, `SESSION_*`, `SCK_CONFIG`, `RESET_*`, `TRACE_OVERFLOW`.  
-Firmware PR2 will add: 4-frame `ENABLEPROG`, `FAULT_SNAPSHOT`.
-
-## Golden vectors
-
-Keep dual-decoder discipline:
-
-```text
-firmware/tests/core/test_diag_v1.py     # header constants ↔ C
-host/golden/diag/                       # raw snippets (lab)
-tools/usbasp-ng-diag/tests/             # Rust (when present)
-```
-
-Same bytes must decode identically in Python and Rust.
-
-## Roadmap vs firmware
-
-| Track | Owner |
-|-------|--------|
-| Firmware PR2 ENABLEPROG + snapshot | AVR |
-| Client P0 record/decode/monitor | Python now → Rust when cargo available |
-| Client P1 replay/demo/golden | after ENABLEPROG frames exist |
-| Client P2 TUI | last |
-| FX2 capture `-B 8` vs `-B 22` | physical oracle (unchanged) |
-
-Success criteria: replay/demo without hardware; one production binary; CI `--json`; bugs reproducible from `.bin`.
+Success criteria for RC: one production binary; bugs reproducible from `.bin`; firmware+client decode the same DIAG v1 bytes.

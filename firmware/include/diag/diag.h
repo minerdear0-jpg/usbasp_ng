@@ -17,6 +17,7 @@ typedef struct {
     uint8_t reset_driven; /* last RESET_ASSERT/RELEASE flag */
     uint8_t state;
     uint8_t result;
+    uint8_t sw_delay;     /* sck_sw_delay at fault (SW path half-period units) */
     uint8_t tx[4];
     uint8_t rx[4];
 } diag_snapshot_t;
@@ -38,12 +39,15 @@ void diag_emit_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail
 
 /*
  * Copies *s into persistent diag RAM immediately; never retains the pointer.
- * Then emits DIAG_FAULT_SNAPSHOT frames from that copy.
+ * Then emits 4 compact DIAG_FAULT_SNAPSHOT frames from that copy.
  */
 void diag_publish_snapshot(const diag_snapshot_t *s);
 
 /* Emit ENABLEPROG; on fail also publish an atomic fault snapshot. */
 void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail);
+
+/* After a failed enableprog exchange: check byte + sck_sw_delay (lossy). */
+void diag_note_enableprog_try(uint8_t path_flags, uint8_t check);
 
 /*
  * Consumer: fill out[8] with one frame (bytes 0..5) + pad/status.
@@ -60,6 +64,7 @@ uint8_t diag_poll_drain(uint8_t out[8]);
 #define diag_emit_enableprog(tx, rx, fail) ((void)0)
 #define diag_publish_snapshot(s) ((void)0)
 #define diag_report_enableprog(tx, rx, fail) ((void)0)
+#define diag_note_enableprog_try(path, check) ((void)0)
 #define diag_poll_drain(out) (0)
 
 #endif

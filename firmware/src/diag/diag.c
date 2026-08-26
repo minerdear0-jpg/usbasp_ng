@@ -102,23 +102,34 @@ void diag_emit_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail
 
 void diag_publish_snapshot(const diag_snapshot_t *s)
 {
-    /* C3: copy immediately; never retain caller pointer. */
+    /* C3: copy immediately; never retain caller pointer.
+     * Compact 4-frame wire. Full TX/RX also on ENABLEPROG. */
+    uint8_t end;
     memcpy(&diag_fault_snapshot, s, sizeof(diag_fault_snapshot));
 
+    /* F1: sck_req[7:4]|effective_sck[3:0], transport */
     (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_START,
-        diag_fault_snapshot.sck_req, diag_fault_snapshot.transport);
+        (uint8_t)((diag_fault_snapshot.sck_req << 4)
+                  | (diag_fault_snapshot.effective_sck & 0x0fu)),
+        diag_fault_snapshot.transport);
+    /* F2: RESET drive + FSM state */
     (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
         diag_fault_snapshot.reset_driven, diag_fault_snapshot.state);
-    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
-        diag_fault_snapshot.result, diag_fault_snapshot.effective_sck);
+    /* F3: TX[0..1] (TX[2..3] usually 00 00 for ENABLEPROG) */
     (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
         diag_fault_snapshot.tx[0], diag_fault_snapshot.tx[1]);
-    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
-        diag_fault_snapshot.tx[2], diag_fault_snapshot.tx[3]);
-    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_CONT,
-        diag_fault_snapshot.rx[0], diag_fault_snapshot.rx[1]);
-    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, DIAG_EP_END,
-        diag_fault_snapshot.rx[2], diag_fault_snapshot.rx[3]);
+    /* F4: RX[0] + sw_delay; result in END|OK/FAIL */
+    end = (uint8_t)(DIAG_EP_END
+        | (diag_fault_snapshot.result ? DIAG_EP_RESULT_FAIL
+                                      : DIAG_EP_RESULT_OK));
+    (void)diag_try_emit(DIAG_FAULT_SNAPSHOT, end,
+        diag_fault_snapshot.rx[0], diag_fault_snapshot.sw_delay);
+}
+
+void diag_note_enableprog_try(uint8_t path_flags, uint8_t check)
+{
+    /* a = echo/check, b = SW delay units (meaningful when transport=SW). */
+    (void)diag_try_emit(DIAG_ERROR, path_flags, check, sck_sw_delay);
 }
 
 void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail)
@@ -136,6 +147,7 @@ void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fa
         local.reset_driven = diag_reset_driven;
         local.state = prog_state;
         local.result = 1;
+        local.sw_delay = sck_sw_delay;
         memcpy(local.tx, tx, 4);
         memcpy(local.rx, rx, 4);
         diag_publish_snapshot(&local);

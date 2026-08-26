@@ -58,10 +58,23 @@ def decode_frame(data: bytes) -> str:
             extra = " RELEASE"
     elif typ == 5:
         extra = f" sck_id={a} transport={TRANSPORT.get(b, b)}"
-    elif typ in (6, 9):
+    elif typ == 6:
         extra = f" {_seq_flags(flags)} data={a:02x}{b:02x}"
+    elif typ == 9:
+        extra = f" {_seq_flags(flags)} data={a:02x}{b:02x}"
+        if flags & EP_START:
+            extra += (
+                f" sck_req={a >> 4} eff={a & 0x0f}"
+                f" transport={TRANSPORT.get(b, b)}"
+            )
+        elif flags & EP_END:
+            res = "FAIL" if flags & EP_FAIL else "OK" if flags & EP_OK else "?"
+            extra += f" rx0=0x{a:02x} sw_delay={b} {res}"
     elif typ == 10:
         extra = f" dropped={a}"
+    elif typ == 11:
+        path = "AVR" if flags & 0x01 else "AT89" if flags & 0x02 else "?"
+        extra = f" try={path} check=0x{a:02x} sw_delay={b}"
     return f"t={ts:5d} {name:16s} flags=0x{flags:02x} a={a:02x} b={b:02x}{extra}"
 
 
@@ -81,6 +94,32 @@ def reassemble_enableprog(frames: list[bytes]) -> str | None:
     return f"ENABLEPROG  TX {tx.hex(' ').upper()}  RX {rx.hex(' ').upper()}  {result}"
 
 
+def reassemble_fault_snapshot(frames: list[bytes]) -> str | None:
+    """Four compact FAULT_SNAPSHOT frames → one semantic line."""
+    if len(frames) != 4:
+        return None
+    parts = []
+    for fr in frames:
+        d = fr[:6] if len(fr) >= 6 else fr
+        parts.append((d[1], d[4], d[5]))
+    if not (parts[0][0] & EP_START and parts[3][0] & EP_END):
+        return None
+    packed, transport = parts[0][1], parts[0][2]
+    reset_driven, state = parts[1][1], parts[1][2]
+    tx0, tx1 = parts[2][1], parts[2][2]
+    rx0, sw_delay = parts[3][1], parts[3][2]
+    end_flags = parts[3][0]
+    result = (
+        "FAIL" if end_flags & EP_FAIL else "OK" if end_flags & EP_OK else "?"
+    )
+    tr = TRANSPORT.get(transport, transport)
+    return (
+        f"FAULT_SNAPSHOT  sck_req={packed >> 4} eff={packed & 0x0f}"
+        f" transport={tr} reset=0x{reset_driven:02x} state=0x{state:02x}"
+        f" tx={tx0:02x}{tx1:02x}.. rx0=0x{rx0:02x} sw_delay={sw_delay} {result}"
+    )
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print(f"Usage: {sys.argv[0]} capture.bin", file=sys.stderr)
@@ -92,19 +131,30 @@ def main() -> int:
         print(f"warning: trailing {len(blob) % rec} bytes", file=sys.stderr)
 
     ep_buf: list[bytes] = []
+    snap_buf: list[bytes] = []
     for i in range(0, len(blob) - rec + 1, rec):
         host_ns, = struct.unpack_from("<Q", blob, i)
         data = blob[i + 8 : i + 16]
         print(f"{host_ns}  {decode_frame(data)}")
         if data[0] == 6:
+            snap_buf.clear()
             ep_buf.append(data)
             if len(ep_buf) == 4:
                 line = reassemble_enableprog(ep_buf)
                 if line:
                     print(f"{'':20}>> {line}")
                 ep_buf.clear()
+        elif data[0] == 9:
+            ep_buf.clear()
+            snap_buf.append(data)
+            if len(snap_buf) == 4:
+                line = reassemble_fault_snapshot(snap_buf)
+                if line:
+                    print(f"{'':20}>> {line}")
+                snap_buf.clear()
         else:
             ep_buf.clear()
+            snap_buf.clear()
     return 0
 
 

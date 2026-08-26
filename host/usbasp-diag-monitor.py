@@ -99,6 +99,8 @@ def main() -> int:
         pass
     usb.util.claim_interface(dev, IF_MONITOR)
 
+    ep_buf: list[bytes] = []
+    snap_buf: list[bytes] = []
     try:
         while True:
             try:
@@ -115,6 +117,25 @@ def main() -> int:
             else:
                 wall = time.strftime("%H:%M:%S")
                 print(f"[{wall}] {_trace.decode_frame(data)}", flush=True)
+                if data[0] == 6:
+                    snap_buf.clear()
+                    ep_buf.append(data)
+                    if len(ep_buf) == 4:
+                        line = _trace.reassemble_enableprog(ep_buf)
+                        if line:
+                            print(f"         >> {line}", flush=True)
+                        ep_buf.clear()
+                elif data[0] == 9:
+                    ep_buf.clear()
+                    snap_buf.append(data)
+                    if len(snap_buf) == 4:
+                        line = _trace.reassemble_fault_snapshot(snap_buf)
+                        if line:
+                            print(f"         >> {line}", flush=True)
+                        snap_buf.clear()
+                else:
+                    ep_buf.clear()
+                    snap_buf.clear()
     except KeyboardInterrupt:
         if not args.json:
             print("\nstopped", flush=True)

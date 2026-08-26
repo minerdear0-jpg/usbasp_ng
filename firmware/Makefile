@@ -58,6 +58,7 @@ test:
 	python3 tests/core/test_prog_session.py
 	python3 tests/core/test_diag_v1.py
 	python3 ../host/test_usbaspctl_profile.py
+	python3 ../host/golden/diag/test_decode_parity.py
 
 flash: hex
 	avrdude -c $(ISP) -p $(MCU) -U flash:w:$(BUILDDIR)/$(HEX_NAME).hex:i

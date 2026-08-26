@@ -10,7 +10,8 @@
  *   no ISR producer in P0
  */
 
-#define DIAG_RING_SIZE 16
+/* Power of two. 32 absorbs ENABLEPROG+snapshot after last-try notes. */
+#define DIAG_RING_SIZE 32
 
 typedef struct {
     uint8_t type;

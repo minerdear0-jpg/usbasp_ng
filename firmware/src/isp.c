@@ -145,6 +145,7 @@ uchar ispEnterProgrammingMode(void)
 
     while (sck >= USBASP_ISP_SCK_0_5) {
         ispSetSCKOption(sck);
+        diag_emit_sck_config();
         uchar (*spiTx)(uchar) = isp_bus.transfer;
         board_led_isp_activity();
         isp_bus.enable();
@@ -167,6 +168,9 @@ uchar ispEnterProgrammingMode(void)
                 diag_report_enableprog(tx, rx, 0);
                 return 0;
             }
+            /* Last try only — keeps ring room for ENABLEPROG+snapshot. */
+            if (tries == 1)
+                diag_note_enableprog_try(DIAG_ERR_EP_AVR, check);
 
             /* AT89S51/52 programming-enable echo */
             isp_out_set_bit(ISP_RST);
@@ -180,6 +184,8 @@ uchar ispEnterProgrammingMode(void)
                 diag_report_enableprog(tx, rx, 0);
                 return 0;
             }
+            if (tries == 1)
+                diag_note_enableprog_try(DIAG_ERR_EP_AT89, check);
         } while (--tries);
 
         isp_bus.disable();
