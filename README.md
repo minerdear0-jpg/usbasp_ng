@@ -39,6 +39,29 @@ mega8/88 HIDUART hex from beta.1 remains buildable and is **frozen** (no further
 
 While `avrdude` programs a target, firmware emits a semantic ISP timeline on HID EP2: SESSION, SCK, RESET, ENABLEPROG, MEMOP, TRACE, … Host `diagplane` watches, records, correlates.
 
+### Lab recording — USBasp2 beta.1
+
+Live cage (YEL0 → ATmega8): signature / fuses / EEPROM / flash reads, then `diagplane watch` (MEMOP, ENABLEPROG fail / TARGET SILENT, dual-column). Not a synthetic demo.
+
+| | |
+|---|---|
+| Title | USBasp2 beta.1 — diagplane watch + cage flash/eeprom/fuses read |
+| Terminal | 120×36 |
+| In tree | [`docs/media/demo-diagplane-beta1.cast`](docs/media/demo-diagplane-beta1.cast) |
+| Release | [`demo-diagplane-beta1.cast`](https://github.com/minerdear0-jpg/usbasp_ng/releases/download/usbasp2-beta.1/demo-diagplane-beta1.cast) |
+
+```bash
+asciinema play docs/media/demo-diagplane-beta1.cast
+# or:
+curl -fsSL -o /tmp/demo-diagplane-beta1.cast \
+  https://github.com/minerdear0-jpg/usbasp_ng/releases/download/usbasp2-beta.1/demo-diagplane-beta1.cast
+asciinema play /tmp/demo-diagplane-beta1.cast
+```
+
+### Video overview
+
+Earlier overview clip (same instrument idea; prefer the beta.1 cast for the current TUI):
+
 <video
   src="https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane.mp4"
   poster="https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane-poster.webp"
@@ -52,7 +75,6 @@ While `avrdude` programs a target, firmware emits a semantic ISP timeline on HID
 [MP4](https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane.mp4)
 · [WebM](https://github.com/minerdear0-jpg/usbasp_ng/releases/download/demo-assets/demo-diagplane.webm)
 · [`docs/media/`](docs/media/)
-· beta.1 TUI + cage flash/eeprom/fuses reads: [`demo-diagplane-beta1.cast`](docs/media/demo-diagplane-beta1.cast) (`asciinema play`)
 
 ### Linux (USBasp2)
 
