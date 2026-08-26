@@ -20,15 +20,15 @@ firmware
 |---|---|---|
 | USB shape | Vendor class `0xFF`, EP0 only, no serial; BOS + MS OS 2.0 → WinUSB | Composite: WinUSB vendor IF0 + HID UART (interrupt IN/OUT) |
 | Host programmer | Stock avrdude `-c usbasp` (libusb / WinUSB). Arduino IDE programmer **USBasp** | Same FUNC 1–16 / 127. Windows MSVC avrdude may not open composite — MinGW/libusb or use classic |
-| Extra function | Programmer only | HID UART on the MCU USART (debug console without a second USB-serial dongle); 4-char iSerial in EEPROM |
+| Extra function | Programmer only | HID↔USART on **PD0/PD1** (TQFP 30–31); 4-char iSerial in EEPROM. Stock clones do **not** bring those pins to the ISP header — target console needs flying wires or a custom PCB ([KNOWN_ISSUES](docs/KNOWN_ISSUES.md)) |
 | Size (ATmega8) | ~5358 B | ~6816 B |
-| Role | Default image: Windows 10/11 x64 without Zadig; Linux/macOS libusb | UART console on the same stick |
+| Role | Default image: Windows 10/11 x64 without Zadig; Linux/macOS libusb | Same stick ISP + optional USART bridge when pins are accessible |
 
 **Windows / Arduino:** flash **classic**. WinUSB + full ISP burn recorded in [`docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md`](docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md). Matrix: [`docs/WINDOWS.md`](docs/WINDOWS.md). Arduino notes: [`docs/ARDUINO.md`](docs/ARDUINO.md). Open: software SCK sweep [`docs/acceptance/ACCEPTANCE-SCK-SWEEP-001.md`](docs/acceptance/ACCEPTANCE-SCK-SWEEP-001.md). ARM64 is best-effort.
 
 USBHID adds HID UART; it is not required for Arduino. Classic must not grow HID, interrupt endpoints, or EEPROM serial. BOS/MS OS 2.0 on classic is host-driver metadata only ([`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)).
 
-Use classic as the drop-in programmer. Use USBHID when you also want the on-stick UART.
+Use classic as the drop-in programmer. Use USBHID when you need HID UART / iSerial and can reach PD0/PD1. Release gate after RC1 protocol work: software SCK (~32 kHz / `-B 22`).
 
 ## Build
 
@@ -108,7 +108,7 @@ See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md), [docs/KNOWN_ISSUES.md](docs/
 - GETCAPABILITIES = TPI + 3 MHz bit, **not** dioannidis clock bytes
 - Default SCK 1.5 MHz with auto-slowdown (same SETISPSCK wire)
 
-**Known issues:** [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Arduino notes; software SCK wait-for-capture; TPI off). Protocol/FSM RC1 track: [docs/acceptance/RC1-PROTOCOL-FSM.md](docs/acceptance/RC1-PROTOCOL-FSM.md).
+**Known issues:** [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (Arduino notes; SW SCK wait-for-capture = release gate; HIDUART USART not on clone ISP header; TPI off). Protocol/FSM RC1: [docs/acceptance/RC1-PROTOCOL-FSM.md](docs/acceptance/RC1-PROTOCOL-FSM.md).
 
 Hex for ATmega8 clone and HIDUART: [Releases](https://github.com/minerdear0-jpg/usbasp_ng/releases). Packaging rules: [`docs/RELEASE.md`](docs/RELEASE.md) (`./scripts/pack-release.sh VERSION --hex`).
 

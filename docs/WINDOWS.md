@@ -57,6 +57,8 @@ USBasp is USB, not a COM port. AVRDUDESS **115200** is irrelevant; use `-B` / SC
 
 Composite: vendor IF0 + HID. MSVC avrdude/libwinusb often cannot open it. Prefer classic for programming on Windows, or MinGW/libusb avrdude. HID UART uses the built-in HID class driver (no Zadig).
 
+Cheap clone PCBs do not route USART PD0/PD1 to the ISP header — HIDUART is not a ribbon-cable target console. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+
 ## ARM64
 
 Best-effort. avrdude documents Windows ARM64 USB limits. Not a release gate.

@@ -102,7 +102,7 @@ Measured on ATmega8 clones (no-dot programmer, yellow-dot target / USB DUT):
 - GETCAPABILITIES `01 00 00 01`
 - classic L0 USB: one interface, EP0 only; BOS + MS OS 2.0 WinUSB (**device-level** set `0x9E`); `bcdDevice` 2.03. HIDUART is USB 2.01 composite (not L0), same VID/PID, `bcdDevice` 2.01
 - **Win11 x64 2026-08-26:** yellow classic, libusbK uninstalled → WinUSB immediately; AVRDUDESS latest `-c usbasp-clone` read flash+EEPROM of the other mega8. See [WINDOWS.md](WINDOWS.md).
-- HIDUART yellow-dot: iSerial `YEL0`; ISP read of no-dot through composite (flash 4018 B, EEPROM 512 B `0xFF`, `-B 8`/`0.5`/`0.25`); UART loopback PD0–PD1
+- HIDUART yellow-dot: iSerial `YEL0`; ISP read of no-dot through composite (flash 4018 B, EEPROM 512 B `0xFF`, `-B 8`/`0.5`/`0.25`); UART loopback on MCU **PD0–PD1** (TQFP 30–31 — not on the ISP header of stock clones)
 
 ## Capability bytes (GETCAPABILITIES)
 

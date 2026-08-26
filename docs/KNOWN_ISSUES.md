@@ -30,6 +30,18 @@ Best-effort only. avrdude documents ARM64 USB limits.
 
 Composite device: prefer MinGW/libusb avrdude, or use **classic** for Arduino / WinUSB-only hosts.
 
+## HIDUART USART on cheap clones (hardware)
+
+**Status:** product limit of the common PCB, not a firmware bug.
+
+Typical USBasp clone breakouts are **ISP 6-pin only** (MOSI/MISO/SCK/RST/VCC/GND). MCU USART **PD0/PD1** (TQFP 30–31) are **not** on that header. So:
+
+- HIDUART is a **USB↔USART bridge on the stick MCU pins**, not “serial over the ISP ribbon”.
+- Wiring a target’s `printf` UART to the stick needs flying leads to the TQFP (or a custom board). Loopback tests in this repo do the same (PD0–PD1 on the package).
+- Firmware may still use HIDUART for iSerial, Linux/macOS ISP, and optional stick-side diagnostics; it does **not** turn a stock clone into a plug-and-play target console.
+
+Release default remains **classic**. SW SCK (`-B 22` / ~32 kHz ENABLEPROG) stays the open functional gate: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
+
 ## USB execution model
 
 Documented invariant (INT0 vs `usbPoll`): [USB_EXECUTION.md](USB_EXECUTION.md).
