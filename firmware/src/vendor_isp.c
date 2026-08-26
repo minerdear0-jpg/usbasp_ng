@@ -97,8 +97,11 @@ usbMsgLen_t usbasp_vendor_setup(uchar data[8])
         prog_pagesize = data[4];
         prog_blockflags = data[5] & 0x0F;
         prog_pagesize += (uint16_t)(((uint16_t)data[5] & 0xF0) << 4);
-        if (prog_blockflags & PROG_BLOCKFLAG_FIRST)
+        if (prog_blockflags & PROG_BLOCKFLAG_FIRST) {
             prog_pagecounter = prog_pagesize;
+            diag_memop_begin(DIAG_MEM_FLASH,
+                (uchar)(prog_pagesize > 255u ? 255u : prog_pagesize));
+        }
         len = prog_begin_transfer(PROG_STATE_WRITEFLASH, usbasp_read_le16(&data[6]));
         break;
 
@@ -273,6 +276,7 @@ uchar usbasp_isp_write(uchar *data, uchar len)
                 prog_pagecounter--;
                 if (prog_pagecounter == 0) {
                     ispFlushPage(prog_address, data[i]);
+                    diag_memop_page();
                     prog_pagecounter = prog_pagesize;
                 }
             }
@@ -290,7 +294,11 @@ uchar usbasp_isp_write(uchar *data, uchar len)
             if ((prog_blockflags & PROG_BLOCKFLAG_LAST)
                 && (prog_pagecounter != prog_pagesize)) {
                 ispFlushPage(prog_address, data[i]);
+                diag_memop_page();
             }
+            /* Close if LAST, or if no paged flushes happened (byte mode). */
+            if ((prog_blockflags & PROG_BLOCKFLAG_LAST) || prog_pagesize == 0)
+                diag_memop_end(DIAG_MEM_FLASH);
             retVal = 1;
             prog_address++;
             break; /* ignore remainder of this USB OUT packet */

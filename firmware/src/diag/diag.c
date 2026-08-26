@@ -26,6 +26,11 @@ static uint8_t diag_tick_hi;
 static uint8_t diag_tick_last;
 static uint8_t diag_reset_driven;
 static diag_snapshot_t diag_fault_snapshot;
+static uint8_t diag_sck_seen;
+static uint8_t diag_sck_last;
+static uint8_t diag_tr_last;
+static uint8_t diag_mem_pages; /* saturating page-flush count for MEMOP END */
+static uint8_t diag_mem_open;
 
 extern uchar requested_sck;
 extern uchar effective_sck;
@@ -86,7 +91,14 @@ bool diag_try_emit(uint8_t type, uint8_t flags, uint8_t a, uint8_t b)
 
 void diag_emit_sck_config(void)
 {
-    (void)diag_try_emit(DIAG_SCK_CONFIG, 0, effective_sck, diag_transport());
+    uint8_t tr = diag_transport();
+
+    if (diag_sck_seen && effective_sck == diag_sck_last && tr == diag_tr_last)
+        return;
+    diag_sck_seen = 1;
+    diag_sck_last = effective_sck;
+    diag_tr_last = tr;
+    (void)diag_try_emit(DIAG_SCK_CONFIG, 0, effective_sck, tr);
 }
 
 void diag_emit_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail)
@@ -128,8 +140,41 @@ void diag_publish_snapshot(const diag_snapshot_t *s)
 
 void diag_note_enableprog_try(uint8_t path_flags, uint8_t check)
 {
-    /* a = echo/check, b = SW delay units (meaningful when transport=SW). */
+    /* SW forensics only — HW last-try notes fill the ring before PASS. */
+    if (diag_transport() != DIAG_TRANSPORT_SW)
+        return;
     (void)diag_try_emit(DIAG_ERROR, path_flags, check, sck_sw_delay);
+}
+
+void diag_memop_begin(uint8_t mem, uint8_t pagesize)
+{
+    /* avrdude often sets FIRST on every page; one START per open write. */
+    if (diag_mem_open)
+        return;
+    diag_mem_open = 1;
+    diag_mem_pages = 0;
+    (void)diag_try_emit(DIAG_MEMOP, DIAG_EP_START, mem, pagesize);
+}
+
+void diag_memop_page(void)
+{
+    if (diag_mem_pages < 255)
+        diag_mem_pages++;
+    /* Emit per flush — LAST flag is unreliable across avrdude versions. */
+    if (diag_mem_open) {
+        (void)diag_try_emit(DIAG_MEMOP,
+            (uint8_t)(DIAG_EP_END | DIAG_EP_RESULT_OK),
+            DIAG_MEM_FLASH, diag_mem_pages);
+    }
+}
+
+void diag_memop_end(uint8_t mem)
+{
+    if (!diag_mem_open)
+        return;
+    diag_mem_open = 0;
+    (void)diag_try_emit(DIAG_MEMOP,
+        (uint8_t)(DIAG_EP_END | DIAG_EP_RESULT_OK), mem, diag_mem_pages);
 }
 
 void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail)
@@ -156,6 +201,7 @@ void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fa
 
 void diag_on_connect(void)
 {
+    diag_sck_seen = 0; /* force SCK_CONFIG once per session */
     (void)diag_try_emit(
         DIAG_HELLO,
         (uint8_t)(DIAG_CAP_SESSION | DIAG_CAP_TRANSACTION | DIAG_CAP_SNAPSHOT),
@@ -169,6 +215,7 @@ void diag_on_connect(void)
 
 void diag_on_disconnect(void)
 {
+    diag_memop_end(DIAG_MEM_FLASH); /* close open write if LAST was missing */
     diag_reset_driven = DIAG_RESET_RELEASE;
     (void)diag_try_emit(DIAG_RESET, DIAG_RESET_RELEASE, 0, 0);
     (void)diag_try_emit(DIAG_SESSION_END, 0, 0, 0);

@@ -46,8 +46,14 @@ void diag_publish_snapshot(const diag_snapshot_t *s);
 /* Emit ENABLEPROG; on fail also publish an atomic fault snapshot. */
 void diag_report_enableprog(const uint8_t tx[4], const uint8_t rx[4], uint8_t fail);
 
-/* After a failed enableprog exchange: check byte + sck_sw_delay (lossy). */
+/* After a failed enableprog exchange: check byte + sck_sw_delay (lossy).
+ * SW path only — HW notes are noise before autoslow/PASS. */
 void diag_note_enableprog_try(uint8_t path_flags, uint8_t check);
+
+/* WRITEFLASH (and friends): START on FIRST, page++ on flush, END on LAST. */
+void diag_memop_begin(uint8_t mem, uint8_t pagesize);
+void diag_memop_page(void);
+void diag_memop_end(uint8_t mem);
 
 /*
  * Consumer: fill out[8] with one frame (bytes 0..5) + pad/status.
@@ -65,6 +71,9 @@ uint8_t diag_poll_drain(uint8_t out[8]);
 #define diag_publish_snapshot(s) ((void)0)
 #define diag_report_enableprog(tx, rx, fail) ((void)0)
 #define diag_note_enableprog_try(path, check) ((void)0)
+#define diag_memop_begin(mem, pagesize) ((void)0)
+#define diag_memop_page() ((void)0)
+#define diag_memop_end(mem) ((void)0)
 #define diag_poll_drain(out) (0)
 
 #endif

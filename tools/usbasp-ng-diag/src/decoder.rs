@@ -11,6 +11,7 @@ pub fn type_name(ty: u8) -> &'static str {
         FAULT_SNAPSHOT => "FAULT_SNAPSHOT",
         TRACE_OVERFLOW => "TRACE_OVERFLOW",
         ERROR => "ERROR",
+        MEMOP => "MEMOP",
         _ => "UNKNOWN",
     }
 }
@@ -72,6 +73,21 @@ pub fn format_frame(f: &DiagFrame) -> String {
                 "?"
             };
             extra = format!(" try={path} check=0x{:02x} sw_delay={}", f.a, f.b);
+        }
+        MEMOP => {
+            let mem = match f.a {
+                MEM_FLASH => "FLASH",
+                MEM_EEPROM => "EEPROM",
+                MEM_READFLASH => "READFLASH",
+                _ => "?",
+            };
+            if f.flags & EP_START != 0 {
+                extra = format!(" START {mem} pagesize={}", f.b);
+            } else if f.flags & EP_END != 0 {
+                extra = format!(" END {mem} pages={}", f.b);
+            } else {
+                extra = format!(" {} {mem} b={}", seq_flags(f.flags), f.b);
+            }
         }
         _ => {}
     }

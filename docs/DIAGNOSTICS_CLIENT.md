@@ -39,6 +39,19 @@ cd tools/usbasp-ng-diag && cargo build --release
 ./target/release/usbasp-ng-diag decode capture.bin
 ```
 
+### lnav analysis (from `.bin`)
+
+Keep the binary capture as source of truth. Convert for interactive viewing:
+
+```bash
+python3 host/usbasp-trace.py capture.bin --jsonl > capture.jsonl
+lnav -i tools/usbasp-ng-diag/lnav/usbasp_ng_diag.json   # once
+lnav capture.jsonl
+# :filter-in ENABLEPROG   :filter-in OVERFLOW   :goto error
+```
+
+`--semantic-only` emits only reassembled ENABLEPROG / FAULT_SNAPSHOT summaries.
+
 ## Layers L0–L3
 
 ```text
@@ -54,7 +67,8 @@ L3 Presentation  stdout / JSON / TUI
 |------|--------|
 | Firmware PR1 lifecycle | done |
 | Firmware PR2 ENABLEPROG + snapshot | done (4-frame compact snapshot) |
-| Firmware PR3 forensics | done (last-try `DIAG_ERROR`, SCK_CONFIG/step, ring 32) |
+| Firmware PR3 forensics | done (last-try `DIAG_ERROR` SW-only, SCK_CONFIG/step, ring 32) |
+| MEMOP flash markers | done (`START`/`END` + page count; deduped SCK) |
 | Client P0 record/decode/monitor | Python + Rust |
 | Golden parity Python↔Rust | `host/golden/diag/` |
 | Client P1 replay/demo | open |

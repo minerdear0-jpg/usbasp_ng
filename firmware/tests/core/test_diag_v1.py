@@ -26,6 +26,8 @@ def main() -> int:
     assert d["DIAG_HELLO"] == 1
     assert d["DIAG_ENABLEPROG"] == 6
     assert d["DIAG_FAULT_SNAPSHOT"] == 9
+    assert d["DIAG_MEMOP"] == 12
+    assert d["DIAG_MEM_FLASH"] == 0
     assert d["DIAG_EP_START"] == 0x01
     assert d["DIAG_EP_CONT"] == 0x02
     assert d["DIAG_EP_END"] == 0x04
@@ -47,6 +49,9 @@ def main() -> int:
     assert "diag_note_enableprog_try" in diag_c
     assert "DIAG_ERR_EP_AVR" in (FW / "include" / "diag" / "diag_events.h").read_text()
     assert "DIAG_RING_SIZE 32" in (FW / "include" / "diag" / "diag_ring.h").read_text()
+    assert "diag_memop_begin" in diag_c
+    assert "diag_sck_seen" in diag_c
+    assert "DIAG_TRANSPORT_SW" in diag_c
 
     isp = ISP.read_text()
     assert "diag_report_enableprog" in isp
@@ -58,6 +63,9 @@ def main() -> int:
 
     vendor = VENDOR.read_text()
     assert "diag_on_connect();" in vendor
+    assert "diag_memop_begin" in vendor
+    assert "diag_memop_end" in vendor
+    assert "diag_memop_page" in vendor
 
     print("ok  diag_v1_golden")
     return 0

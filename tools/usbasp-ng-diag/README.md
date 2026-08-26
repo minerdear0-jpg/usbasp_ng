@@ -11,3 +11,11 @@ cargo build --release
 ```
 
 Contracts: [`docs/DIAGNOSTICS.md`](../../docs/DIAGNOSTICS.md), client notes: [`docs/DIAGNOSTICS_CLIENT.md`](../../docs/DIAGNOSTICS_CLIENT.md).
+
+## lnav
+
+```bash
+python3 ../../host/usbasp-trace.py capture.bin --jsonl > capture.jsonl
+lnav -i lnav/usbasp_ng_diag.json
+lnav capture.jsonl
+```

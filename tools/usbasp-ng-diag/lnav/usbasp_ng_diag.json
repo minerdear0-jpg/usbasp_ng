@@ -1,0 +1,53 @@
+{
+  "$schema": "https://lnav.org/schemas/format-v1.schema.json",
+  "usbasp_ng_diag": {
+    "title": "USBasp NG Diagnostics Plane",
+    "description": "JSONL from: python3 host/usbasp-trace.py capture.bin --jsonl",
+    "url": "https://github.com/minerdear0-jpg/usbasp_ng",
+    "json": true,
+    "file-pattern": ".*\\.(jsonl|diag\\.jsonl)$",
+    "timestamp-field": "ts",
+    "level-field": "level",
+    "body-field": "msg",
+    "level": {
+      "error": "error",
+      "warning": "warning",
+      "info": "info",
+      "debug": "debug"
+    },
+    "value": {
+      "kind": { "kind": "string", "identifier": true },
+      "type": { "kind": "string", "identifier": true },
+      "transport": { "kind": "string", "identifier": true },
+      "result": { "kind": "string", "identifier": true },
+      "tick": { "kind": "integer" },
+      "host_ns": { "kind": "integer" },
+      "sck_id": { "kind": "integer" },
+      "sw_delay": { "kind": "integer" },
+      "dropped": { "kind": "integer" }
+    },
+    "line-format": [
+      { "field": "__timestamp__" },
+      " ",
+      { "field": "/level", "text-transform": "uppercase", "min-width": 7 },
+      " ",
+      { "field": "/kind", "default-value": "frame", "min-width": 14 },
+      " ",
+      { "field": "/msg" }
+    ],
+    "highlights": {
+      "enableprog_fail": {
+        "pattern": "ENABLEPROG.*FAIL",
+        "color": "red"
+      },
+      "overflow": {
+        "pattern": "TRACE_OVERFLOW|dropped=",
+        "color": "yellow"
+      },
+      "pass": {
+        "pattern": "ENABLEPROG.*PASS|RESULT_OK|\\bPASS\\b|\\bOK\\b",
+        "color": "green"
+      }
+    }
+  }
+}

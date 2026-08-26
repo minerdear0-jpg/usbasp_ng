@@ -22,7 +22,7 @@ firmware
 | Host programmer | Stock avrdude `-c usbasp` (libusb / WinUSB). Arduino IDE programmer **USBasp** | Same FUNC 1–16 / 127. Windows MSVC avrdude may not open composite — MinGW/libusb or use classic |
 | **Primary goal** | Reliable everyday ISP (zero telemetry cost) | **Diagnostics Plane** — binary programmer telemetry (SESSION, SCK HW/SW, RESET drive intent, ENABLEPROG TX/RX, fault snapshots) on EP2 without changing the USBasp protocol |
 | Secondary | — | iSerial in EEPROM; optional HID↔USART on PD0/PD1 (TQFP 30–31 — **not** on the stock ISP header; [KNOWN_ISSUES](docs/KNOWN_ISSUES.md)) |
-| Size (ATmega8) | ~5610 B | ~7918 B (`USBASP_HAS_DIAG=1`, ring 32) |
+| Size (ATmega8) | ~5610 B | ~8040 B (`USBASP_HAS_DIAG=1`, MEMOP markers) |
 | Role | **Default release** for Windows 10/11 x64 + Arduino | Linux/macOS ISP + **instrumented** stick for SW-SCK / ENABLEPROG investigation |
 
 **Windows / Arduino:** flash **classic**. WinUSB + full ISP burn: [`docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md`](docs/acceptance/ACCEPTANCE-WIN11-USBASP-001.md). Matrix: [`docs/WINDOWS.md`](docs/WINDOWS.md). Arduino: [`docs/ARDUINO.md`](docs/ARDUINO.md). Open gate: software SCK on some targets ([`ACCEPTANCE-SCK-SWEEP-001`](docs/acceptance/ACCEPTANCE-SCK-SWEEP-001.md)).

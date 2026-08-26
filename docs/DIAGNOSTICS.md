@@ -154,6 +154,17 @@ Host reassembles one semantic transaction. Optional later `DIAG_SPI_BYTE` TRACE 
 
 Capture TX/RX **inside** `ispEnterProgrammingMode` without calling `diag_try_emit` from `ispTransmit_sw`. Emit only after the attempt (and snapshot on fail).
 
+### `DIAG_MEMOP` (load markers)
+
+Compact flash/eeprom block markers — **not** per-byte TRACE.
+
+| flags | `a` | `b` |
+|-------|-----|-----|
+| `START` | mem (`FLASH=0`, `EEPROM=1`, `READFLASH=2`) | `pagesize` (sat 255) |
+| `END \| OK` | mem | pages flushed so far (sat 255) |
+
+Emit: first `FIRST` → one START; each `ispFlushPage` → END with running page count (avrdude often omits `LAST`); DISCONNECT closes an open write. Deduped `SCK_CONFIG`; HW skips `DIAG_ERROR` try-notes (SW keeps them).
+
 ### `DIAG_FAULT_SNAPSHOT` fields (P0)
 
 RAM copy (`diag_snapshot_t`) still holds full TX/RX + `sw_delay`. Wire emit is **4 frames** (compact):

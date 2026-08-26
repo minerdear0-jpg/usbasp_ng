@@ -13,6 +13,7 @@ pub const ENABLEPROG: u8 = 6;
 pub const FAULT_SNAPSHOT: u8 = 9;
 pub const TRACE_OVERFLOW: u8 = 10;
 pub const ERROR: u8 = 11;
+pub const MEMOP: u8 = 12;
 
 pub const RESET_ASSERT: u8 = 0x01;
 pub const RESET_RELEASE: u8 = 0x02;
@@ -28,6 +29,10 @@ pub const ERR_EP_AT89: u8 = 0x02;
 
 pub const TRANSPORT_HW: u8 = 0;
 pub const TRANSPORT_SW: u8 = 1;
+
+pub const MEM_FLASH: u8 = 0;
+pub const MEM_EEPROM: u8 = 1;
+pub const MEM_READFLASH: u8 = 2;
 
 pub const VID: u16 = 0x16c0;
 pub const PID: u16 = 0x05dc;
