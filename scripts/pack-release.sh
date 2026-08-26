@@ -53,7 +53,9 @@ git archive --format=zip --prefix="${PREFIX}/" -o "$SRC_ZIP" HEAD
 echo "Wrote $SRC_ZIP"
 
 # Fail hard if the archive looks like a developer dump.
-BAD=$(unzip -Z1 "$SRC_ZIP" | grep -E '(^|/)\.git/|/firmware/build/|/__pycache__/|\.pyc$|\.o$|\.obj$|\.elf$|\.hex$|\.eep$|\.map$' || true)
+# Allow the vendored Optiboot image under bench/.../bootloader/ (tracked on purpose).
+BAD=$(unzip -Z1 "$SRC_ZIP" | grep -E '(^|/)\.git/|/firmware/build/|/__pycache__/|\.pyc$|\.o$|\.obj$|\.elf$|\.hex$|\.eep$|\.map$' \
+  | grep -vE '/bench/mega8-nano-loop/bootloader/optiboot_flash_.*\.hex$' || true)
 if [[ -n "$BAD" ]]; then
   echo "ERROR: source zip contains forbidden paths:" >&2
   echo "$BAD" >&2
