@@ -27,15 +27,15 @@ See [USBASP2.md](USBASP2.md) and [DIAGNOSTICS_PROBE.md](DIAGNOSTICS_PROBE.md).
 | ISP_PINS Hi-Z | after disconnect |
 | Ring | `TRACE_SLOTS=128`, live overflow=no @ pages=89 |
 | Dual-truth | oracle + mangle/fault; `diagplane correlate` |
-| Host | `diagplane.bin` |
+| Host | `diagplane.bin` — watch with diagnosis/phases/instruments + dual-column when `--uart` |
 
 ## Beta.1 OUT
 
 - FX2 / PHYSICAL_CAPTURE
-- Dual-column watch TUI (ui@ → **beta.2** polish; not a tag gate)
 - Windows HIDUART ISP programming
 - TPI advertise
 - Optiboot + oracle canary on the same hex / same flash ownership of `0x1E00`
+- mega8/88 HIDUART full lab grains (compact plane only; use **USBasp2 328P** for trigger / MEMOP PAGE / ISP_PINS)
 
 ## Smoke checklist
 
@@ -52,7 +52,7 @@ avrdude -c usbasp -P usb:YEL0 -p m8 -B 8 -U signature:r:-:h
 ## Known limits
 
 - Dual-truth is a **lab method** (oracle UART + EP2), not a Windows product claim.
-- Dual-column timeline UI deferred to beta.2.
+- Dual-column watch is in beta.1 (`watch --uart` / `--diag`+`--uart`); further polish may follow.
 - No bcdDevice bump beyond HIDUART 2.01; no DIAG v2 wire in this tag.
 
 ## Release assets
