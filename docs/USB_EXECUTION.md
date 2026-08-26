@@ -24,7 +24,7 @@ ISP / TPI session code
 2. **ISP may be preempted by INT0.** PORTB RMW (MOSI / SCK / RST) uses `cli` / restore `SREG` against V-USB `in`/`ori`/`out` on the same port.
 3. **Software SCK delays tolerate ISR stretch.** Half-period is a **minimum**; INT0 must not shorten a phase. See L2.5 in [COMPATIBILITY.md](COMPATIBILITY.md).
 4. **LED and USB bookkeeping stay out of `ispTransmit_sw` / `ispTransmit_hw`.** Kick activity at the FUNC / operation level (`vendor_isp`, ENABLEPROG), not per SPI byte on the timing path.
-5. **Diagnostics (HIDUART only, when present)** may only `diag_try_emit()` into a RAM ring from ISP; HID drain runs from poll/main. Never block ISP on telemetry. Design: [DIAGNOSTICS.md](DIAGNOSTICS.md).
+5. **Diagnostics (when `USBASP_HAS_DIAG`)** may only `diag_try_emit()` into a SPSC RAM ring from ISP/foreground; HID EP2 drain runs from `hiduart_poll`. Never block ISP on telemetry. Overflow is deferred (flag + count), not pushed on a full ring. Design: [DIAGNOSTICS.md](DIAGNOSTICS.md).
 
 ## Where it lives in code
 

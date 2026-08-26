@@ -4,251 +4,225 @@ Architectural separation for HIDUART / research builds. **Not implemented yet.**
 
 Companion physical truth for SW SCK remains an FX2 / Nano capture: [SOFTWARE_SCK.md](SOFTWARE_SCK.md), [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md). Telemetry is **firmware truth**; the two must be comparable, not substitutes.
 
-Sweet spot to keep:
+Sweet spot:
 
 ```text
 classic     → zero diagnostics cost
-hiduart     → semantic diagnostics + fault snapshots + optional TRACE
+hiduart*    → USBASP_HAS_DIAG → semantic + snapshots + optional TRACE
 host        → dumb recorder + smart decoder
 physical    → FX2/Nano = independent truth
 ```
 
+\* Gate is **`USBASP_HAS_DIAG`**, not `profile == hiduart`. Profile selects features; later `hiduart-debug` / `hiduart-trace` can flip the same flag.
+
 Pipeline (iron rule):
 
 ```text
-ISP timing → event → RAM → USB when convenient
+ISP timing → diag_try_emit() → RAM ring → hiduart_poll() → EP2 IN
 ```
 
-Never: `ISP timing → USB → pray`.
+Never: `ISP timing → USB → pray`. EP1 UART bridge untouched. FUNC 1–16 / 127 unchanged. Telemetry is **not** part of the USBasp protocol.
 
 ## Three planes
 
-```text
-                         USB
-                          │
-              ┌───────────┴───────────┐
-              │                       │
-        V-USB EP0                HID interrupt EP
-              │                       │
-       USBasp Protocol Plane    Diagnostics Transport
-              │                       │
-              ▼                       ▼
-       ISP Protocol Engine      ring → HID task
-              │                       ▲
-              ▼                       │
-       ISP Data Plane (HW/SW SCK) ────┘  diag_try_emit() only
-              │
-              ▼
-          Target AVR
-```
-
 | Plane | Role |
 |-------|------|
-| **Protocol** | FUNC CONNECT…GETCAPABILITIES on EP0 (unchanged) |
-| **ISP Data** | Bitbang / HW SPI / RST / MOSI / MISO timing |
-| **Diagnostics** | Compact binary events → RAM ring → HID drain |
+| **Protocol** | FUNC on EP0 (unchanged) |
+| **ISP Data** | HW/SW SCK, RST drive, MOSI/MISO |
+| **Diagnostics** | Binary frames → SPSC ring → EP2 drain |
 
-Target UART bridge (`printf` of the DUT) is a **separate product mode** and a board capability (`BOARD_HAS_TARGET_UART`). Stock clones do not route PD0/PD1 to the ISP header — see [KNOWN_ISSUES.md](KNOWN_ISSUES.md). Do not mix that with this plane.
+Target UART bridge is a separate board capability (`BOARD_HAS_TARGET_UART`). Stock clones: [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
-## Architectural invariants
+## Contracts (freeze before PR1)
 
-### 1. Emit is lossy by design
-
-API name must remind callers that events may vanish and ISP must not care:
+### C1 — SPSC ownership (P0)
 
 ```c
-/* Returns false if dropped. Callers MUST NOT retry or wait. */
-bool diag_try_emit(uint8_t type, uint8_t flags, uint8_t a, uint8_t b);
+/*
+ * SPSC ring:
+ *   producer = ISP / foreground vendor_isp context only
+ *   consumer = hiduart_poll() / diag_poll_drain()
+ *   no ISR producer in P0
+ */
+volatile uint8_t head, tail;
+diag_frame_t frames[16];
 ```
 
-Forbidden:
+Cheap single-producer/single-consumer. No locks. Document in `diag_ring.h`.
 
-```c
-if (!diag_try_emit(...))
-    retry();   /* NO */
-while (!diag_try_emit(...))
-    ;          /* NO — blocks ISP */
-```
+### C2 — Lossy emit; overflow is deferred
 
-ISP pass/fail must be identical with diagnostics OFF or ring full.
+`diag_try_emit()` on full ring:
 
-### 2. `DIAG_FAULT_SNAPSHOT` is an atomic snapshot
+1. saturating `dropped++` (`0..255`, `255` = 255+)  
+2. set `overflow_pending = 1`  
+3. return `false`  
+4. **do not** try to push `DIAG_TRACE_OVERFLOW` (no room → overflow-of-overflow)
 
-On failure, **first** freeze state into a RAM snapshot struct (SCK config, RESET, last SPI bytes, metrics, `prog_state`), **then** publish one snapshot event (or a fixed multi-frame sequence from that frozen copy). Do not assemble the snapshot piecemeal after returning to normal flow — HID drain must never see half-old / half-new fields.
+When `diag_poll_drain()` can write a frame and `overflow_pending`:
 
 ```text
-failure detected
-      ↓
-snapshot current state / SPI / SCK metrics   (atomic in RAM)
-      ↓
-publish DIAG_FAULT_SNAPSHOT from that copy
-      ↓
-continue normal ISP return path
+emit DIAG_TRACE_OVERFLOW (a = dropped, then clear / reduce count)
+overflow_pending = 0
 ```
 
-### 3. Timestamp is formal and local
+Name stays `DIAG_TRACE_OVERFLOW` for future TRACE; P0 uses the same type for any drop.
 
-| Property | Spec |
-|----------|------|
-| Source | Monotonic **local** tick (not wall clock, not USB SOF required) |
-| Width | `uint16_t` |
-| Wrap | **Expected**; host reconstructs relative deltas across wrap |
-| Unit | Defined per schema (v1 may use Timer0 overflow / ~ms-class tick — freeze before shipping captures). Need not be 1 µs |
+Callers **must not** retry or wait on `false`. Prefer API name `diag_try_emit`.
 
-Host wall-clock stamps belong only in the **recorder** metadata around raw frames, not inside firmware events.
-
-### 4. Semantic ENABLEPROG ≠ optional SPI_BYTE
-
-| Event | Role |
-|-------|------|
-| `DIAG_ENABLEPROG` | **Semantic transaction**: TX[4], RX[4], result. Sufficient for SESSION/TRANSACTION diagnostics alone |
-| `DIAG_SPI_BYTE` | **Optional transport TRACE** of underlying bytes |
-
-Host may show:
-
-```text
-ENABLEPROG  TX AC 53 00 00  RX 00 53 00 00  PASS
-```
-
-with **zero** `DIAG_SPI_BYTE` frames. TRACE level may *additionally* emit per-byte `SPI AC→00` … Changing TRACE detail must not break semantic diagnostics.
-
-## Wire format (binary, host presents)
-
-Stable on the wire; human text lives only on the host.
+### C3 — Snapshot copy semantics
 
 ```c
-typedef enum {
-    DIAG_HELLO = 1,         /* schema + feature bits — not USBasp FUNC 127 */
-    DIAG_SESSION_BEGIN,
-    DIAG_SESSION_END,
-    DIAG_RESET,             /* assert / release in flags */
-    DIAG_SCK_CONFIG,        /* requested id + HW/SW */
-    DIAG_ENABLEPROG,        /* semantic TX×4/RX×4/result — may be multi-frame */
-    DIAG_SPI_BYTE,          /* optional TRACE only: TX, RX */
-    DIAG_SCK_STATS,         /* min/max/sum periods after N edges */
-    DIAG_FAULT_SNAPSHOT,
-    DIAG_TRACE_OVERFLOW,    /* includes dropped_count (saturating 0..255) */
-    DIAG_ERROR
-} diag_event_type_t;
+void diag_publish_snapshot(const diag_snapshot_t *s);
+/* Copies *s into persistent diag RAM immediately.
+ * Never retains the caller's pointer. local may go out of scope after return. */
+```
 
+Flow:
+
+```text
+ENABLEPROG failure
+      → fill local diag_snapshot_t
+      → capture into persistent fault_snapshot (memcpy)
+      → emit snapshot frames from persistent copy
+      → return to ISP path
+```
+
+No `snapshot_ptr = s`.
+
+### C4 — RESET is semantic drive intent
+
+Events: **`RESET_ASSERT` / `RESET_RELEASE`** (flags on `DIAG_RESET`).
+
+Meaning: *programmer drove* RST asserted/released — **not** measured pin level. No input sense in P0 → never name events `RESET_LOW` / `RESET_HIGH` (that would claim physical truth).
+
+### C5 — HELLO once per CONNECT, not keep-alive
+
+```text
+CONNECT → DIAG_HELLO → SESSION_BEGIN → …
+```
+
+No idle HELLO spam. No heartbeat in P0. If needed later: separate `DIAG_HEARTBEAT`.
+
+`DIAG_HELLO` (6-byte frame sketch):
+
+| Field | Content |
+|-------|---------|
+| `a` | schema (`1`) |
+| `b` | profile / build id (HIDUART, …) |
+| `flags` | `DIAG_CAP_SESSION \| TRANSACTION \| SNAPSHOT` (P0); TRACE/SCK_STATS bits when present |
+
+**Not** USBasp `FUNC_GETCAPABILITIES` (127). Host must not guess features across hiduart generations.
+
+## Frame layout
+
+```c
 struct diag_frame {
     uint8_t type;
     uint8_t flags;
-    uint16_t timestamp;     /* see invariant 3 */
-    uint8_t  a, b;          /* type-specific */
+    uint16_t timestamp;   /* monotonic local tick; wrap expected; unit frozen per schema */
+    uint8_t a, b;
 };
 ```
 
-Schema label: `USBASP-NG DIAG v1`. Bump when layout or tick unit changes; keep old decoders.
+Schema label: `USBASP-NG DIAG v1`.
 
-### `DIAG_HELLO` / internal capabilities
+### `DIAG_SCK_CONFIG` (semantic, not Hz)
 
-**Not** USBasp `FUNC_GETCAPABILITIES` (127) — that EP0 contract stays untouched.
-
-On diagnostics open (or first frames), firmware emits HID-only:
-
-```text
-DIAG_HELLO
-  schema   = 1
-  features = SESSION | TRANSACTION | SNAPSHOT | TRACE | SCK_STATS  (bitmask)
+```c
+/* a = sck_id (requested / applied id), b = transport (HW/SW), flags = extras */
 ```
 
-Host tools must not guess whether `DIAG_SCK_STATS` exists across hiduart v1/v2.
+Report what firmware **chose**. No “actual frequency” in P0 (that is P2 stats).
 
-### Levels
+### `DIAG_ENABLEPROG` — four ordinary frames
+
+Avoid clever 3-frame packing. Same 6-byte frame; `flags` carry sequence:
+
+| Frame | flags | a, b |
+|-------|-------|------|
+| 0 | `START` | tx0, tx1 |
+| 1 | `CONT` | tx2, tx3 |
+| 2 | `CONT` | rx0, rx1 |
+| 3 | `END \| RESULT_OK` or `END \| RESULT_FAIL` | rx2, rx3 |
+
+Host reassembles one semantic transaction. Optional later `DIAG_SPI_BYTE` TRACE must not be required for this.
+
+Capture TX/RX **inside** `ispEnterProgrammingMode` without calling `diag_try_emit` from `ispTransmit_sw`. Emit only after the attempt (and snapshot on fail).
+
+### `DIAG_FAULT_SNAPSHOT` fields (P0)
+
+```c
+uint8_t requested_sck;
+uint8_t transport;     /* HW / SW */
+uint8_t reset_driven;  /* last semantic assert/release state if known */
+uint8_t state;
+uint8_t result;
+uint8_t tx[4];
+uint8_t rx[4];
+/* effective_sck only if already available — do not invent in P0 */
+```
+
+Multi-frame emit from **persistent** copy after `diag_publish_snapshot`.
+
+## Levels
 
 | Level | What |
 |-------|------|
-| **OFF** | No events |
-| **ERROR** | Failures, overflow markers |
-| **SESSION** | CONNECT / DISCONNECT / RESET edges / SCK config / HELLO |
-| **TRANSACTION** | Semantic `DIAG_ENABLEPROG` (not mandatory SPI_BYTE) |
-| **TRACE** | Opt-in raw stream (`DIAG_SPI_BYTE`, …). Never default |
+| OFF | Nothing |
+| ERROR | Drops / overflow when drained |
+| SESSION | HELLO, SESSION_*, RESET_*, SCK_CONFIG |
+| TRANSACTION | Semantic ENABLEPROG (4 frames) |
+| TRACE | Opt-in `DIAG_SPI_BYTE` — never default; **not PR1/PR2** |
 
-Do **not** log every SCK edge. At 32 kHz that is tens of thousands of edges/s.
+## EP2 drain
 
-SCK frequency (P2): accumulate period samples (e.g. N=64) → min/max/sum. Prefer **cycle-counted / selected-edge** sampling — no capture ISR on every SW-SCK edge. Telemetry must not change the object under test. V-USB / Timer0: [USB_EXECUTION.md](USB_EXECUTION.md).
+One `diag_frame` per ready interrupt (pad to 8 if HID report size requires). Prefer EP2 for diagnostics; **do not** steal EP1 UART. No empty HELLO keep-alive when ring empty — skip or send idle status byte only if existing monitor already needs it; prefer silence.
 
-### Overflow
-
-`DIAG_TRACE_OVERFLOW` carries at least a **saturating** `dropped_count` (`0..255`, `255` = 255+). Prefer **drop-oldest** so the end of the operation remains visible.
-
-## Fault snapshot (P0)
-
-Atomic RAM freeze then publish (invariant 2). Typical fields:
-
-- `requested_sck`, effective transport (HW/SW), RESET level  
-- last ENABLEPROG TX[4]/RX[4]  
-- last few SCK periods if available  
-- `prog_state`  
-
-Cheap on the happy path.
-
-## ISP mirror / TRACE
-
-Optional mirror into the same ring (avrdude still stock USBasp). First generation is **trace**, not a protocol proxy.
-
-## Safety
-
-- Telemetry must not change ISP pass/fail.  
-- Full TRACE arming: only before CONNECT (or explicit host enable); during WRITEFLASH → best-effort.  
-- Ring full → drop (+ overflow with count). Never wait, retry-spin, disable USB, or delay ISP for HID.
+## CMake
 
 ```text
-ISP engine → diag_try_emit() → ring → HID drain
+profile → features → USBASP_HAS_DIAG=0|1
 ```
 
-Never `ISP → HID` directly.
+Classic: `0` → macros no-op, no `diag.o`. HIDUART (and future variants): `1`.
 
-## Product split
+## Implementation split (approved)
 
-| Image | Telemetry |
-|-------|-----------|
-| **classic** | None (closest to stock USBasp) |
-| **hiduart** | Semantic diagnostics + fault snapshots + optional TRACE |
-| **hiduart-debug** (optional later) | Max TRACE + snapshots; still no requirement for target UART |
+### PR1 — Skeleton + lifecycle (no ISP timing change)
 
-## Host tools
+- `include/diag/`, `src/diag/` (ring + emit + drain hooks)  
+- `USBASP_HAS_DIAG` gate + classic stubs  
+- SPSC contracts C1–C2 in headers  
+- `DIAG_HELLO`, `SESSION_BEGIN/END`, `SCK_CONFIG`, `RESET_ASSERT/RELEASE`  
+- EP2 drain from `hiduart_poll`  
+- Golden Python frame constants / decoder stubs  
+- Optional: dumb `hidraw-log` (schema-agnostic)
 
-```text
-host/usbasp-hidraw-log.py   # discover → read interrupt → host stamp → raw .bin
-host/usbasp-trace.py        # .bin → human (schema-aware via DIAG_HELLO)
-```
+### PR2 — ENABLEPROG + snapshot
 
-Recorder is **dumb**: it must not interpret frames. Implement recorder **with P0** even while TRACE is off — future firmware changes stay replayable from real `.bin` files.
+- Local TX/RX capture in `ispEnterProgrammingMode`  
+- 4-frame semantic ENABLEPROG  
+- Persistent fault snapshot + publish (C3)  
+- Deferred overflow accounting on drain  
 
-Not `/dev/ttyUSB*` — HIDUART is **hidraw**, not CDC. Existing status/loopback scripts stay functional checks.
+Then bench HIDUART `-B 8` vs `-B 22` for firmware truth; FX2 remains physical oracle.
 
-## Suggested tree (when implemented)
+## Out of P0 / do not expand
 
-```text
-firmware/include/diag/     diag.h, diag_events.h, diag_trace.h
-firmware/src/diag/         diag.c, diag_ring.c, diag_metrics.c
-firmware/src_hid/          hid_diag.c   (drain only)
-```
+- Interrupt-per-SCK, timer capture ISR  
+- Actual SCK Hz / period stats (P2)  
+- TRACE SPI_BYTE stream  
+- Target UART  
+- Changing FUNC 127 or classic USB  
+- Heartbeat / HELLO keep-alive  
+- Claiming physical RESET level without sense  
 
-Classic: omit link or empty stubs.
-
-## Priority
-
-| Pri | Item |
-|-----|------|
-| **P0** | Atomic fault snapshot; semantic `DIAG_ENABLEPROG`; RESET transitions; transport/SCK config; `DIAG_HELLO` |
-| **P1** | **hidraw recorder + offline decoder** (with P0); binary ISP TRACE |
-| **P2** | SCK period statistics (non-invasive) |
-| **P3** | Target UART bridge (board capability only) |
-
-P0 firmware stays cheap: no interrupt-per-SCK, no USBasp protocol change, no classic bloat. P1 recorder ships early because it is schema-agnostic.
-
-## Relation to SW SCK work
+## Relation to SW SCK
 
 | Source | Truth |
 |--------|--------|
-| FX2 / sniffer | RST / SCK / MOSI / MISO on the wire |
-| Diagnostics Plane | What firmware believes (state, TX/RX, transport, periods) |
+| FX2 / sniffer | Wire RST/SCK/MOSI/MISO |
+| Diagnostics | Firmware intent + reported TX/RX/transport |
 
-Disagreement is evidence.
-
-**Agreement does not prove target-side correctness.** It only proves the programmer **emitted what firmware reports**. Example: firmware TX=`AC`, FX2 MOSI=`AC`, MISO=`FF` strongly **localizes off-stick** (power, RESET, MISO contention, phase, wiring, target clock, …) — not necessarily a “target bug”. Prefer the phrase **off-stick**, not “target fault”.
-
-Do **not** treat HID TRACE as a substitute for the planned `-B 8` vs `-B 22` capture.
+Agreement **localizes off-stick**; it does not prove “target bug”. Disagreement is evidence. HID TRACE/snapshots do **not** replace the planned `-B 8` vs `-B 22` capture.
