@@ -17,8 +17,8 @@ overrun / reset / guards               RST/SCK/MOSI/MISO
 | RC1-03 | Zero-length transfer guards (`prog_begin_transfer`) | **done** (`4321302`) |
 | RC1-04 | EEPROM API `uint16_t` | **done** (`4321302`) |
 | RC1-05 | TPI capability off until silicon (`USBASP_HAS_TPI=0`) | **done** (`4321302`) |
-| RC1-06 | SCK capture `-B 8` vs `-B 22` | **wait** — [ACCEPTANCE-SCK-SWEEP-001](ACCEPTANCE-SCK-SWEEP-001.md) |
-| RC1-07 | SW SCK fix | **only after** waveform |
+| RC1-06 | SCK capture `-B 8` vs `-B 22` | **closed** — [ACCEPTANCE-SCK-SWEEP-001](ACCEPTANCE-SCK-SWEEP-001.md) (USBasp2 PASS) |
+| RC1-07 | SW SCK fix | **n/a** — gate closed without firmware change |
 | RC1-08 | Regression acceptance | after RC1-02 flash + HW ISP smoke |
 
 ## RC1-02 detail

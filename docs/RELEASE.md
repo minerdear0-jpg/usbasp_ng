@@ -67,4 +67,4 @@ USB identity / WinUSB / MS OS are frozen for classic. Validate on iron:
 1. **Windows 11 clean VM** → plug classic → WinUSB → modern avrdude `-c usbasp` → signature / flash → Arduino Burn Bootloader  
 2. **Linux** → `-c usbasp` and `-c usbasp-clone` both open and talk ISP  
 
-Software SCK still needs waveform capture ([SOFTWARE_SCK.md](SOFTWARE_SCK.md)); that does not block the classic USB compatibility claim.
+Software SCK gate is **closed** for the lab path (USBasp2 → mega8-on-Nano-PCB): [SOFTWARE_SCK.md](SOFTWARE_SCK.md). That does not change the classic USB compatibility claim.

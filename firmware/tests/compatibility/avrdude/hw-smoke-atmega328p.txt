@@ -1,4 +1,5 @@
-# ATmega328P on the ISP ribbon. Programmer is no-dot (classic, USB to host).
+# ATmega328P on the ISP ribbon (target).
+# Programmer: no-dot classic, or **USBasp2** (yellow HIDUART 328P MCU) — docs/USBASP2.md
 # Do not write flash/fuses on no-dot.
 #
 # Signature 328P: 1E 95 0F   (ATmega328: 1E 95 14)
@@ -14,4 +15,4 @@
 #
 # Uno as target: 328P on ICSP, Uno USB unplugged (shared reset/5V). Power from USBasp or the board, not both blindly.
 #
-# Optional: HIDUART yellow (YEL0) as programmer instead of no-dot — same commands, unplug no-dot.
+# USBasp2 as programmer: unplug no-dot; yellow in USB (iSerial YEL0); same -c usbasp commands.

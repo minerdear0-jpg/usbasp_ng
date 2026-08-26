@@ -30,6 +30,7 @@ Examples:
   $0 hiduart
   SERIAL=YEL0 $0 usbhid
   $0 usbasp-atmega88
+  SERIAL=YEL0 $0 usbasp-hiduart-atmega328p
 EOF
 }
 

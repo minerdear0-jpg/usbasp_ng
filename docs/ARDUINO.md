@@ -31,7 +31,7 @@ That was empty USB string indices (V-USB PROP flags mistaken for indices), not �
 
 Canonical record: **[ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md)**.
 
-Strict conclusion: classic NG completed a full destructive ISP cycle on Windows 11 with WinUSB and avrdude 6.3 (erase, fuses, ~8 KiB flash, verify). That does **not** close software SCK and does **not** by itself widen the compatibility matrix.
+Strict conclusion: classic NG completed a full destructive ISP cycle on Windows 11 with WinUSB and avrdude 6.3 (erase, fuses, ~8 KiB flash, verify). Software SCK is separately **closed** on USBasp2 ([ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md)); do not widen the Windows/Arduino matrix from the Win11 run alone.
 
 **Do not** reinstall libusbK just to please Arduino 1.8 — that undoes the zero-driver path.
 

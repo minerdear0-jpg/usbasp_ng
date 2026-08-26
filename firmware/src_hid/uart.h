@@ -43,7 +43,9 @@
 #   define USBASPUART_RXCIE     RXCIE
 #   define USBASPUART_RXEN      RXEN
 #   define USBASPUART_TXEN      TXEN
-#elif (defined __AVR_ATmega88__) || (defined __AVR_ATmega88PA__)
+#elif (defined __AVR_ATmega88__) || (defined __AVR_ATmega88PA__) \
+   || (defined __AVR_ATmega168__) || (defined __AVR_ATmega168PA__) \
+   || (defined __AVR_ATmega328__) || (defined __AVR_ATmega328P__)
 #   define USBASPUART_UDR       UDR0
 #   define USBASPUART_UDRIE     UDRIE0
 #   define USBASPUART_UCSRA     UCSR0A

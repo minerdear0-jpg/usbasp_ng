@@ -4,15 +4,17 @@
 
 Architectural separation for HIDUART / research builds when `USBASP_HAS_DIAG=1`. Does not change the Fischl USBasp wire protocol. Classic stays telemetry-free (`USBASP_HAS_DIAG=0`).
 
-Companion physical truth for SW SCK remains an FX2 / Nano capture: [SOFTWARE_SCK.md](SOFTWARE_SCK.md), [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md). Telemetry is **firmware truth**; the two must be comparable, not substitutes.
+**USBasp2 (ATmega328P):** same L1 USBasp; Diagnostics evolves toward an **ISP development probe** (observability + measurement + capture) — not AVR-ICE. Philosophy and roadmap: **[DIAGNOSTICS_PROBE.md](DIAGNOSTICS_PROBE.md)**. P0/RC wire below stays frozen until an explicit DIAG v2 bump.
+
+Companion physical truth for SW SCK was scoped then **closed** on USBasp2: [SOFTWARE_SCK.md](SOFTWARE_SCK.md), [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md). Telemetry is **firmware truth**; optional FX2 remains interesting for dual-timestamp science, not a release gate.
 
 Sweet spot:
 
 ```text
 classic     → zero diagnostics cost
-hiduart*    → USBASP_HAS_DIAG → semantic + snapshots + optional TRACE
-host        → dumb recorder + smart decoder
-physical    → FX2/Nano = independent truth
+hiduart*    → USBASP_HAS_DIAG → semantic + snapshots (+ probe roadmap on 328P)
+host        → dumb recorder + smart decoder / TUI
+physical    → FX2 = independent truth (dual-T with firmware)
 ```
 
 \* Gate is **`USBASP_HAS_DIAG`**, not `profile == hiduart`. Profile selects features; later `hiduart-debug` / `hiduart-trace` can flip the same flag.

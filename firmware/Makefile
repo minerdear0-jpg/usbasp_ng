@@ -19,8 +19,8 @@ else
 HEX_NAME := usbasp
 endif
 
-BOARDS := usbasp-atmega8-clone usbasp-atmega8-usbisp usbasp-atmega88 \
-	usbasp-hiduart-atmega8 usbasp-hiduart-atmega88
+BOARDS := usbasp-atmega8-clone usbasp-atmega8-usbisp usbasp-atmega88 usbasp-atmega328p \
+	usbasp-hiduart-atmega8 usbasp-hiduart-atmega88 usbasp-hiduart-atmega328p
 
 .PHONY: all configure hex clean test flash eeprom fuses probe all-boards
 

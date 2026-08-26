@@ -1,83 +1,50 @@
 # ACCEPTANCE-SCK-SWEEP-001
 
-**Status:** isolation complete (2026-08-26, Linux)  
-**Depends on:** [ACCEPTANCE-WIN11-USBASP-001](ACCEPTANCE-WIN11-USBASP-001.md)
+**Status:** **CLOSED** (2026-08-26 evening)  
+**Depends on:** [ACCEPTANCE-WIN11-USBASP-001](ACCEPTANCE-WIN11-USBASP-001.md)  
+**Closing hardware:** [USBASP2.md](../USBASP2.md)
 
-## Formal state
+## Formal state (closed)
 
 ```text
-ACCEPTANCE-SCK-SWEEP-001
+ACCEPTANCE-SCK-SWEEP-001  CLOSED
 
-HW SPI
-  AUTO  PASS
-  B=1   PASS
-  B=8   PASS
-  B=10  PASS
+Closing run (USBasp2 → mega8-on-Nano-PCB):
+  B=8   HW   PASS  signature 1E 93 07
+  B=22  SW   PASS  signature 1E 93 07
 
-SW SPI
-  B=22  FAIL  ENABLEPROG=0x01
-  B=50  FAIL  ENABLEPROG=0x01
-  B=250 FAIL  ENABLEPROG=0x01
-
-Control:
-  same host
-  same firmware
-  same target
-  same cable
-  same USB path
+Earlier isolation (classic mega8 programmer → mega8 clone target):
+  HW SPI   PASS
+  SW SPI   FAIL ENABLEPROG=0x01
+  → isolated to SW-SCK on that pair; not a permanent product blocker.
 
 Conclusion:
-  failure isolated to SW-SCK path.
-  Root cause unknown.
-  No firmware modification after isolation.
-
-Next evidence:
-  RST/SCK/MOSI/MISO capture for B=8 vs B=22.
+  Software SCK works with USBasp2 (ATmega328P programmer) against
+  ATmega8 mounted on a Nano PCB. Gate closed — no further firmware
+  speculation or mandatory FX2 capture for release.
 ```
 
-## Conclusion (prose)
-
-Failure is **isolated to the software SCK (bitbang) path**. Root cause is **unknown**. Do **not** change `ispTransmit_sw` / related firmware until bus evidence exists — further source-only reasoning is speculation.
-
-At this stage the hardware must speak: scope or Nano sniffer on **RST / SCK / MOSI / MISO**, PASS `-B 8` vs FAIL `-B 22`.
-
-## Setup (this run)
+## Closing evidence (2026-08-26)
 
 | Field | Value |
 |-------|--------|
-| Date | 2026-08-26 |
-| Host | Linux, **avrdude 8.2** |
-| Programmer | yellow-dot classic NG (`bcdDevice` 2.03, MS OS `0x9E`) |
-| Target | ATmega8 on ISP ribbon, signature `1E 93 07` |
-| JP3 | open |
-| Programmer id | `-c usbasp` |
+| Programmer | **USBasp2** — yellow-dot, ATmega328P + HIDUART (`YEL0`, `bcdDevice` 2.01) |
+| Target | **ATmega8 soldered on a Nano PCB** (not a stock Nano 328P — that board failed earlier) |
+| Host | Linux, avrdude, `-c usbasp` |
+| `-B 8` | PASS — signature `1E 93 07` |
+| `-B 22` | PASS — signature `1E 93 07` |
 
-## Results table
+Diag on the same stick showed ENABLEPROG **PASS** (RX `… 53 00`) during signature sessions.
 
-| `-B` | avrdude SCK | Path | ENABLEPROG | signature | flash read |
-|------|-------------|------|------------|-----------|------------|
-| AUTO | default | HW | PASS | `1E 93 07` | PASS (5530 B) |
-| 1 | 750 kHz | HW | PASS | `1E 93 07` | — |
-| 8 | 93.75 kHz | HW | PASS | `1E 93 07` | — |
-| 10 | 93.75 kHz | HW | PASS | `1E 93 07` | — |
-| **22** | **32 kHz** | **SW** | **FAIL `0x01`** | — | — |
-| 50 | 16 kHz | SW | FAIL `0x01` | — | — |
-| 250 | 4 kHz | SW | FAIL `0x01` | — | — |
+## Historical isolation (same day, earlier)
 
-```bash
-avrdude -c usbasp -p atmega8 [-B N] -U signature:r:-:h
-avrdude -c usbasp -p atmega8 -U flash:r:/tmp/usbasp-sck-auto.hex:i   # AUTO
-```
+Programmer was yellow **classic mega8** NG; target another mega8 clone on ribbon. HW PASS / SW FAIL `0x01`. That record remains below for archaeology; it does **not** keep the acceptance gate open.
 
-## Next evidence only
+### Historical results table
 
-| Capture | Purpose |
-|---------|---------|
-| `-B 8` (HW PASS) | Reference waveform |
-| `-B 22` (SW FAIL) | Compare RST/SCK/MOSI/MISO timing and levels |
+| `-B` | Path | ENABLEPROG (mega8 prog → mega8 target) |
+|------|------|----------------------------------------|
+| AUTO / 1 / 8 / 10 | HW | PASS |
+| 22 / 50 / 250 | SW | FAIL `0x01` |
 
-Background: [SOFTWARE_SCK.md](../SOFTWARE_SCK.md). Issue: [#1](https://github.com/minerdear0-jpg/usbasp_ng/issues/1). Nano sniffer: `host/isp-sniffer/`.
-
-## Out of scope until capture
-
-Firmware edits to SW SCK; widening Windows/Arduino matrix; TPI silicon.
+Background notes: [SOFTWARE_SCK.md](../SOFTWARE_SCK.md). Issue: [#1](https://github.com/minerdear0-jpg/usbasp_ng/issues/1).

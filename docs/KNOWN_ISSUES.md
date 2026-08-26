@@ -14,7 +14,11 @@ PCs that previously used Zadig/libusbK for `16c0:05dc` may keep that association
 
 ## Software SCK ENABLEPROG (`-B 22` / slow ids)
 
-**Status:** SW-SCK isolated — HW PASS, SW ENABLEPROG `0x01`. Root cause unknown; **capture next**, not more firmware guesses. [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
+**Status:** **CLOSED.** USBasp2 → ATmega8 on Nano PCB: `-B 8` and `-B 22` signature PASS (2026-08-26). Record: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md), [SOFTWARE_SCK.md](SOFTWARE_SCK.md). Historical mega8↔mega8 FAIL remains documented there as isolation only.
+
+## USBasp2 (ATmega328P programmer)
+
+**Status:** lab default for Diagnostics Plane. Reflow onto clone PCB; board `usbasp-hiduart-atmega328p`. See [USBASP2.md](USBASP2.md).
 
 ## TPI
 
@@ -38,7 +42,7 @@ Typical USBasp clone breakouts are **ISP 6-pin only** (MOSI/MISO/SCK/RST/VCC/GND
 
 **HIDUART’s primary product goal is the Diagnostics Plane** (EP2 binary telemetry: SESSION / SCK / RESET / ENABLEPROG / fault snapshots) — independent of PD0/PD1 and of the USBasp wire protocol. See [DIAGNOSTICS.md](DIAGNOSTICS.md). USART bridge remains optional secondary hardware.
 
-Release default remains **classic**. SW SCK (`-B 22`) is target-dependent (Nano PASS / mega8 FAIL on the bench); capture still wanted: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
+Release default remains **classic** for Windows. Lab Diagnostics Plane: **USBasp2**. SW SCK gate closed: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
 
 ## USB execution model
 

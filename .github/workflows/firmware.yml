@@ -36,7 +36,10 @@ jobs:
             firmware/build/usbasp-atmega8-clone/usbasp.hex
             firmware/build/usbasp-atmega8-usbisp/usbasp.hex
             firmware/build/usbasp-atmega88/usbasp.hex
+            firmware/build/usbasp-atmega328p/usbasp.hex
             firmware/build/usbasp-hiduart-atmega8/usbasp-hiduart.hex
             firmware/build/usbasp-hiduart-atmega8/usbasp-hiduart.eep
             firmware/build/usbasp-hiduart-atmega88/usbasp-hiduart.hex
             firmware/build/usbasp-hiduart-atmega88/usbasp-hiduart.eep
+            firmware/build/usbasp-hiduart-atmega328p/usbasp-hiduart.hex
+            firmware/build/usbasp-hiduart-atmega328p/usbasp-hiduart.eep

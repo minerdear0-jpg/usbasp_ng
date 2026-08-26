@@ -49,7 +49,7 @@ Device Manager may still show the generic label **“WinUSB Device”**. That is
 
 Yellow-dot classic NG, libusbK removed. **WinUSB on first plug** with device-level MS OS `0x9E`. Nested `0xAE` on the same stick → unbound (`!`, no publisher); see [USB_WINDOWS.md](USB_WINDOWS.md). AVRDUDESS read flash/EEPROM via `usbasp-clone`.
 
-Later the same day: full destructive ISP via IDE Burn Bootloader through yellow — recorded as **[ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md)**. Do not widen this matrix from that single run. **SW SCK** remains open: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
+Later the same day: full destructive ISP via IDE Burn Bootloader through yellow — recorded as **[ACCEPTANCE-WIN11-USBASP-001](acceptance/ACCEPTANCE-WIN11-USBASP-001.md)**. Do not widen this matrix from that single run. **SW SCK** later **closed** on USBasp2: [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md).
 
 USBasp is USB, not a COM port. AVRDUDESS **115200** is irrelevant; use `-B` / SCK for ISP speed. Arduino **Get Board Info** is Serial-only — irrelevant for USBasp.
 

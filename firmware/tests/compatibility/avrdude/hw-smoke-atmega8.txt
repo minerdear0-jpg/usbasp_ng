@@ -1,21 +1,24 @@
-# Hardware checks that do not need ATmega328P.
+# Hardware checks that do not need a 328P *target*.
 #
 # Bench names:
 #   no-dot       — USBasp clone with NG classic; the programmer (USB to host, -c usbasp)
-#   yellow-dot   — experiment target
-#                  ISP mode: on the header, J2 closed, no-dot programmes it
-#                  USB mode: yellow-dot itself on the host (lsusb, descriptors, avrdude -c usbasp
-#                  as the device under test, HIDUART enumeration). J2 open.
+#                  Also used to ISP-flash USBasp2 / yellow.
+#   yellow-dot / USBasp2
+#                  ATmega328P MCU (reflow) with HIDUART + Diagnostics Plane.
+#                  USB mode: yellow on host (bcdDevice 2.01, iSerial YEL0). J2 open.
+#                  Build: BOARD=usbasp-hiduart-atmega328p — docs/USBASP2.md
+#   mega8 target — often the other stick / DIP on the ISP ribbon from USBasp2
 #
-# USB mode (yellow-dot on host, J2 open, unplug no-dot):
+# USB mode (USBasp2 on host, J2 open):
 #   host/usb-inspect-usbasp.sh
-#   host/usbasp-getcaps.py
+#   host/usbaspctl.py info
+#   ./diagplane.bin watch --serial YEL0
 #
-# Classic L0 (measured): 16c0:05dc, bcdUSB 1.10, device class 0xFF,
-#   1 interface, 0 endpoints, iSerial 0, no HID/BOS.
-# HIDUART (measured, yellow-dot, iSerial YEL0):
+# Classic L0 (measured): 16c0:05dc, bcdUSB 1.10/2.00, device class 0xFF,
+#   1 interface, 0 endpoints, iSerial 0, no HID/BOS. bcdDevice 2.03 on NG classic.
+# HIDUART / USBasp2 (measured, iSerial YEL0):
 #   USB 2.01, 3 interfaces, BOS/MS OS 2.0, GETCAPABILITIES 01 00 00 01
-#   ISP read of no-dot through composite: signature/flash OK (do not write no-dot)
+#   ISP of mega8 target: signature/flash/EEPROM OK (2026-08-26)
 #   UART loopback: TQFP 30–31 (PD0–PD1), host/usbasp-hiduart-loopback.py
 
 #
@@ -33,15 +36,11 @@
 # no-dot programmer: usbisp-sized classic (~4018 B). JP3 on that board is not
 # sampled (HAS_SCK_JUMPER=0). Clone profile (4024+) reads PC2 for 8 kHz.
 #
-# SCK smoke (yellow NG as programmer, no-dot as ISP target, signature only):
-#   AUTO, -B 0.5 (1.5 MHz), -B 8 (93.75 kHz): PASS on both HIDUART and NG classic.
-#   -B 22 / 50 / 250 (32 / 16 / 4 kHz software SCK): FAIL ENABLEPROG 0x01 on both.
-#   Conclusion: software SCK programming-enable is a real functional bug on this
-#   pair; it is not HIDUART/composite IRQ. Root cause (SCK vs MOSI vs MISO vs RST)
-#   not scoped yet. USB stayed enumerated after FAIL on classic.
-#   Parked: do not iterate sck.c until a scope capture of -B 22 vs -B 8.
+# SCK smoke (historical mega8 prog → mega8 target): HW PASS / SW FAIL — see ACCEPTANCE-SCK-SWEEP-001.
+# Closing path: USBasp2 → ATmega8 on Nano PCB: -B 8 and -B 22 PASS (docs/USBASP2.md).
+#   AUTO, -B 0.5 (1.5 MHz), -B 8 (93.75 kHz): PASS on HIDUART and NG classic (various pairs).
 #
-# Next ISP (hardware SPI only, no -B 22/50/250):
+# Next ISP:
 #   EEPROM read of no-dot (yellow programmer, J2 closed on target):
 #     avrdude -c usbasp -p atmega8 -U eeprom:r:/tmp/no-dot.eep:r
 #   Do not eeprom:w / flash:w / fuse:w on no-dot.
@@ -85,7 +84,7 @@
 #   HIDUART now writes the .eep after the hex (do not parallel flash and eeprom).
 #   UART loopback PD0–PD1 (TQFP 30–31, tweezers): HELLO echoed. Do not short pin 29 (RESET).
 #
-# Waveform: parked until a capture of -B 22 vs -B 8. Report: docs/SOFTWARE_SCK.md
+# Waveform: optional. Gate closed on USBasp2 — docs/SOFTWARE_SCK.md / ACCEPTANCE-SCK-SWEEP-001.
 #   Third mega8 sniffer or FX2 LA — host/isp-sniffer/README.md
 #   (do not flash sniffer onto no-dot or onto yellow unless replacing NG).
 

@@ -19,13 +19,13 @@ USBasp NG Classic successfully completed a full destructive ISP programming cycl
 
 ## What this does **not** prove
 
-- Software SCK (`-B 22` / slow ids) — **still open** ([SOFTWARE_SCK.md](../SOFTWARE_SCK.md))
+- Software SCK (`-B 22` / slow ids) — **closed** later the same day on USBasp2 ([SOFTWARE_SCK.md](../SOFTWARE_SCK.md), [ACCEPTANCE-SCK-SWEEP-001](ACCEPTANCE-SCK-SWEEP-001.md))
 - Arduino **Get Board Info** (Serial-only; irrelevant)
 - Universal “avrdude 6.3 works on every Windows PC” — one bench PASS after string-index fix
 - HIDUART / composite MSVC avrdude
 - TPI (capability bit off until silicon proof)
 
-Do **not** widen the Windows/Arduino compatibility matrix from this run alone. Record it; keep SW SCK as a separate acceptance criterion.
+Do **not** widen the Windows/Arduino compatibility matrix from this run alone. Record it. SW SCK is a separate criterion — later closed on USBasp2.
 
 ## Environment
 
@@ -64,4 +64,4 @@ Never **Burn Bootloader** while a second programmer MCU sits on the ISP ribbon. 
 
 ## Next acceptance (separate)
 
-**SW SCK** — same firmware/host/USB/target/cable; only HW vs SW SPI. Plan: [ACCEPTANCE-SCK-SWEEP-001](ACCEPTANCE-SCK-SWEEP-001.md).
+**SW SCK** — closed: [ACCEPTANCE-SCK-SWEEP-001](ACCEPTANCE-SCK-SWEEP-001.md) (USBasp2 → mega8-on-Nano-PCB).

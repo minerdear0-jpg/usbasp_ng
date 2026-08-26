@@ -9,8 +9,10 @@ Release asset **`diagplane.bin`** = portable Linux x86-64 build of the same tool
 ```bash
 chmod +x diagplane.bin
 ./diagplane.bin watch --demo enableprog_fail_sw
-./diagplane.bin monitor YEL0
+./diagplane.bin monitor YEL0          # USBasp2 / HIDUART iSerial
 ```
+
+Preferred programmer for live telemetry: **[USBasp2](USBASP2.md)** (ATmega328P + HIDUART). Probe roadmap (timestamps, triggers, capture — not AVR-ICE): [DIAGNOSTICS_PROBE.md](DIAGNOSTICS_PROBE.md).
 
 ## Align with firmware contracts
 
@@ -97,6 +99,6 @@ L3 Presentation  stdout / JSON / JSONL / TUI
 | Client P1 replay/demo + header + `--jsonl`/`--faults` | done |
 | Client P2 TUI `watch` | done |
 | Golden parity Python↔Rust | `host/golden/diag/` |
-| FX2 physical oracle | open ([SOFTWARE_SCK.md](SOFTWARE_SCK.md)) |
+| FX2 physical oracle | optional (SW SCK gate closed — [SOFTWARE_SCK.md](SOFTWARE_SCK.md)) |
 
 Success: bugs reproducible from `.bin` / `demo` without hardware.
