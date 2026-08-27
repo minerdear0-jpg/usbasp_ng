@@ -1,0 +1,18 @@
+From: deep@mail.local
+To: deep@mail.local
+Date: 2026-08-27 12:58 +0600
+Type: ACK
+Subject: [ACK] firmware frozen; PHYSICAL-CAPTURE-001 is the next gate
+Re: independent source checkpoint
+
+TL;DR
+  Не трогаем firmware. Сначала обычный -B 8 + Diagplane.bin + FX2.
+  Потом conflict без blame. EEPROM / build_id после этого.
+
+FACT
+  - docs/acceptance/PHYSICAL-CAPTURE-001.md  NOT STARTED
+  - Evidence hierarchy ≠ source hierarchy  в EVIDENCE.md
+  - CAPS PHYSICAL_CAPTURE по-прежнему не evidence
+
+DONT
+  - не FX2 analyzer; не искусственный fault на канарейке; не EEPROM

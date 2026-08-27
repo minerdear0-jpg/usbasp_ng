@@ -84,6 +84,9 @@ pub struct AppState {
     pub memop_end_ok: Option<bool>,
     pub last_flash_pages: Option<u8>,
     pub last_flash_ok: Option<bool>,
+    /// Sticky: any FLASH/EEPROM CONT|FAIL this session (survives following READFLASH START).
+    pub flash_poll_failed: bool,
+    pub flash_poll_fail_addr: Option<u16>,
     pub last_verify_pages: Option<u8>,
     pub last_verify_ok: Option<bool>,
     pub pins_ok: Option<bool>,
@@ -384,13 +387,31 @@ impl AppState {
                     self.memop_end_pages = None;
                     self.memop_end_ok = None;
                     match f.a {
-                        MEM_READFLASH => self.miso_ns = Some(host_ns),
-                        MEM_FLASH | MEM_EEPROM => self.mosi_ns = Some(host_ns),
+                        MEM_FLASH | MEM_EEPROM => {
+                            // New write: clear sticky poll fail for this op only.
+                            self.flash_poll_failed = false;
+                            self.flash_poll_fail_addr = None;
+                            self.mosi_ns = Some(host_ns);
+                        }
+                        MEM_READFLASH => {
+                            // Do not clear flash_poll_failed — write FAILs must outlive verify MEMOP.
+                            self.miso_ns = Some(host_ns);
+                        }
                         _ => {}
                     }
                 } else if f.flags & EP_CONT != 0 {
                     let addr = (u16::from(f.a) << 8) | u16::from(f.b);
-                    self.memop_pages.push((addr, f.flags & EP_FAIL == 0));
+                    let ok = f.flags & EP_FAIL == 0;
+                    self.memop_pages.push((addr, ok));
+                    if !ok {
+                        match self.memop_kind {
+                            Some(MEM_FLASH) | Some(MEM_EEPROM) => {
+                                self.flash_poll_failed = true;
+                                self.flash_poll_fail_addr = Some(addr);
+                            }
+                            _ => {}
+                        }
+                    }
                     match self.memop_kind {
                         Some(MEM_READFLASH) => self.miso_ns = Some(host_ns),
                         Some(MEM_FLASH) | Some(MEM_EEPROM) => self.mosi_ns = Some(host_ns),
@@ -399,16 +420,17 @@ impl AppState {
                 } else if f.flags & EP_END != 0 {
                     self.memop_kind = Some(f.a);
                     self.memop_end_pages = Some(f.b);
-                    self.memop_end_ok = Some(f.flags & EP_FAIL == 0);
-                    let ok = f.flags & EP_FAIL == 0;
+                    let end_ok = f.flags & EP_FAIL == 0;
+                    self.memop_end_ok = Some(end_ok);
                     match f.a {
                         MEM_FLASH | MEM_EEPROM => {
                             self.last_flash_pages = Some(f.b);
-                            self.last_flash_ok = Some(ok);
+                            // END|OK must not wash CONT|FAIL (ribbon tear mid-write).
+                            self.last_flash_ok = Some(end_ok && !self.flash_poll_failed);
                         }
                         MEM_READFLASH => {
                             self.last_verify_pages = Some(f.b);
-                            self.last_verify_ok = Some(ok);
+                            self.last_verify_ok = Some(end_ok);
                         }
                         _ => {}
                     }
@@ -467,6 +489,8 @@ impl AppState {
         self.memop_end_ok = None;
         self.last_flash_pages = None;
         self.last_flash_ok = None;
+        self.flash_poll_failed = false;
+        self.flash_poll_fail_addr = None;
         self.last_verify_pages = None;
         self.last_verify_ok = None;
         self.pins_ok = None;
@@ -578,5 +602,17 @@ mod tests {
         st.ingest_capture(&cap);
         assert!(st.trace_overflow);
         assert!(st.events.iter().any(|e| e.text.contains("TRACE_OVERFLOW")));
+    }
+
+    #[test]
+    fn flash_poll_fail_sticky_across_readflash() {
+        let cap = demo::build_scenario("flash_poll_fail_end_ok").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        assert!(st.flash_poll_failed);
+        assert_eq!(st.flash_poll_fail_addr, Some(0x1200));
+        assert_eq!(st.last_flash_ok, Some(false));
+        assert_eq!(st.last_verify_ok, Some(true));
+        assert!(st.saw_session_end);
     }
 }

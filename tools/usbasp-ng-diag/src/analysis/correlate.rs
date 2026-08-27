@@ -19,10 +19,34 @@ fn aggregates(ev: &EvidenceRecord, analyzed: &[Finding]) -> Vec<Finding> {
     let flash_ok = has(analyzed, "ISP.FLASH", FindingStatus::Pass);
     let verify_ok = ev.execution.verify_ok == Some(true);
 
-    if ep_pass && flash_ok {
+    if ev.execution.memop_incomplete {
+        extra.push(Finding {
+            id: "ISP.MEMOP_INCOMPLETE",
+            analyzer: "correlator",
+            domain: Domain::Correlation,
+            status: FindingStatus::Fail,
+            scope: "SESSION",
+            confidence: Confidence::High,
+            causal_relevance: CausalRelevance::Required,
+            claim: "memory operation started but never ended on EP2".into(),
+            expected: "MEMOP END after START/CONT".into(),
+            observed: format!(
+                "CONT pages seen in protocol path; MEMOP END missing; session_end={}",
+                ev.execution.session_end
+            ),
+            source: EvidenceSource::UsbaspInternal,
+            evidence: vec![
+                "incomplete MEMOP is not a successful flash".into(),
+                "host USB I/O drop / hung avrdude possible — not proven".into(),
+                "CONT OK pages ≠ operation complete".into(),
+            ],
+        });
+    }
+
+    if ep_pass && flash_ok && !ev.execution.memop_incomplete {
         let mut evidence = vec![
             "ENABLEPROG PASS → programming_mode CONFIRMED".into(),
-            "MEMOP PASS → programming_path CONFIRMED".into(),
+            "MEMOP END PASS → programming_path CONFIRMED".into(),
         ];
         if verify_ok {
             evidence.push("VERIFY PASS corroborates path (confidence stays HIGH)".into());
@@ -36,7 +60,7 @@ fn aggregates(ev: &EvidenceRecord, analyzed: &[Finding]) -> Vec<Finding> {
             confidence: Confidence::High,
             causal_relevance: CausalRelevance::ExplainsSuccess,
             claim: "ISP programming path operational".into(),
-            expected: "ENABLEPROG PASS then MEMOP PASS".into(),
+            expected: "ENABLEPROG PASS then MEMOP END PASS".into(),
             observed: format!(
                 "ENABLEPROG PASS  MEMOP pages={}  verify={:?}",
                 ev.execution.memop_pages.unwrap_or(0),
@@ -85,6 +109,7 @@ fn verdict_of(ev: &EvidenceRecord, findings: &[Finding]) -> Verdict {
     let ep_fail = has(findings, "ISP.ENABLEPROG", FindingStatus::Fail);
     let line_anom = has(findings, "LINE.RST_ECHO", FindingStatus::Anomaly);
     let path_ok = has(findings, "ISP.PROGRAMMING_PATH", FindingStatus::Pass);
+    let incomplete = has(findings, "ISP.MEMOP_INCOMPLETE", FindingStatus::Fail);
     let conflict = findings.iter().any(|f| f.id == "EVIDENCE.CONFLICT");
     let flash_fail = findings.iter().any(|f| f.id == "ISP.FLASH_POLL");
     let phys_src = ev.sources.physical.is_some();
@@ -106,11 +131,39 @@ fn verdict_of(ev: &EvidenceRecord, findings: &[Finding]) -> Verdict {
         };
     }
 
+    // ENABLEPROG PASS + CONT pages is not a session PASS if MEMOP never ended.
+    if incomplete {
+        return Verdict {
+            result: "FAIL_UNCONFIRMED",
+            likely: "flash/EEPROM operation did not complete on EP2 (no MEMOP END). ENABLEPROG success does not mean the write finished.".into(),
+            supported_by: supported,
+            not_proven: vec![
+                "host USB I/O error vs target vs cable".into(),
+                if line_anom {
+                    "RST GPIO echo as cause (anomaly only; not established)"
+                } else {
+                    "physical cause"
+                }
+                .into(),
+            ],
+        };
+    }
+
     if ep_pass {
+        // Session outcome only after the ISP session closed (or there was no open MEMOP).
+        let closed = ev.execution.session_end;
+        if !closed && ev.execution.session {
+            return Verdict {
+                result: "INCONCLUSIVE",
+                likely: "ENABLEPROG observed but ISP session still open / no SESSION_END".into(),
+                supported_by: supported,
+                not_proven: vec!["final session outcome".into()],
+            };
+        }
         if line_anom {
             return Verdict {
                 result: "PASS_WITH_ANOMALY",
-                likely: "ISP programming path confirmed. RST GPIO observation is anomalous but not established as causal.".into(),
+                likely: "ISP session completed successfully. RST GPIO observation is anomalous but not established as causal.".into(),
                 supported_by: supported,
                 not_proven: vec![
                     "physical RST on the connector (PINx is the MCU pad)".into(),
@@ -123,7 +176,7 @@ fn verdict_of(ev: &EvidenceRecord, findings: &[Finding]) -> Verdict {
         return Verdict {
             result: "PASS",
             likely: if path_ok {
-                "programming path confirmed (ENABLEPROG + MEMOP)".into()
+                "programming path confirmed (ENABLEPROG + MEMOP END)".into()
             } else {
                 "programming-enable sequence matched firmware observation".into()
             },
@@ -131,7 +184,7 @@ fn verdict_of(ev: &EvidenceRecord, findings: &[Finding]) -> Verdict {
             not_proven: vec![
                 "pin edges".into(),
                 "PHYSICAL_CAPTURE evidence".into(),
-                "target signature (not an EP2 frame)".into(),
+                "target signature / avrdude verify (not on EP2)".into(),
             ],
         };
     }
@@ -142,7 +195,6 @@ fn verdict_of(ev: &EvidenceRecord, findings: &[Finding]) -> Verdict {
         } else {
             "RESET/SCK/MISO electrical"
         };
-        // Capability never confirms. Independent capture that RST stayed HIGH can.
         let confirmed = conflict
             && phys_src
             && ev

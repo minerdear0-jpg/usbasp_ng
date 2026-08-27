@@ -1,0 +1,13 @@
+{
+  "id": "05_flash_abort_line_anomaly",
+  "demo": "flash_abort_line_anomaly",
+  "expect": {
+    "verdict": "FAIL_UNCONFIRMED",
+    "findings": {
+      "ISP.ENABLEPROG": { "status": "PASS" },
+      "ISP.MEMOP_INCOMPLETE": { "status": "FAIL", "confidence": "HIGH" },
+      "LINE.RST_ECHO": { "status": "ANOMALY", "confidence": "LOW", "causal_relevance": "UNKNOWN" }
+    },
+    "must_not_have": ["ISP.PROGRAMMING_PATH", "EVIDENCE.CONFLICT"]
+  }
+}

@@ -89,9 +89,28 @@ pub fn list_scenarios() -> &'static [&'static str] {
         "pass_with_rst_anomaly",
         "memop_flash",
         "memop_poll_fail",
+        "flash_abort_line_anomaly",
+        "flash_poll_fail_end_ok",
         "overflow",
         "session_hw_pass",
         "capabilities_yel0",
+    ]
+}
+
+/// Canonical ISP sessions for replay and determinism. Not CAPS-only HELLO.
+pub fn replay_corpus() -> &'static [&'static str] {
+    &[
+        "memop_flash",
+        "pass_with_rst_anomaly",
+        "enableprog_fail_sw",
+        "enableprog_fail_line_anomaly",
+        "line_fault_rst",
+        "overflow",
+        "enableprog_ladder_silent",
+        "memop_poll_fail",
+        "flash_abort_line_anomaly",
+        "flash_poll_fail_end_ok",
+        "session_hw_pass",
     ]
 }
 
@@ -398,6 +417,160 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 report(RESET, RESET_RELEASE, 50, 0, 0),
             );
             push(&mut records, &mut ns, report(SESSION_END, 0, 51, 0, 0));
+        }
+        "flash_abort_line_anomaly" => {
+            // ENABLEPROG PASS + LINE anomaly + CONT pages, no MEMOP END — must not be PASS.
+            push_hello_caps(&mut records, &mut ns, 10);
+            push(&mut records, &mut ns, report(SESSION_BEGIN, 0, 20, 8, 8));
+            push(
+                &mut records,
+                &mut ns,
+                report(
+                    LINE_FAULT,
+                    LINE_DRIVE_HIGH | EP_FAIL,
+                    21,
+                    2,
+                    0x14,
+                ),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(SCK_CONFIG, 0, 22, 8, TRANSPORT_HW),
+            );
+            push(&mut records, &mut ns, report(RESET, RESET_ASSERT, 23, 0, 0));
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_START, 30, 0xac, 0x53),
+            );
+            push(&mut records, &mut ns, report(ENABLEPROG, EP_CONT, 31, 0, 0));
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_CONT, 32, 0xff, 0xff),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_END | EP_OK, 33, 0x53, 0),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_START, 40, MEM_FLASH, 64),
+            );
+            for p in 0u8..23 {
+                let addr = (p as u16) * 64;
+                push(
+                    &mut records,
+                    &mut ns,
+                    report(
+                        MEMOP,
+                        EP_CONT | EP_OK,
+                        41 + p as u16,
+                        (addr >> 8) as u8,
+                        (addr & 0xff) as u8,
+                    ),
+                );
+            }
+            // USB dies: no MEMOP END. Session may still close on host teardown.
+            push(
+                &mut records,
+                &mut ns,
+                report(RESET, RESET_RELEASE, 80, 0, 0),
+            );
+            push(&mut records, &mut ns, report(SESSION_END, 0, 81, 0, 0));
+        }
+        "flash_poll_fail_end_ok" => {
+            // Ribbon tear: CONT|FAIL then firmware still emits END|OK + READFLASH.
+            // Host must NOT paint PASS (sticky poll fail survives READFLASH START).
+            push_hello_caps(&mut records, &mut ns, 10);
+            push(&mut records, &mut ns, report(SESSION_BEGIN, 0, 20, 8, 8));
+            push(
+                &mut records,
+                &mut ns,
+                report(
+                    LINE_FAULT,
+                    LINE_DRIVE_HIGH | EP_FAIL,
+                    21,
+                    2,
+                    0x14,
+                ),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(SCK_CONFIG, 0, 22, 8, TRANSPORT_HW),
+            );
+            push(&mut records, &mut ns, report(RESET, RESET_ASSERT, 23, 0, 0));
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_START, 30, 0xac, 0x53),
+            );
+            push(&mut records, &mut ns, report(ENABLEPROG, EP_CONT, 31, 0, 0));
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_CONT, 32, 0xff, 0xff),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_END | EP_OK, 33, 0x53, 0),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_START, 40, MEM_FLASH, 64),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_CONT | EP_OK, 41, 0x10, 0x00),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_CONT | EP_FAIL, 42, 0x11, 0xc0),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_CONT | EP_FAIL, 43, 0x12, 0x00),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_END | EP_OK, 44, MEM_FLASH, 128),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_START, 50, MEM_READFLASH, 64),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_CONT | EP_OK, 51, 0x00, 0x00),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_END | EP_OK, 52, MEM_READFLASH, 1),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(RESET, RESET_RELEASE, 60, 0, 0),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(ISP_PINS, PINS_AFTER_DISC | EP_OK, 61, 0x00, 0x00),
+            );
+            push(&mut records, &mut ns, report(SESSION_END, 0, 62, 0, 0));
         }
         "overflow" => {
             push_hello_caps(&mut records, &mut ns, 1);

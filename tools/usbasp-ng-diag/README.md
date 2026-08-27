@@ -44,7 +44,7 @@ cargo build --release
 # → dt_ready_host_ns ± doubt_ns  (Cristian |dt|/2)
 ```
 
-TUI keys: `q` quit, `x` / `Ctrl+L` clear (confirm `y`), `w` wire frames, `f` faults, `c` caps, `j`/`k` scroll, `g`/`G` top/bottom, `Space` HOLD/RUN (RUN blinks = alive). Dual-column when `--uart` is set (yellow row = RELEASE↔READY **order**, not absolute µs). Full-width **VERDICT** is a session face (`PASS` / `PASS WITH ANOMALY` / `FAIL UNCONFIRMED` / `INCONCLUSIVE`). A red LINE_FAULT finding does not paint the session FAIL. Protocol ENABLEPROG FAIL without independent physical capture is **unconfirmed**, not a proven line cause.
+TUI keys: `q` quit, `x` / `Ctrl+L` clear (confirm `y`), `w` wire frames, `f` faults, `c` caps, `j`/`k` scroll, `g`/`G` top/bottom, `Space` HOLD/RUN (RUN blinks = alive). Dual-column when `--uart` is set (yellow row = RELEASE↔READY **order**, not absolute µs). Full-width **VERDICT** is a session face (`PASS` / `PASS WITH ANOMALY` / `FAIL UNCONFIRMED` / `INCONCLUSIVE`). A red LINE_FAULT finding does not paint the session FAIL. Protocol ENABLEPROG FAIL without independent physical capture is **unconfirmed**, not a proven line cause. Live `watch --serial` opens without the stick: header right **AWAITING**, then **CONNECTED** plus `/dev/bus/usb/…` and serial (unplug → **DROPPED**, then AWAITING again).
 
 Diagplane answers **what firmware observed**. **Why** is a host analysis layer. Pin edges need a sniffer; TRACE aims it, it does not replace it.
 

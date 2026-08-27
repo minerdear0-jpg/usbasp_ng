@@ -92,4 +92,4 @@ Separate target (switchable RESET/SCK/MISO or dedicated fault board). Never the 
 
 ## Next product step (after this fixture)
 
-Correlate USBasp2 Timer1 ↔ target UART ↔ FX2 physical capture — development probe, not more diag layers.
+Correlate USBasp2 Timer1 ↔ target UART ↔ FX2 physical capture — [PHYSICAL-CAPTURE-001](PHYSICAL-CAPTURE-001.md). Firmware frozen until class A (baseline dual capture) exists.

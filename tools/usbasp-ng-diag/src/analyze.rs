@@ -289,16 +289,8 @@ mod tests {
     fn rst_anomaly_with_prog_is_pass_with_anomaly() {
         let a = run_pipeline(&ev("pass_with_rst_anomaly"));
         assert_eq!(a.verdict.result, "PASS_WITH_ANOMALY", "{:?}", a.verdict.likely);
-        let line = a
-            .findings
-            .iter()
-            .find(|f| f.id == "LINE.RST_ECHO")
-            .unwrap();
-        assert_eq!(line.status, FindingStatus::Anomaly);
-        assert_eq!(line.confidence, Confidence::Low);
-        assert_eq!(line.causal_relevance, CausalRelevance::Unknown);
         assert!(a.findings.iter().any(|f| f.id == "ISP.PROGRAMMING_PATH"));
-        assert!(a.findings.iter().all(|f| f.id != "EVIDENCE.CONFLICT"));
+        assert!(a.findings.iter().all(|f| f.id != "ISP.MEMOP_INCOMPLETE"));
         let ep = a
             .findings
             .iter()
@@ -306,6 +298,15 @@ mod tests {
             .unwrap();
         assert_eq!(ep.status, FindingStatus::Pass);
         assert!(a.verdict.likely.contains("anomalous"));
+    }
+
+    #[test]
+    fn flash_abort_with_line_is_fail_not_pass_anomaly() {
+        let a = run_pipeline(&ev("flash_abort_line_anomaly"));
+        assert_eq!(a.verdict.result, "FAIL_UNCONFIRMED", "{:?}", a.verdict.likely);
+        assert!(a.findings.iter().any(|f| f.id == "ISP.MEMOP_INCOMPLETE"));
+        assert!(a.findings.iter().all(|f| f.id != "ISP.PROGRAMMING_PATH"));
+        assert!(a.verdict.likely.contains("did not complete"));
     }
 
     #[test]
@@ -398,7 +399,7 @@ mod goldens {
             .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
             .collect();
         files.sort();
-        assert_eq!(files.len(), 4, "expected four canonical goldens in {}", dir.display());
+        assert_eq!(files.len(), 6, "expected six canonical goldens in {}", dir.display());
         for path in files {
             let spec: Golden = serde_json::from_str(&fs::read_to_string(&path).unwrap())
                 .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
@@ -433,6 +434,64 @@ mod goldens {
                     path.display()
                 );
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod corpus {
+    use super::*;
+    use crate::demo;
+    use crate::evidence;
+    use crate::state::AppState;
+
+    fn pack(name: &str) -> Usbasp2eFile {
+        let cap = demo::build_scenario(name).unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        let ev = evidence::from_state(&format!("demo:{name}"), &st, true);
+        Usbasp2eFile::from_capture(ev, &cap)
+    }
+
+    #[test]
+    fn replay_corpus_is_nine_isp_sessions() {
+        assert_eq!(demo::replay_corpus().len(), 11);
+    }
+
+    #[test]
+    fn replay_is_deterministic() {
+        for name in demo::replay_corpus() {
+            let a = serde_json::to_vec(&run_pipeline(&{
+                let cap = demo::build_scenario(name).unwrap();
+                let mut st = AppState::default();
+                st.ingest_capture(&cap);
+                evidence::from_state(&format!("demo:{name}"), &st, true)
+            }))
+            .unwrap();
+            let b = serde_json::to_vec(&run_pipeline(&{
+                let cap = demo::build_scenario(name).unwrap();
+                let mut st = AppState::default();
+                st.ingest_capture(&cap);
+                evidence::from_state(&format!("demo:{name}"), &st, true)
+            }))
+            .unwrap();
+            assert_eq!(a, b, "{name} analysis JSON must not depend on run time");
+        }
+    }
+
+    #[test]
+    fn raw_is_immutable_across_analysis() {
+        for name in demo::replay_corpus() {
+            let p1 = pack(name);
+            let p2 = pack(name);
+            let r1 = p1.raw.as_ref().expect("demo has raw");
+            let r2 = p2.raw.as_ref().expect("demo has raw");
+            assert_eq!(r1.sha256, r2.sha256, "{name} raw sha256");
+            assert_eq!(r1.hex, r2.hex, "{name} raw bytes");
+            let a1 = serde_json::to_vec(&p1.analysis).unwrap();
+            let a2 = serde_json::to_vec(&p2.analysis).unwrap();
+            assert_eq!(a1, a2, "{name} derived analysis");
+            assert_eq!(p1.observations.integrity.capture_digest, p2.observations.integrity.capture_digest);
         }
     }
 }

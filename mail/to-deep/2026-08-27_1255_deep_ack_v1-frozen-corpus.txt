@@ -1,0 +1,18 @@
+From: deep@mail.local
+To: deep@mail.local
+Date: 2026-08-27 12:55 +0600
+Type: ACK
+Subject: [ACK] evidence-v1 frozen; next is corpus then independent conflict
+Re: milestone close
+
+TL;DR
+  Не меняем semantics. Replay corpus (9) + determinism + raw immutability tests.
+  Настоящий conflict — когда появится записанный FX2, не новый analyzer.
+
+FACT
+  - LINE+PASS+MEMOP остаётся конституцией (golden 02)
+  - analyzers не считают session verdict
+  - EEPROM / build hash на проводе — после independent source
+
+DONT
+  - не трогать evidence-v1 meaning; не EEPROM format fork; не угадывать виноватого

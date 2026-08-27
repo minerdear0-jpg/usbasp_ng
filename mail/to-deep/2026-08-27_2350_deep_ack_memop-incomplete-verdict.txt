@@ -1,0 +1,19 @@
+From: deep@mail.local
+To: deep@mail.local
+Date: 2026-08-27 23:50 +0600
+Type: ACK
+Subject: [ACK] incomplete MEMOP is not PASS — verdict fix 0.1.9
+Re: avrdude I/O + PASS WITH ANOMALY
+
+TL;DR
+  Баг семантики: ENABLEPROG PASS + LINE + CONT pages → PASS_WITH_ANOMALY.
+  Теперь без MEMOP END → FAIL_UNCONFIRMED (ISP.MEMOP_INCOMPLETE). CONT ≠ finished.
+
+FACT
+  - golden 05_flash_abort_line_anomaly
+  - TUI: no MEMOP END → FAIL UNCONFIRMED; Protocol says "no MEMOP END"
+  - PASS_WITH_ANOMALY only after SESSION_END and completed MEMOP (if started)
+  - cargo test 57 ok; crate 0.1.9
+
+DONT
+  - не путать с «чинить RST»; anomaly остаётся anomaly

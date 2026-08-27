@@ -1,0 +1,13 @@
+{
+  "id": "06_flash_poll_fail_end_ok",
+  "demo": "flash_poll_fail_end_ok",
+  "expect": {
+    "verdict": "FAIL_UNCONFIRMED",
+    "findings": {
+      "ISP.ENABLEPROG": { "status": "PASS" },
+      "ISP.FLASH_POLL": { "status": "FAIL" },
+      "LINE.RST_ECHO": { "status": "ANOMALY", "confidence": "LOW", "causal_relevance": "UNKNOWN" }
+    },
+    "must_not_have": ["ISP.PROGRAMMING_PATH"]
+  }
+}

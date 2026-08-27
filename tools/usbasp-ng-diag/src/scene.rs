@@ -97,6 +97,15 @@ pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String)
             "PINS STILL DRIVING — DDR RST/MOSI/SCK".into(),
         );
     }
+    if state.flash_poll_failed {
+        let addr = state.flash_poll_fail_addr.unwrap_or(0);
+        return (
+            DiagTone::Bad,
+            format!(
+                "FLASH POLL FAIL @{addr:#06x} — page never left 0xFF (or ribbon torn). MEMOP END OK does not clear this. Verify-mismatch is avrdude-only"
+            ),
+        );
+    }
     if let Some(&(addr, false)) = state.memop_pages.iter().find(|(_, ok)| !*ok) {
         return (
             DiagTone::Bad,
@@ -182,10 +191,20 @@ pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String)
             .last()
             .map(|(a, _)| *a)
             .unwrap_or(0);
+        let n = state.memop_pages.iter().filter(|(_, ok)| *ok).count();
+        if open {
+            return (
+                DiagTone::Warn,
+                format!(
+                    "{} @{addr:#06x} — {n} CONT, no MEMOP END yet",
+                    mem_name(state.memop_kind)
+                ),
+            );
+        }
         return (
-            DiagTone::Warn,
+            DiagTone::Bad,
             format!(
-                "{} @{addr:#06x} — no MEMOP END",
+                "MEMOP INCOMPLETE — {} {n} CONT pages, no MEMOP END (session closed). CONT OK ≠ write finished",
                 mem_name(state.memop_kind)
             ),
         );

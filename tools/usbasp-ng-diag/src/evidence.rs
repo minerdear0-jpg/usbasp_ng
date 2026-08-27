@@ -78,6 +78,10 @@ pub struct Execution {
     pub memop_ok: Option<bool>,
     pub memop_pages: Option<u8>,
     pub verify_ok: Option<bool>,
+    /// MEMOP START (or CONT) seen. Not the same as success.
+    pub memop_started: bool,
+    /// START/CONT without MEMOP END — write/read did not finish on EP2.
+    pub memop_incomplete: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -196,9 +200,21 @@ pub fn from_state(source: &str, state: &AppState, complete: bool) -> EvidenceRec
             trace_events: state.trace_valid,
             trace_overflow: state.trace_overflow,
             frames: state.events.len(),
-            memop_ok: state.last_flash_ok.or(state.memop_end_ok),
+            memop_ok: if state.flash_poll_failed {
+                Some(false)
+            } else {
+                state.last_flash_ok.or(state.memop_end_ok)
+            },
             memop_pages: state.last_flash_pages.or(state.memop_end_pages),
             verify_ok: state.last_verify_ok,
+            memop_started: state.memop_kind.is_some()
+                || !state.memop_pages.is_empty()
+                || state.memop_end_ok.is_some()
+                || state.last_flash_ok.is_some()
+                || state.flash_poll_failed,
+            memop_incomplete: (state.memop_kind.is_some() || !state.memop_pages.is_empty())
+                && state.memop_end_ok.is_none()
+                && !state.flash_poll_failed,
         },
         claims: claims(state),
         result: result_block(state, tone, &diagnosis),
@@ -274,7 +290,10 @@ fn claims(state: &AppState) -> Vec<Claim> {
             confidence,
         });
     }
-    if let Some(&(addr, false)) = state.memop_pages.iter().find(|(_, ok)| !*ok) {
+    if let Some(addr) = state
+        .flash_poll_fail_addr
+        .or_else(|| state.memop_pages.iter().find(|(_, ok)| !*ok).map(|(a, _)| *a))
+    {
         out.push(Claim {
             name: "FLASH_POLL",
             expected: "page leaves 0xFF after write (AVR data polling)".into(),

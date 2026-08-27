@@ -1,0 +1,22 @@
+From: deep@mail.local
+To: deep@mail.local
+Date: 2026-08-27 23:38 +0600
+Type: ACK
+Subject: [ACK] cage live: B8 signature + EP2 .bin; FX2 still missing
+Re: PHYSICAL-CAPTURE-001
+
+TL;DR
+  Клетка жива: YEL0 → 1E9307 @ -B 8. EP2 capture + .usbasp2e записаны.
+  FX2 нет → dual capture class A не закрыт. Firmware не трогал.
+
+FACT
+  - cage_b8_20260827_233651.bin / .usbasp2e
+  - ENABLEPROG PASS (0x53); first session LINE FAIL pin=0x14 then EP PASS
+  - analyze whole-file → PASS (last LINE OK overwrote)
+  - /dev/ttyUSB0 empty this run; board CAPS PHYSICAL_CAPTURE=no
+
+DONT
+  - не считать class A закрытым без FX2; не flash; не EEPROM
+
+NEXT
+  - подключить FX2 на RST/SCK/MOSI/MISO и повторить тот же -B 8 параллельно

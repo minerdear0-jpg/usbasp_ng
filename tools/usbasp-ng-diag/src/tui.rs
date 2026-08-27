@@ -7,7 +7,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Clear, Padding, Paragraph, Row, Table, TableState};
@@ -15,7 +15,7 @@ use ratatui::Frame;
 use ratatui::Terminal;
 use std::io::{self, IsTerminal, Stdout};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::capture::CaptureFile;
 use crate::correlate::{self, TimelineEvent};
@@ -48,6 +48,18 @@ struct Ui {
     uart_path: Option<PathBuf>,
     timeline: Vec<TimelineEvent>,
     confirm_clear: bool,
+    usb_want: Option<String>,
+    usb_path: String,
+    usb_serial: String,
+    usb_link: UsbLink,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum UsbLink {
+    Offline,
+    Awaiting,
+    Connected,
+    Dropped,
 }
 
 impl Ui {
@@ -66,6 +78,10 @@ impl Ui {
             uart_path,
             timeline: Vec::new(),
             confirm_clear: false,
+            usb_want: None,
+            usb_path: String::new(),
+            usb_serial: String::new(),
+            usb_link: UsbLink::Offline,
         };
         ui.refresh_timeline();
         ui.jump_bot();
@@ -175,16 +191,35 @@ pub fn run(source: WatchSource, uart: Option<PathBuf>) -> Result<()> {
             (format!("jsonl:{}", path.display()), st, None)
         }
         WatchSource::Live { serial } => {
-            let handle = crate::usb::open_composite(&serial)?;
-            (
-                format!("live:{}", handle.serial),
-                AppState::default(),
-                Some(handle),
-            )
+            let live = crate::usb::try_open_composite(&serial)?;
+            let (label, link, path, ser) = match &live {
+                Some(h) => (
+                    format!("live:{}", h.serial),
+                    UsbLink::Connected,
+                    h.path.clone(),
+                    h.serial.clone(),
+                ),
+                None => (
+                    format!("live:{serial}"),
+                    UsbLink::Awaiting,
+                    "—".into(),
+                    serial.clone(),
+                ),
+            };
+            let mut ui = Ui::new(label, AppState::default(), uart);
+            ui.usb_want = Some(serial);
+            ui.usb_path = path;
+            ui.usb_serial = ser;
+            ui.usb_link = link;
+            return run_tui(ui, live);
         }
     };
 
-    let mut ui = Ui::new(label, state, uart);
+    let ui = Ui::new(label, state, uart);
+    run_tui(ui, live)
+}
+
+fn run_tui(mut ui: Ui, live: Option<CompositeHandle>) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -216,8 +251,39 @@ fn run_loop(
     mut live: Option<CompositeHandle>,
 ) -> Result<()> {
     let mut buf = [0u8; 8];
+    let mut last_probe = Instant::now()
+        .checked_sub(Duration::from_secs(1))
+        .unwrap_or_else(Instant::now);
     loop {
         terminal.draw(|f| draw(f, ui))?;
+
+        if live.is_none() {
+            if let Some(want) = ui.usb_want.clone() {
+                if last_probe.elapsed() >= Duration::from_millis(400) {
+                    last_probe = Instant::now();
+                    match crate::usb::try_open_composite(&want) {
+                        Ok(Some(h)) => {
+                            ui.usb_path = h.path.clone();
+                            ui.usb_serial = h.serial.clone();
+                            ui.source_label = format!("live:{}", h.serial);
+                            ui.usb_link = UsbLink::Connected;
+                            ui.status.clear();
+                            live = Some(h);
+                        }
+                        Ok(None) => {
+                            ui.usb_link = UsbLink::Awaiting;
+                            if ui.usb_path.is_empty() {
+                                ui.usb_path = "—".into();
+                            }
+                        }
+                        Err(e) => {
+                            ui.usb_link = UsbLink::Awaiting;
+                            ui.status = format!("USB {e}");
+                        }
+                    }
+                }
+            }
+        }
 
         if let Some(h) = live.as_mut() {
             match h
@@ -239,13 +305,15 @@ fn run_loop(
                 Ok(_) | Err(rusb::Error::Timeout) => {}
                 Err(e) => {
                     ui.status = format!("USB {e}");
+                    ui.usb_link = UsbLink::Dropped;
+                    live = None;
                 }
             }
         } else if ui.uart_path.is_some() {
             ui.refresh_timeline();
         }
 
-        let wait = if live.is_some() {
+        let wait = if live.is_some() || ui.usb_want.is_some() {
             Duration::from_millis(16)
         } else {
             Duration::from_millis(200)
@@ -477,6 +545,13 @@ fn dash_key_alive(on: bool) -> Vec<Span<'static>> {
 }
 
 fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
+    let (hud, hud_w) = usb_hud(ui);
+    let hud_w = hud_w.min(area.width.saturating_sub(8)).max(12);
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(8), Constraint::Length(hud_w)])
+        .split(area);
+
     let mut spans = vec![
         Span::styled(
             crate::version::banner_short(),
@@ -499,7 +574,71 @@ fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
     spans.extend(dash_key("FAULT", ui.faults_only.then(lamp_ng)));
     spans.push(Span::raw(" "));
     spans.extend(dash_key("CAPS", ui.show_caps.then(lamp_run)));
-    f.render_widget(Paragraph::new(Line::from(spans)), area);
+    f.render_widget(Paragraph::new(Line::from(spans)), cols[0]);
+    f.render_widget(Paragraph::new(hud).alignment(Alignment::Right), cols[1]);
+}
+
+fn spans_width(spans: &[Span]) -> u16 {
+    spans
+        .iter()
+        .map(|s| s.content.chars().count() as u16)
+        .sum()
+}
+
+fn usb_hud(ui: &Ui) -> (Line<'static>, u16) {
+    match ui.usb_link {
+        UsbLink::Offline => {
+            let spans = dash_key("OFFLINE", None);
+            let w = spans_width(&spans);
+            (Line::from(spans), w)
+        }
+        UsbLink::Awaiting => {
+            let lamp = if heartbeat() {
+                Some(lamp_run())
+            } else {
+                None
+            };
+            let id = if ui.usb_serial.is_empty() {
+                "USBasp2".to_string()
+            } else {
+                ui.usb_serial.clone()
+            };
+            let path = if ui.usb_path.is_empty() {
+                "—"
+            } else {
+                ui.usb_path.as_str()
+            };
+            let mut spans = dash_key("AWAITING", lamp);
+            spans.push(Span::raw(" "));
+            spans.extend(dash_key(path, None));
+            spans.push(Span::raw(" "));
+            spans.extend(dash_key(&id, None));
+            let w = spans_width(&spans);
+            (Line::from(spans), w)
+        }
+        UsbLink::Connected => {
+            let mut spans = dash_key("CONNECTED", Some(lamp_ok()));
+            spans.push(Span::raw(" "));
+            // Bus address is a readout plate, not a third status lamp.
+            spans.extend(dash_key(
+                &ui.usb_path,
+                Some((Color::Black, Color::White)),
+            ));
+            spans.push(Span::raw(" "));
+            spans.extend(dash_key(&ui.usb_serial, None));
+            let w = spans_width(&spans);
+            (Line::from(spans), w)
+        }
+        UsbLink::Dropped => {
+            let mut spans = dash_key("DROPPED", Some(lamp_ng()));
+            spans.push(Span::raw(" "));
+            spans.extend(dash_key(&ui.usb_path, None));
+            spans.push(Span::raw(" "));
+            spans.extend(dash_key(&ui.usb_serial, None));
+            let w = spans_width(&spans);
+            (Line::from(spans), w)
+        }
+    }
 }
 
 fn draw_footer(f: &mut Frame, area: Rect, ui: &Ui) {
@@ -555,15 +694,29 @@ enum SessionFace {
 
 fn session_face(st: &AppState) -> SessionFace {
     let line_fail = st.line_ok == Some(false);
-    let poll_fail = st.memop_pages.iter().any(|(_, ok)| !*ok);
+    let poll_fail = st.flash_poll_failed || st.memop_pages.iter().any(|(_, ok)| !*ok);
     let ep_fail = st.ep_fail == Some(true);
     let ep_pass = st.ep_fail == Some(false);
-    if ep_fail || poll_fail {
+    let memop_open = st.memop_kind.is_some() && st.memop_end_ok.is_none();
+    let memop_fail = st.memop_end_ok == Some(false) || st.last_flash_ok == Some(false);
+    let done = st.saw_session_end;
+
+    if ep_fail || poll_fail || memop_fail {
         SessionFace::FailUnconfirmed
-    } else if ep_pass && line_fail {
+    } else if memop_open {
+        // CONT pages without MEMOP END: still writing, or aborted mid-write.
+        if done {
+            SessionFace::FailUnconfirmed
+        } else {
+            SessionFace::Open
+        }
+    } else if ep_pass && done && line_fail {
         SessionFace::PassAnomaly
-    } else if ep_pass {
+    } else if ep_pass && done {
         SessionFace::Pass
+    } else if ep_pass {
+        // ENABLEPROG ok, session still open — not a final PASS.
+        SessionFace::Open
     } else if line_fail {
         SessionFace::Inconclusive
     } else {
@@ -648,11 +801,41 @@ fn verdict_lines(st: &AppState, inner_w: u16, inner_h: u16) -> Vec<Line<'static>
 
     let echo = st.ep_rx.map(|b| b.contains(&0x53)).unwrap_or(false);
     let pages_ok = st.memop_pages.iter().filter(|(_, ok)| *ok).count();
-    let proto = match (st.ep_fail, echo, pages_ok) {
-        (Some(false), true, n) if n > 0 => format!("✓ ENABLEPROG 0x53  ✓ FLASH {n} pages"),
-        (Some(false), true, _) => "✓ ENABLEPROG 0x53  FLASH —".into(),
-        (Some(false), false, n) if n > 0 => format!("✓ ENABLEPROG PASS  ✓ FLASH {n} pages"),
-        (Some(true), _, _) => "ENABLEPROG FAIL  (primary)".into(),
+    let pages_fail = st.memop_pages.iter().filter(|(_, ok)| !*ok).count();
+    let sticky_fail = st.flash_poll_failed;
+    let proto = match (
+        st.ep_fail,
+        echo,
+        sticky_fail || pages_fail > 0,
+        st.last_flash_ok,
+        st.memop_end_ok,
+        pages_ok,
+        pages_fail,
+    ) {
+        (Some(false), _, true, _, _, ok_n, fail_n) => {
+            let addr = st
+                .flash_poll_fail_addr
+                .map(|a| format!(" @{a:#06x}"))
+                .unwrap_or_default();
+            format!("✓ ENABLEPROG  FLASH POLL FAIL{addr}  CONT ok={ok_n} fail={fail_n}")
+        }
+        (Some(false), true, false, Some(true), _, n, _) if n > 0 || st.last_flash_pages.is_some() => {
+            format!(
+                "✓ ENABLEPROG 0x53  ✓ FLASH END {} pages",
+                st.last_flash_pages.unwrap_or(n as u8)
+            )
+        }
+        (Some(false), true, false, Some(false), _, _, _) => {
+            "✓ ENABLEPROG 0x53  FLASH END FAIL".into()
+        }
+        (Some(false), true, false, None, None, n, _) if n > 0 => {
+            format!("✓ ENABLEPROG 0x53  FLASH {n} pages — no MEMOP END")
+        }
+        (Some(false), true, false, None, None, _, _) if st.memop_kind.is_some() => {
+            "✓ ENABLEPROG 0x53  FLASH — no MEMOP END".into()
+        }
+        (Some(false), true, false, _, _, _, _) => "✓ ENABLEPROG 0x53".into(),
+        (Some(true), _, _, _, _, _, _) => "ENABLEPROG FAIL  (primary)".into(),
         _ => "—".into(),
     };
     let pin = st.line_pin.unwrap_or(0);
@@ -672,6 +855,9 @@ fn verdict_lines(st: &AppState, inner_w: u16, inner_h: u16) -> Vec<Line<'static>
                 "{} anomaly → programming failure   NOT ESTABLISHED",
                 rst_name(st)
             )
+        }
+        SessionFace::FailUnconfirmed if st.memop_kind.is_some() && st.memop_end_ok.is_none() => {
+            "MEMOP incomplete  host USB drop plausible  RST NOT ESTABLISHED".into()
         }
         SessionFace::FailUnconfirmed if st.ep_fail == Some(true) && st.line_ok == Some(false) => {
             format!("{} path plausible  physical {} NOT PROVEN", rst_name(st), rst_name(st))
@@ -1399,7 +1585,10 @@ fn draw_timeline(f: &mut Frame, area: Rect, ui: &Ui) {
 
 #[cfg(test)]
 mod tests {
-    use super::{isp_pin_lines, session_face, verdict_lines, SessionFace, HEADLESS_WATCH_HINT};
+    use super::{
+        isp_pin_lines, session_face, usb_hud, verdict_lines, SessionFace, Ui, UsbLink,
+        HEADLESS_WATCH_HINT,
+    };
     use crate::state::AppState;
 
     fn line_text(line: &ratatui::text::Line) -> String {
@@ -1444,6 +1633,10 @@ mod tests {
         st.ep_fail = Some(false);
         st.ep_rx = Some([0xff, 0xff, 0x53, 0x00]);
         st.memop_pages = vec![(0, true), (0x200, true), (0x400, true)];
+        st.memop_kind = Some(1); // MEM_FLASH
+        st.memop_end_ok = Some(true);
+        st.memop_end_pages = Some(3);
+        st.saw_session_end = true;
         assert_eq!(session_face(&st), SessionFace::PassAnomaly);
         let all = verdict_lines(&st, 96, 4)
             .iter()
@@ -1471,6 +1664,82 @@ mod tests {
             .join("\n");
         assert!(all.contains("INCONCLUSIVE"), "{all}");
         assert!(!all.contains(" FAIL "), "{all}");
+    }
+
+    #[test]
+    fn flash_cont_without_end_is_not_pass() {
+        let mut st = AppState::default();
+        st.line_ok = Some(false);
+        st.line_bit = Some(2);
+        st.line_pin = Some(0x14);
+        st.ep_fail = Some(false);
+        st.ep_rx = Some([0xff, 0xff, 0x53, 0x00]);
+        st.memop_kind = Some(1);
+        st.memop_pages = (0..23).map(|i| ((i * 0x40) as u16, true)).collect();
+        st.memop_end_ok = None;
+        st.saw_session_end = true;
+        assert_eq!(session_face(&st), SessionFace::FailUnconfirmed);
+        let all = verdict_lines(&st, 96, 4)
+            .iter()
+            .map(line_text)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(all.contains("FAIL UNCONFIRMED"), "{all}");
+        assert!(all.contains("no MEMOP END"), "{all}");
+        assert!(!all.contains("PASS WITH ANOMALY"), "{all}");
+    }
+
+    #[test]
+    fn flash_poll_fail_survives_readflash_and_is_not_pass() {
+        let mut st = AppState::default();
+        st.line_ok = Some(false);
+        st.line_bit = Some(2);
+        st.line_pin = Some(0x14);
+        st.ep_fail = Some(false);
+        st.ep_rx = Some([0xff, 0xff, 0x53, 0x00]);
+        st.flash_poll_failed = true;
+        st.flash_poll_fail_addr = Some(0x11c0);
+        st.last_flash_ok = Some(false);
+        st.last_flash_pages = Some(128);
+        // After READFLASH START, current memop_pages may be all OK.
+        st.memop_kind = Some(2); // READFLASH
+        st.memop_pages = vec![(0, true)];
+        st.memop_end_ok = Some(true);
+        st.saw_session_end = true;
+        assert_eq!(session_face(&st), SessionFace::FailUnconfirmed);
+        let all = verdict_lines(&st, 96, 4)
+            .iter()
+            .map(line_text)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(all.contains("FAIL UNCONFIRMED"), "{all}");
+        assert!(all.contains("POLL FAIL"), "{all}");
+        assert!(!all.contains("PASS WITH ANOMALY"), "{all}");
+    }
+
+    #[test]
+    fn usb_hud_awaiting_names_the_stick() {
+        let mut ui = Ui::new("live:YEL0".into(), AppState::default(), None);
+        ui.usb_link = UsbLink::Awaiting;
+        ui.usb_serial = "YEL0".into();
+        ui.usb_path = "—".into();
+        let (line, _) = usb_hud(&ui);
+        let t = line_text(&line);
+        assert!(t.contains("AWAITING"), "{t}");
+        assert!(t.contains("YEL0"), "{t}");
+        assert!(t.contains("["), "{t}");
+    }
+
+    #[test]
+    fn usb_hud_connected_path_is_a_key() {
+        let mut ui = Ui::new("live:YEL0".into(), AppState::default(), None);
+        ui.usb_link = UsbLink::Connected;
+        ui.usb_serial = "YEL0".into();
+        ui.usb_path = "/dev/bus/usb/003/010".into();
+        let t = line_text(&usb_hud(&ui).0);
+        assert!(t.contains("CONNECTED"), "{t}");
+        assert!(t.contains("[ /dev/bus/usb/003/010 ]"), "{t}");
+        assert!(t.contains("[ YEL0 ]"), "{t}");
     }
 }
 
