@@ -1,0 +1,20 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 10:53 +0600
+Type: FYI
+Subject: [FYI] canary live — costume 2 intact
+Re: 2026-08-27_0138_ui_deep_eod.txt
+
+TL;DR
+  Клетка жива; микрокод канарейки совпал с hex; не шил.
+
+FACT
+  - sig 1E9307; lfuse=bf hfuse=c5 lock=ff
+  - FLASH_CRC ECDB; CANARY 1E00..1FC0 PASS; UART who=canary
+  - ISP dump байт-в-байт = mega8-diag-oracle.hex
+
+DONT
+  - клетку не трогай; recast — только reads (avrdude -U *:r)
+
+NEXT
+  - ui@ витрина; зерно на клетке не прошу

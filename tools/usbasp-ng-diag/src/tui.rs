@@ -334,18 +334,19 @@ fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
 
 fn draw_banner(f: &mut Frame, area: Rect, ui: &Ui) {
     let (tone, line) = diagnosis(&ui.state);
-    let (fg, bg) = match tone {
-        DiagTone::Bad => (Color::White, Color::Red),
-        DiagTone::Ok => (Color::Black, Color::Green),
-        DiagTone::Warn => (Color::Black, Color::Yellow),
-        DiagTone::Info => (Color::Cyan, Color::Reset),
+    let (fg, bg, lit) = match tone {
+        DiagTone::Bad => (Color::White, Color::Red, true),
+        DiagTone::Ok => (Color::Black, Color::Green, true),
+        DiagTone::Warn => (Color::Black, Color::Yellow, true),
+        DiagTone::Info => (Color::DarkGray, Color::Reset, false),
     };
-    let text = line;
+    let style = if lit {
+        Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(fg)
+    };
     f.render_widget(
-        Paragraph::new(Span::styled(
-            format!(" {text} "),
-            Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
-        )),
+        Paragraph::new(Span::styled(format!(" {line} "), style)),
         area,
     );
 }
@@ -360,20 +361,35 @@ fn draw_phases(f: &mut Frame, area: Rect, ui: &Ui) {
             PhaseMark::Ok => ("✓", Color::Black, Color::Green),
             PhaseMark::Fail => ("×", Color::White, Color::Red),
             PhaseMark::Active => ("▶", Color::Black, Color::Yellow),
-            PhaseMark::Idle => ("·", Color::DarkGray, Color::Reset),
+            PhaseMark::Idle => (" ", Color::DarkGray, Color::Reset),
         };
         spans.push(Span::styled(
             format!(" {name} {sym} "),
-            Style::default().fg(fg).bg(bg),
+            match mark {
+                PhaseMark::Idle => Style::default().fg(Color::DarkGray),
+                _ => Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
+            },
         ));
     }
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
+fn dim_block(title: &str, lit: bool) -> Block<'_> {
+    let style = if lit {
+        Style::default()
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+    Block::default()
+        .borders(Borders::ALL)
+        .title(title.to_string())
+        .border_style(style)
+        .title_style(style)
+}
+
 fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
-    let show_flash = ui.state.memop_kind.is_some() && ui.state.ep_fail != Some(true);
-    // 16:9 terminal ≈ 3.3 cells/row (cell ~1:2). 120×36 is already that.
-    let bus = if show_flash && area.width >= 110 {
+    // Chassis is always there on 16:9. FLASH never pops in and shoves the bus.
+    let bus = if area.width >= 110 {
         let split = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Min(72), Constraint::Length(32)])
@@ -393,44 +409,32 @@ fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
         ])
         .split(bus);
 
+    let isp_lit = ui.state.saw_reset || ui.state.pins_ddr.is_some() || ui.state.sck_id.is_some();
     f.render_widget(
-        Paragraph::new(isp_pin_lines(&ui.state)).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("ISP"),
-        ),
+        Paragraph::new(isp_pin_lines(&ui.state)).block(dim_block("ISP", isp_lit)),
         cols[0],
     );
+    let ep_lit = ui.state.ep_fail.is_some();
     f.render_widget(
-        Paragraph::new(enableprog_lines(&ui.state)).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("ENABLEPROG"),
-        ),
+        Paragraph::new(enableprog_lines(&ui.state)).block(dim_block("ENABLEPROG", ep_lit)),
         cols[1],
     );
+    let trace_lit = ui.state.trace_triggered || ui.state.trace_overflow;
     let trace_title = match ui.state.trace_slots {
         Some(n) => format!("TRACE {n}"),
         None => "TRACE".into(),
     };
     f.render_widget(
-        Paragraph::new(trace_lines(&ui.state)).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(trace_title),
-        ),
+        Paragraph::new(trace_lines(&ui.state)).block(dim_block(&trace_title, trace_lit)),
         cols[2],
     );
 }
 
 fn draw_flash_map(f: &mut Frame, area: Rect, ui: &Ui) {
     let inner_w = area.width.saturating_sub(2);
+    let lit = ui.state.memop_kind.is_some() || !ui.state.memop_pages.is_empty();
     f.render_widget(
-        Paragraph::new(flash_lines(&ui.state, inner_w)).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("FLASH"),
-        ),
+        Paragraph::new(flash_lines(&ui.state, inner_w)).block(dim_block("FLASH", lit)),
         area,
     );
 }
@@ -505,7 +509,7 @@ fn isp_pin_lines(st: &AppState) -> Vec<Line<'static>> {
             "STILL DRIVING",
             Style::default().fg(Color::White).bg(Color::Red),
         ),
-        None => Span::styled("in session", Style::default().fg(Color::DarkGray)),
+        None => Span::styled("—", Style::default().fg(Color::DarkGray)),
     };
     vec![
         Line::from(vec![rst_n, Span::raw(" "), mosi_n]),
@@ -536,10 +540,14 @@ fn hex_cell(b: u8, accent: bool, fail: bool) -> Span<'static> {
     Span::styled(format!(" {b:02X} "), style)
 }
 
+fn empty_cell() -> Span<'static> {
+    Span::styled(" ·· ", Style::default().fg(Color::DarkGray))
+}
+
 fn enableprog_lines(st: &AppState) -> Vec<Line<'static>> {
     match (st.ep_tx, st.ep_rx, st.ep_fail) {
         (Some(tx), Some(rx), Some(fail)) => {
-            let echo_ok = rx[0] == 0x53;
+            let echo_ok = rx.iter().any(|&b| b == 0x53);
             let mut tx_spans = vec![Span::styled("TX  ", Style::default().fg(Color::DarkGray))];
             for (i, b) in tx.iter().enumerate() {
                 tx_spans.push(hex_cell(*b, i == 1, false));
@@ -549,7 +557,8 @@ fn enableprog_lines(st: &AppState) -> Vec<Line<'static>> {
             }
             let mut rx_spans = vec![Span::styled("RX  ", Style::default().fg(Color::DarkGray))];
             for (i, b) in rx.iter().enumerate() {
-                rx_spans.push(hex_cell(*b, !fail && i == 1, fail && i == 0));
+                let is_echo = *b == 0x53;
+                rx_spans.push(hex_cell(*b, is_echo && !fail, fail && i == 0));
                 if i + 1 != rx.len() {
                     rx_spans.push(Span::raw(" "));
                 }
@@ -577,19 +586,52 @@ fn enableprog_lines(st: &AppState) -> Vec<Line<'static>> {
                 Line::from(rx_spans),
                 Line::from(vec![res, echo, Span::raw(delay)]),
                 Line::from(Span::styled(
-                    "expect RX[0]=53  (programming enable)",
+                    "expect 53 in RX  (programming enable echo)",
                     Style::default().fg(Color::DarkGray),
                 )),
             ]
         }
-        _ => vec![Line::from(Span::styled(
-            "waiting for ENABLEPROG",
-            Style::default().fg(Color::DarkGray),
-        ))],
+        _ => vec![
+            Line::from(vec![
+                Span::styled("TX  ", Style::default().fg(Color::DarkGray)),
+                empty_cell(),
+                Span::raw(" "),
+                empty_cell(),
+                Span::raw(" "),
+                empty_cell(),
+                Span::raw(" "),
+                empty_cell(),
+            ]),
+            Line::from(vec![
+                Span::styled("RX  ", Style::default().fg(Color::DarkGray)),
+                empty_cell(),
+                Span::raw(" "),
+                empty_cell(),
+                Span::raw(" "),
+                empty_cell(),
+                Span::raw(" "),
+                empty_cell(),
+            ]),
+        ],
     }
 }
 
 fn flash_lines(st: &AppState, inner_w: u16) -> Vec<Line<'static>> {
+    if st.memop_kind.is_none() && st.memop_pages.is_empty() {
+        return vec![
+            Line::from(Span::styled("—", Style::default().fg(Color::DarkGray))),
+            Line::from(vec![
+                empty_cell(),
+                Span::raw(" "),
+                empty_cell(),
+            ]),
+            Line::from(vec![
+                empty_cell(),
+                Span::raw(" "),
+                empty_cell(),
+            ]),
+        ];
+    }
     let psz = st.memop_pagesize.unwrap_or(0) as u16;
     let lo = st.memop_pages.first().map(|(a, _)| *a);
     let hi = st
@@ -655,17 +697,26 @@ fn trace_lines(st: &AppState) -> Vec<Line<'static>> {
         "IDLE"
     };
     let n = 16u16;
-    let t_at = if st.trace_triggered { 9 } else { n };
+    let (fill, mark_t) = if st.trace_triggered {
+        (9u16, true)
+    } else {
+        (0, false)
+    };
     let mut bar = String::new();
     for i in 0..n {
-        if i == t_at {
+        if mark_t && i == fill {
             bar.push('T');
-        } else if i < t_at {
+        } else if i < fill {
             bar.push('█');
         } else {
             bar.push('·');
         }
     }
+    let bar_style = if st.trace_triggered {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
     let ov = if st.trace_overflow { "YES" } else { "no" };
     let kind = match st.trace_kind {
         Some(3) => "ENABLEPROG_FAIL",
@@ -673,22 +724,27 @@ fn trace_lines(st: &AppState) -> Vec<Line<'static>> {
         Some(0) | None => "NONE",
         Some(_) => "?",
     };
+    let life_style = if st.trace_triggered {
+        Style::default().fg(Color::Black).bg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
     vec![
         Line::from(vec![
             Span::raw("["),
-            Span::styled(bar, Style::default().fg(Color::Cyan)),
+            Span::styled(bar, bar_style),
             Span::raw("]  "),
-            Span::styled(
-                format!(" {life} "),
-                if st.trace_triggered {
-                    Style::default().fg(Color::Black).bg(Color::Yellow)
-                } else {
-                    Style::default().fg(Color::DarkGray)
-                },
-            ),
+            Span::styled(format!(" {life} "), life_style),
         ]),
         Line::from(Span::styled(
-            format!("slots={slots}  overflow={ov}  kind={kind}  post={}", st.trace_post.unwrap_or(0)),
+            if st.trace_triggered || st.trace_overflow || st.saw_session {
+                format!(
+                    "slots={slots}  overflow={ov}  kind={kind}  post={}",
+                    st.trace_post.unwrap_or(0)
+                )
+            } else {
+                "—".into()
+            },
             Style::default().fg(Color::DarkGray),
         )),
     ]

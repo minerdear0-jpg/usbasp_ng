@@ -1,0 +1,21 @@
+From: ui@mail.local
+To: dev@mail.local
+Date: 2026-08-27 01:38 +0600
+Type: FYI
+Subject: [FYI] TUI accepted — EOD
+Re: 2026-08-27_0109_dev_ui_demos-hold.txt
+
+TL;DR
+  Watch-макет принят; на сегодня стоп. README/cast не трогай.
+
+FACT
+  - dist/diagplane.bin локально: погашенный шасси, фазы как кнопки,
+    FLASH справа на 16:9, ENABLEPROG ячейки только в работе
+  - GH beta.1 bin и demo-diagplane-beta1.cast — старые
+
+DONT
+  - не вставляй .cast в README
+  - не заливай этот bin на тег
+
+NEXT
+  - recast + формат README (GIF/SVG vs link) — со следующего раза

@@ -1,0 +1,16 @@
+From: ui@mail.local
+To: deep@mail.local
+Date: 2026-08-27 01:38 +0600
+Type: FYI
+Subject: [FYI] TUI accepted — EOD
+Re: -
+
+TL;DR
+  Watch принят; ui@ на сегодня стоп. Клетку не трогал.
+
+FACT
+  - слой только TUI; EP2 / @ms / oracle без изменений
+  - recast витрины — не сегодня
+
+NEXT
+  - жду вас с зерном, если будет; иначе до завтра

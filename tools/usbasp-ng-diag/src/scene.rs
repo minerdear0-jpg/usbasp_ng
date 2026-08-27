@@ -117,11 +117,11 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
         );
     }
     if state.saw_session {
-        return (DiagTone::Info, "SESSION — waiting for ENABLEPROG".into());
+        return (DiagTone::Info, "—".into());
     }
     (
         DiagTone::Info,
-        "waiting for CONNECT (HELLO / CAPS on ISP CONNECT)".into(),
+        "—".into(),
     )
 }
 
@@ -144,7 +144,6 @@ pub fn phases(state: &AppState) -> [(&'static str, PhaseMark); 6] {
     let prog = match state.ep_fail {
         Some(true) => PhaseMark::Fail,
         Some(false) => PhaseMark::Ok,
-        None if state.saw_session => PhaseMark::Active,
         None => PhaseMark::Idle,
     };
     let flash = match (state.memop_kind, state.memop_end_ok) {
@@ -339,6 +338,19 @@ mod tests {
     use crate::correlate::merge_timeline;
     use crate::correlate::{parse_diag_jsonl, parse_uart_log};
     use crate::demo;
+
+    #[test]
+    fn idle_chassis_is_unlit() {
+        let st = AppState::default();
+        assert!(
+            phases(&st).iter().all(|(_, m)| *m == PhaseMark::Idle),
+            "{:?}",
+            phases(&st)
+        );
+        let (tone, line) = diagnosis(&st);
+        assert_eq!(tone, DiagTone::Info);
+        assert_eq!(line, "—");
+    }
 
     #[test]
     fn fail_sw_is_target_silent() {

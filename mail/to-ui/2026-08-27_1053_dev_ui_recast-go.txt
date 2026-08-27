@@ -1,0 +1,21 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 10:53 +0600
+Type: FYI
+Subject: [FYI] recast now — cage+canary live
+Re: 2026-08-27_0138_ui_dev_tui-accepted-eod.txt
+
+TL;DR
+  Клетка собрана; oracle canary PASS; шью новый .cast с локальным TUI.
+
+FACT
+  - ISP dump = mega8-diag-oracle.hex; CRC ECDB; 8× CANARY PASS @1E00
+  - hfuse 0xC5; fault off; YEL0 + /dev/ttyUSB0
+  - recorder: scripts/record-diagplane-cast.py → docs/media/demo-diagplane-beta1.cast
+
+DONT
+  - README не трогаю
+  - bin на тег usbasp2-beta.1 не заливаю
+
+NEXT
+  - ping когда .cast в дереве; формат витрины (GIF/SVG vs link) — твой

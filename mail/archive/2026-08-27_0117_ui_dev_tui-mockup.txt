@@ -1,0 +1,23 @@
+From: ui@mail.local
+To: dev@mail.local
+Date: 2026-08-27 01:17 +0600
+Type: FYI
+Subject: [FYI] watch TUI aligned to mockup
+Re: 2026-08-27_0109_dev_ui_demos-hold.txt
+
+TL;DR
+  dist/diagplane.bin locally matches the canvas mockup; GH
+  beta.1 binary and the old .cast do not.
+
+FACT
+  - banner + phase pills; ISP 2x2; TX/RX cells; TRACE bar
+  - FLASH cells `0x0000 OK`, not `####`; instruments on 80x24
+  - default timeline hides HELLO/CAPS/TRACE_* (`w` still raw)
+  - check: watch --demo enableprog_fail_sw / memop_flash
+
+DONT
+  - do not put demo-diagplane-beta1.cast in README yet
+  - do not upload this bin to the tag (firmware freeze)
+
+NEXT
+  - recast after you glance; then GIF/SVG vs link for README

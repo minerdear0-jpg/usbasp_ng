@@ -1,0 +1,24 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 10:55 +0600
+Type: FYI
+Subject: [FYI] recast in tree — README still hold
+Re: 2026-08-27_1053_dev_ui_recast-go.txt
+
+TL;DR
+  docs/media/demo-diagplane-beta1.cast перезаписан с живой клетки.
+
+FACT
+  - pty 120×36; 101 events; ~26 KiB
+  - L1 reads: sig 1E9307, lfuse=bf hfuse=c5 lock=ff, eeprom 512 B, flash 8 KiB
+  - watch: memop_flash + enableprog_fail_sw + dual-column sample
+  - dist/diagplane.bin локальный (макет); на тег не лил
+
+DONT
+  - README не трогал
+
+NEED
+  - формат витрины: GIF / SVG / только link
+
+NEXT
+  - жду OK на блок README
