@@ -502,7 +502,7 @@ fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
 
     let isp_lit = ui.state.saw_reset || ui.state.pins_ddr.is_some() || ui.state.sck_id.is_some();
     f.render_widget(
-        Paragraph::new(isp_pin_lines(&ui.state)).block(dim_block("ISP", isp_lit)),
+        Paragraph::new(isp_pin_lines(&ui.state, blink_now())).block(dim_block("ISP", isp_lit)),
         cols[0],
     );
     let ep_lit = ui.state.ep_fail.is_some();
@@ -528,13 +528,6 @@ fn draw_flash_map(f: &mut Frame, area: Rect, ui: &Ui) {
     let inner_w = area.width.saturating_sub(2);
     let inner_h = area.height.saturating_sub(2);
     let lit = ui.state.memop_kind.is_some() || !ui.state.memop_pages.is_empty();
-    let blink = (SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        / 350)
-        % 2
-        == 0;
     let flash_title = match ui.state.memop_kind {
         Some(MEM_READFLASH) => "FLASH READ",
         Some(MEM_FLASH) => "FLASH WRITE",
@@ -542,10 +535,48 @@ fn draw_flash_map(f: &mut Frame, area: Rect, ui: &Ui) {
         _ => "FLASH",
     };
     f.render_widget(
-        Paragraph::new(flash_lines(&ui.state, inner_w, inner_h, blink))
+        Paragraph::new(flash_lines(&ui.state, inner_w, inner_h, blink_now()))
             .block(dim_block(flash_title, lit)),
         area,
     );
+}
+
+fn blink_now() -> bool {
+    (SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        / 350)
+        % 2
+        == 0
+}
+
+fn recent_ns(event: Option<u64>, now: Option<u64>, window_ns: u64) -> bool {
+    match (event, now) {
+        (Some(t), Some(n)) => n.saturating_sub(t) <= window_ns,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
+/// Semantic bus LED — EP2 has frames, not an SCK/MOSI/MISO oscillogram.
+fn vled(on: bool, hot: bool, silent: bool, blink: bool) -> Span<'static> {
+    if !on && !silent {
+        return Span::styled(" · ", Style::default().fg(Color::DarkGray));
+    }
+    if silent {
+        return Span::styled(" · ", Style::default().fg(Color::Red));
+    }
+    let hot = hot && blink;
+    let style = if hot {
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Green)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Black).bg(Color::Green)
+    };
+    Span::styled(" * ", style)
 }
 
 fn pin_after_disc(st: &AppState, bit: u8) -> Option<(&'static str, Style)> {
@@ -565,33 +596,32 @@ fn pin_pair(name: &'static str, val: String, style: Style) -> (Span<'static>, Sp
     (name_s, val_s)
 }
 
-fn isp_pin_lines(st: &AppState) -> Vec<Line<'static>> {
-    // Faceplate is the PROG bus, not the trailing RELEASE line.
-    // After-disc DDR (if present) overlays Hi-Z vs still-driving.
-    let in_prog = st.reset_asserted || st.ep_fail.is_some() || st.saw_reset;
-    let rst = if let Some(v) = pin_after_disc(st, 2) {
-        (v.0.to_string(), v.1)
-    } else if st.reset_asserted || (st.ep_fail == Some(true) && in_prog) {
+fn isp_pin_lines(st: &AppState, blink: bool) -> Vec<Line<'static>> {
+    // EP2 faceplate: MCU intent + sampled frames. Not a probe.
+    // RESET = drive intent. SCK = id + HW/SW, not Hz.
+    // MOSI/MISO lamps = ENABLEPROG TX/RX and MEMOP direction, not edges.
+    // DISC = ISP_PINS one-shot DDR/PIN after disconnect.
+    let now = st.events.last().map(|e| e.host_ns);
+    const WIN_NS: u64 = 400_000_000;
+    let rst = if st.reset_asserted {
         (
-            "ASSERT".into(),
+            "DRV".into(),
             Style::default().fg(Color::Black).bg(Color::Yellow),
         )
     } else if st.saw_release {
-        ("RELEASE".into(), Style::default().fg(Color::White))
+        ("REL".into(), Style::default().fg(Color::White))
     } else {
         ("—".into(), Style::default().fg(Color::DarkGray))
     };
-    let mosi = if let Some(v) = pin_after_disc(st, 3) {
-        (v.0.to_string(), v.1)
-    } else if in_prog {
-        ("OUT".into(), Style::default().fg(Color::White))
+    let mosi = if st.mosi_ns.is_some() {
+        ("TX".into(), Style::default().fg(Color::White))
     } else {
         ("—".into(), Style::default().fg(Color::DarkGray))
     };
-    let miso = if let Some(v) = pin_after_disc(st, 4) {
-        (v.0.to_string(), v.1)
-    } else if in_prog {
-        ("IN".into(), Style::default().fg(Color::DarkGray))
+    let miso = if st.miso_silent {
+        ("SILENT".into(), Style::default().fg(Color::Red))
+    } else if st.miso_ns.is_some() {
+        ("RX".into(), Style::default().fg(Color::White))
     } else {
         ("—".into(), Style::default().fg(Color::DarkGray))
     };
@@ -603,28 +633,50 @@ fn isp_pin_lines(st: &AppState) -> Vec<Line<'static>> {
         (Some(id), _) => (format!("HW {id}"), Style::default().fg(Color::White)),
         _ => ("—".into(), Style::default().fg(Color::DarkGray)),
     };
+    let mosi_led = vled(
+        st.mosi_ns.is_some(),
+        recent_ns(st.mosi_ns, now, WIN_NS),
+        false,
+        blink,
+    );
+    let miso_led = vled(
+        st.miso_ns.is_some(),
+        recent_ns(st.miso_ns, now, WIN_NS),
+        st.miso_silent,
+        blink,
+    );
     let (rst_n, rst_v) = pin_pair("RST", rst.0, rst.1);
-    let (mosi_n, mosi_v) = pin_pair("MOSI", mosi.0, mosi.1);
-    let (miso_n, miso_v) = pin_pair("MISO", miso.0, miso.1);
+    let (mosi_n, _) = pin_pair("MOSI", mosi.0.clone(), mosi.1);
+    let (miso_n, _) = pin_pair("MISO", miso.0.clone(), miso.1);
     let (sck_n, sck_v) = pin_pair("SCK", sck.0, sck.1);
-    let disc = match st.pins_ok {
-        Some(true) => Span::styled(
-            "Hi-Z OK",
+    let mosi_txt = Span::styled(format!("{:<6}", mosi.0), mosi.1);
+    let miso_txt = Span::styled(format!("{:<6}", miso.0), miso.1);
+    let disc = match (st.pins_ok, st.pins_ddr, st.pins_pin) {
+        (Some(true), ddr, pin) => Span::styled(
+            format!(
+                "Hi-Z  d={:02X} p={:02X}",
+                ddr.unwrap_or(0),
+                pin.unwrap_or(0)
+            ),
             Style::default().fg(Color::Black).bg(Color::Green),
         ),
-        Some(false) => Span::styled(
-            "STILL DRIVING",
+        (Some(false), ddr, pin) => Span::styled(
+            format!(
+                "DRIVE d={:02X} p={:02X}",
+                ddr.unwrap_or(0),
+                pin.unwrap_or(0)
+            ),
             Style::default().fg(Color::White).bg(Color::Red),
         ),
-        None => Span::styled("—", Style::default().fg(Color::DarkGray)),
+        (None, _, _) => Span::styled("—", Style::default().fg(Color::DarkGray)),
     };
     vec![
         Line::from(vec![rst_n, Span::raw(" "), mosi_n]),
-        Line::from(vec![rst_v, Span::raw(" "), mosi_v]),
+        Line::from(vec![rst_v, Span::raw(" "), mosi_led, mosi_txt]),
         Line::from(vec![miso_n, Span::raw(" "), sck_n]),
-        Line::from(vec![miso_v, Span::raw(" "), sck_v]),
+        Line::from(vec![miso_led, miso_txt, Span::raw(" "), sck_v]),
         Line::from(vec![
-            Span::styled("DISC ", Style::default().fg(Color::DarkGray)),
+            Span::styled("SNAP ", Style::default().fg(Color::DarkGray)),
             disc,
         ]),
     ]

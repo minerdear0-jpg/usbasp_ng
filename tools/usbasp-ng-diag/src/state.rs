@@ -82,6 +82,11 @@ pub struct AppState {
     pub pins_ok: Option<bool>,
     pub pins_ddr: Option<u8>,
     pub pins_pin: Option<u8>,
+    /// Last MOSI-side semantic frame (ENABLEPROG TX / MEMOP write). Not SPI bits.
+    pub mosi_ns: Option<u64>,
+    /// Last MISO-side semantic frame (ENABLEPROG RX if not silent / READFLASH).
+    pub miso_ns: Option<u64>,
+    pub miso_silent: bool,
     ep_buf: Vec<DiagFrame>,
     snap_buf: Vec<DiagFrame>,
     caps_buf: Vec<DiagFrame>,
@@ -137,6 +142,9 @@ impl AppState {
                 self.trace_end_buf.clear();
                 self.ep_buf.push(f);
                 self.ep_ns.push(host_ns);
+                if self.ep_buf.len() <= 2 {
+                    self.mosi_ns = Some(host_ns);
+                }
                 if self.ep_buf.len() == 4 {
                     let fail = enableprog_failed(&self.ep_buf);
                     self.stats.note_enableprog(fail);
@@ -153,6 +161,10 @@ impl AppState {
                         self.ep_buf[3].b,
                     ]);
                     self.ep_fail = Some(fail);
+                    self.miso_silent = self.ep_rx.is_some_and(|rx| rx.iter().all(|&b| b == 0xff));
+                    if !self.miso_silent {
+                        self.miso_ns = Some(host_ns);
+                    }
                     if let Some(line) = reassemble_enableprog(&self.ep_buf) {
                         self.events.push(LogEvent {
                             host_ns,
@@ -352,9 +364,19 @@ impl AppState {
                     self.memop_pages.clear();
                     self.memop_end_pages = None;
                     self.memop_end_ok = None;
+                    match f.a {
+                        MEM_READFLASH => self.miso_ns = Some(host_ns),
+                        MEM_FLASH | MEM_EEPROM => self.mosi_ns = Some(host_ns),
+                        _ => {}
+                    }
                 } else if f.flags & EP_CONT != 0 {
                     let addr = (u16::from(f.a) << 8) | u16::from(f.b);
                     self.memop_pages.push((addr, f.flags & EP_FAIL == 0));
+                    match self.memop_kind {
+                        Some(MEM_READFLASH) => self.miso_ns = Some(host_ns),
+                        Some(MEM_FLASH) | Some(MEM_EEPROM) => self.mosi_ns = Some(host_ns),
+                        _ => {}
+                    }
                 } else if f.flags & EP_END != 0 {
                     self.memop_kind = Some(f.a);
                     self.memop_end_pages = Some(f.b);
@@ -403,6 +425,9 @@ impl AppState {
         self.pins_ok = None;
         self.pins_ddr = None;
         self.pins_pin = None;
+        self.mosi_ns = None;
+        self.miso_ns = None;
+        self.miso_silent = false;
         self.saw_reset = false;
         self.saw_release = false;
         self.reset_asserted = false;
