@@ -1,5 +1,6 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include <stdint.h>
 #include "usbasp/isp.h"
 #include "usbasp/sck.h"
 #include "usbasp/clock.h"
@@ -50,6 +51,77 @@ void isp_out_clr_bit(uchar bit)
     SREG = sreg;
 }
 
+uchar isp_out_set_bit_verify(uchar bit)
+{
+    uchar sreg = SREG;
+    uchar ok;
+    uchar mask = (uchar)(1u << bit);
+
+    cli();
+    ISP_OUT |= mask;
+    (void)ISP_IN;
+    ok = (uchar)((ISP_IN & mask) != 0);
+    SREG = sreg;
+    return ok;
+}
+
+uchar isp_out_clr_bit_verify(uchar bit)
+{
+    uchar sreg = SREG;
+    uchar ok;
+    uchar mask = (uchar)(1u << bit);
+
+    cli();
+    ISP_OUT &= (uchar)~mask;
+    (void)ISP_IN;
+    ok = (uchar)((ISP_IN & mask) == 0);
+    SREG = sreg;
+    return ok;
+}
+
+#if USBASP_HAS_DIAG
+static uint8_t isp_pin_mask(void)
+{
+    return (uint8_t)((1u << ISP_RST) | (1u << ISP_MOSI)
+        | (1u << ISP_MISO) | (1u << ISP_SCK));
+}
+
+static uchar isp_probe_bit(uchar bit)
+{
+    uint8_t pin;
+    uchar ok = 1;
+
+    if (!isp_out_set_bit_verify(bit)) {
+        pin = (uint8_t)(ISP_IN & isp_pin_mask());
+        diag_emit_line_fault(bit,
+            (uint8_t)(DIAG_LINE_DRIVE_HIGH | DIAG_EP_RESULT_FAIL), pin);
+        ok = 0;
+    }
+    if (!isp_out_clr_bit_verify(bit)) {
+        pin = (uint8_t)(ISP_IN & isp_pin_mask());
+        diag_emit_line_fault(bit,
+            (uint8_t)(DIAG_LINE_DRIVE_LOW | DIAG_EP_RESULT_FAIL), pin);
+        ok = 0;
+    }
+    return ok;
+}
+
+static void isp_line_probe(void)
+{
+    uchar ok;
+
+    ok = isp_probe_bit(ISP_MOSI);
+    ok = (uchar)(ok & isp_probe_bit(ISP_SCK));
+    ok = (uchar)(ok & isp_probe_bit(ISP_RST));
+    if (ok) {
+        uint8_t drive = (uint8_t)((1u << ISP_RST) | (1u << ISP_MOSI)
+            | (1u << ISP_SCK));
+        diag_emit_line_fault(drive, DIAG_EP_RESULT_OK,
+            (uint8_t)(ISP_IN & isp_pin_mask()));
+    }
+}
+#endif
+
 void ispConnect(void)
 {
     /* One pin per RMW: V-USB TX does in/ori/out on DDRB (PB0/PB1). */
@@ -59,6 +131,9 @@ void ispConnect(void)
     isp_out_clr_bit(ISP_RST);
     ISP_OUT &= ~(1 << ISP_SCK);
     ISP_OUT |= (1 << ISP_MISO);
+#if USBASP_HAS_DIAG
+    isp_line_probe();
+#endif
     /* 2011: RST high-low longer than two target SCK before ENABLEPROG. */
     clockWait(1);
     isp_out_set_bit(ISP_RST);

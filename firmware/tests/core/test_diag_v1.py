@@ -31,6 +31,9 @@ def main() -> int:
     assert d["DIAG_TRACE_BEGIN"] == 14
     assert d["DIAG_TRACE_END"] == 15
     assert d["DIAG_ISP_PINS"] == 16
+    assert d["DIAG_LINE_FAULT"] == 17
+    assert d["DIAG_LINE_DRIVE_HIGH"] == 0x01
+    assert d["DIAG_LINE_DRIVE_LOW"] == 0x02
     assert d["DIAG_PINS_AFTER_DISC"] == 0x01
     assert d["DIAG_MEM_FLASH"] == 0
     assert d["DIAG_EP_START"] == 0x01
@@ -48,6 +51,7 @@ def main() -> int:
     assert "DIAG_FCAP_TRACE" in events
     assert "DIAG_FCAP_TRIGGER" in events
     assert "DIAG_FCAP_PRETRIGGER" in events
+    assert "DIAG_FCAP_LINE_FAULT" in events
     assert "BOARD_CAP_PHYSICAL_CAPTURE" in events
     assert "BOARD_CAP_SCK_JUMPER" in events
 
@@ -75,6 +79,8 @@ def main() -> int:
     assert "DIAG_TRACE_END" in diag_c
     assert "diag_emit_isp_pins" in diag_c
     assert "DIAG_ISP_PINS" in diag_c
+    assert "diag_emit_line_fault" in diag_c
+    assert "DIAG_FCAP_LINE_FAULT" in diag_c
     assert "DIAG_MEMOP_PAGE_STRIDE" in diag_c
     assert "0x1E00" in diag_c
     assert "diag_trace_arm" in diag_c
@@ -103,6 +109,9 @@ def main() -> int:
     assert "diag_report_enableprog" in isp
     assert "diag_note_enableprog_try" in isp
     assert "diag_emit_sck_config" in isp
+    assert "isp_out_set_bit_verify" in isp
+    assert "isp_out_clr_bit_verify" in isp
+    assert "isp_line_probe" in isp
     assert "if (tries == 1)" in isp
     sw = isp[isp.index("ispTransmit_sw") : isp.index("ispTransmit_hw")]
     assert "diag_" not in sw

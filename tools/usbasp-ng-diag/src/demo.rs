@@ -83,7 +83,10 @@ fn push_trace_end(
 pub fn list_scenarios() -> &'static [&'static str] {
     &[
         "enableprog_fail_sw",
+        "enableprog_ladder_silent",
+        "line_fault_rst",
         "memop_flash",
+        "memop_poll_fail",
         "overflow",
         "session_hw_pass",
         "capabilities_yel0",
@@ -161,6 +164,64 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 8,
                 18,
                 133,
+            );
+            push(&mut records, &mut ns, report(SESSION_END, 0, 160, 0, 0));
+        }
+        "enableprog_ladder_silent" => {
+            push_hello_caps(&mut records, &mut ns, 100);
+            push(&mut records, &mut ns, report(SESSION_BEGIN, 0, 110, 7, 7));
+            push(&mut records, &mut ns, report(RESET, RESET_ASSERT, 112, 0, 0));
+            for (i, id) in [8u8, 4, 0].iter().copied().enumerate() {
+                let t = 120 + (i as u16) * 10;
+                let tr = if id == 0 { TRANSPORT_SW } else { TRANSPORT_HW };
+                push(&mut records, &mut ns, report(SCK_CONFIG, 0, t, id, tr));
+                push(
+                    &mut records,
+                    &mut ns,
+                    report(ENABLEPROG, EP_START, t + 1, 0xac, 0x53),
+                );
+                push(
+                    &mut records,
+                    &mut ns,
+                    report(ENABLEPROG, EP_CONT, t + 2, 0, 0),
+                );
+                push(
+                    &mut records,
+                    &mut ns,
+                    report(ENABLEPROG, EP_CONT, t + 3, 0xff, 0xff),
+                );
+                push(
+                    &mut records,
+                    &mut ns,
+                    report(ENABLEPROG, EP_END | EP_FAIL, t + 4, 0xff, 0xff),
+                );
+            }
+            push(
+                &mut records,
+                &mut ns,
+                report(RESET, RESET_RELEASE, 160, 0, 0),
+            );
+            push(&mut records, &mut ns, report(SESSION_END, 0, 161, 0, 0));
+        }
+        "line_fault_rst" => {
+            push_hello_caps(&mut records, &mut ns, 100);
+            push(&mut records, &mut ns, report(SESSION_BEGIN, 0, 110, 7, 7));
+            push(
+                &mut records,
+                &mut ns,
+                report(
+                    LINE_FAULT,
+                    LINE_DRIVE_HIGH | EP_FAIL,
+                    111,
+                    2,
+                    0x00,
+                ),
+            );
+            push(&mut records, &mut ns, report(RESET, RESET_ASSERT, 112, 0, 0));
+            push(
+                &mut records,
+                &mut ns,
+                report(RESET, RESET_RELEASE, 150, 0, 0),
             );
             push(&mut records, &mut ns, report(SESSION_END, 0, 160, 0, 0));
         }
@@ -262,6 +323,53 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 report(ISP_PINS, PINS_AFTER_DISC | EP_OK, 57, 0x00, 0x00),
             );
             push(&mut records, &mut ns, report(SESSION_END, 0, 60, 0, 0));
+        }
+        "memop_poll_fail" => {
+            push_hello_caps(&mut records, &mut ns, 10);
+            push(&mut records, &mut ns, report(SESSION_BEGIN, 0, 20, 8, 8));
+            push(
+                &mut records,
+                &mut ns,
+                report(SCK_CONFIG, 0, 21, 8, TRANSPORT_HW),
+            );
+            push(&mut records, &mut ns, report(RESET, RESET_ASSERT, 22, 0, 0));
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_START, 30, 0xac, 0x53),
+            );
+            push(&mut records, &mut ns, report(ENABLEPROG, EP_CONT, 31, 0, 0));
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_CONT, 32, 0xff, 0xff),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_END | EP_OK, 33, 0x53, 0),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_START, 40, MEM_FLASH, 128),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_CONT | EP_FAIL, 41, 0x04, 0x00),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_END | EP_FAIL, 42, MEM_FLASH, 1),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(RESET, RESET_RELEASE, 50, 0, 0),
+            );
+            push(&mut records, &mut ns, report(SESSION_END, 0, 51, 0, 0));
         }
         "overflow" => {
             push_hello_caps(&mut records, &mut ns, 1);

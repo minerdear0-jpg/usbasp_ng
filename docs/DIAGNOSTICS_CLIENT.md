@@ -24,7 +24,7 @@ chmod +x diagplane.bin
 ./diagplane.bin monitor YEL0          # USBasp2 / HIDUART iSerial
 ```
 
-Preferred programmer for live telemetry: **[USBasp2](USBASP2.md)** (ATmega328P + HIDUART). Probe roadmap (timestamps, triggers, capture — not AVR-ICE): [DIAGNOSTICS_PROBE.md](DIAGNOSTICS_PROBE.md).
+Preferred programmer for live telemetry: **[USBasp2](USBASP2.md)** (ATmega328P + HIDUART). Probe roadmap (timestamps, triggers, capture — not AVR-ICE): [DIAGNOSTICS_PROBE.md](DIAGNOSTICS_PROBE.md). Host evidence container (expected/observed/verdict, no physical claim from EP2): [EVIDENCE.md](EVIDENCE.md).
 
 ## Align with firmware contracts
 

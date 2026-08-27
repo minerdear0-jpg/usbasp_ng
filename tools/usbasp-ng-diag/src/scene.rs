@@ -48,8 +48,38 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
 
 /// `now_ns` = host wall clock (live watch). Demos omit it (no stall).
 pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String) {
+    if state.line_ok == Some(false) {
+        let bit = state.line_bit.unwrap_or(0);
+        let name = match bit {
+            2 => "RST",
+            3 => "MOSI",
+            5 => "SCK",
+            _ => "PIN",
+        };
+        let drive = if state.line_drive_high == Some(true) {
+            "HIGH"
+        } else {
+            "LOW"
+        };
+        return (
+            DiagTone::Bad,
+            format!(
+                "LINE OPEN — {name} (PB{bit}) did not follow drive {drive}  pin={:#04x}",
+                state.line_pin.unwrap_or(0)
+            ),
+        );
+    }
     if state.ep_fail == Some(true) {
+        let n = state.ep_attempts.len();
         let rx = state.ep_rx.unwrap_or([0xff; 4]);
+        if state.ladder_all_silent() {
+            return (
+                DiagTone::Bad,
+                format!(
+                    "NO TARGET — ENABLEPROG FAIL at {n} SCK speeds, RX=FF — check ISP cable/power, not baud"
+                ),
+            );
+        }
         if rx.iter().all(|&b| b == 0xff) {
             return (
                 DiagTone::Bad,
@@ -73,7 +103,9 @@ pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String)
     if let Some(&(addr, false)) = state.memop_pages.iter().find(|(_, ok)| !*ok) {
         return (
             DiagTone::Bad,
-            format!("FLASH POLL FAIL @{addr:#06x}"),
+            format!(
+                "FLASH POLL FAIL @{addr:#06x} — page never left 0xFF (cell/lock/ISP). Verify-mismatch is avrdude-only, not EP2"
+            ),
         );
     }
     if state.memop_end_ok == Some(false) {
@@ -397,6 +429,40 @@ mod tests {
         let ph = phases(&st);
         assert_eq!(ph[3], ("PROG", PhaseMark::Fail));
         assert_eq!(ph[4], ("FLASH", PhaseMark::Idle));
+    }
+
+    #[test]
+    fn line_fault_rst_is_open() {
+        let cap = demo::build_scenario("line_fault_rst").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        let (tone, line) = diagnosis(&st);
+        assert_eq!(tone, DiagTone::Bad);
+        assert!(line.contains("LINE OPEN"), "{line}");
+        assert!(line.contains("RST"), "{line}");
+    }
+
+    #[test]
+    fn ladder_silent_is_no_target() {
+        let cap = demo::build_scenario("enableprog_ladder_silent").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        let (tone, line) = diagnosis(&st);
+        assert_eq!(tone, DiagTone::Bad);
+        assert!(line.contains("NO TARGET"), "{line}");
+        assert!(line.contains("cable"), "{line}");
+        assert!(!line.contains("TARGET SILENT"), "{line}");
+    }
+
+    #[test]
+    fn memop_poll_fail_is_page() {
+        let cap = demo::build_scenario("memop_poll_fail").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        let (tone, line) = diagnosis(&st);
+        assert_eq!(tone, DiagTone::Bad);
+        assert!(line.contains("FLASH POLL FAIL @0x0400"), "{line}");
+        assert!(line.contains("0xFF"), "{line}");
     }
 
     #[test]

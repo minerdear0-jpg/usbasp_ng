@@ -19,10 +19,13 @@ pub const CAPS: u8 = 13;
 pub const TRACE_BEGIN: u8 = 14;
 pub const TRACE_END: u8 = 15;
 pub const ISP_PINS: u8 = 16;
+pub const LINE_FAULT: u8 = 17;
 
 pub const RESET_ASSERT: u8 = 0x01;
 pub const RESET_RELEASE: u8 = 0x02;
 pub const PINS_AFTER_DISC: u8 = 0x01;
+pub const LINE_DRIVE_HIGH: u8 = 0x01;
+pub const LINE_DRIVE_LOW: u8 = 0x02;
 
 pub const EP_START: u8 = 0x01;
 pub const EP_CONT: u8 = 0x02;

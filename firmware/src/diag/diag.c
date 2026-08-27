@@ -301,7 +301,7 @@ void diag_on_connect(void)
         uint32_t bcap;
 
         fcap = DIAG_FCAP_SESSION | DIAG_FCAP_SNAPSHOT | DIAG_FCAP_TIMESTAMP
-            | DIAG_FCAP_TRACE;
+            | DIAG_FCAP_TRACE | DIAG_FCAP_LINE_FAULT;
         fcap |= DIAG_FCAP_TRIGGER | DIAG_FCAP_PRETRIGGER;
         bcap = 0;
 #if USBASP_HAS_SCK_JUMPER
@@ -346,6 +346,11 @@ void diag_emit_isp_pins(void)
         flags |= DIAG_EP_RESULT_OK;
     (void)diag_try_emit(DIAG_ISP_PINS, flags, ddr, pin);
 #endif
+}
+
+void diag_emit_line_fault(uint8_t bit_or_mask, uint8_t flags, uint8_t pin_sample)
+{
+    (void)diag_try_emit(DIAG_LINE_FAULT, flags, bit_or_mask, pin_sample);
 }
 
 void diag_on_disconnect(void)

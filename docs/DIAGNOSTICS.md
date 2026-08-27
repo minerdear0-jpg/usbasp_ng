@@ -193,6 +193,18 @@ Emitted on DISCONNECT **after** `ispDisconnect()` and `RESET_RELEASE`. Dual-trut
 
 `ISP_mask` = RST(PB2)|MOSI(PB3)|MISO(PB4)|SCK(PB5). **FAIL** if RST/MOSI/SCK still have DDR=1 (still driving). Host prints `ddr=` / `pin=` / per-line bits.
 
+### `DIAG_LINE_FAULT` (PINx vs PORT after drive)
+
+Emitted on **CONNECT** from `ispConnect` after ISP pins are outputs. Not a sniffer: AVR `PINx` of the **programmer** pad. FAIL if the level just written is not seen. One OK summary (`a` = RST|MOSI|SCK mask) if all three follow.
+
+| flags | `a` | `b` |
+|-------|-----|-----|
+| `DRIVE_HIGH \| FAIL` | bit (2 RST, 3 MOSI, 5 SCK) | `PINB & ISP_mask` |
+| `DRIVE_LOW \| FAIL` | bit | same |
+| `OK` | drive mask | same |
+
+Host: `LINE OPEN — RST did not follow drive HIGH`. Still cannot name open vs short vs another driver, and cannot replace FX2.
+
 ### `DIAG_FAULT_SNAPSHOT` fields (P0)
 
 RAM copy (`diag_snapshot_t`) still holds full TX/RX + `sw_delay`. Wire emit is **4 frames** (compact):

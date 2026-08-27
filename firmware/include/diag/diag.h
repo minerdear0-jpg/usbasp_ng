@@ -60,6 +60,9 @@ void diag_memop_end(uint8_t mem); /* mem ignored; emits stored kind */
 /* After ispDisconnect: DDR/PIN sample for dual-truth vs target ISP_PINS. */
 void diag_emit_isp_pins(void);
 
+/* PINx vs PORT after drive. FAIL frames per bit; one OK summary if all follow. */
+void diag_emit_line_fault(uint8_t bit_or_mask, uint8_t flags, uint8_t pin_sample);
+
 /*
  * Consumer: fill out[8] with one frame (bytes 0..5) + pad/status.
  * Returns 1 if a frame was written, 0 if nothing to send (silence).
@@ -80,6 +83,7 @@ uint8_t diag_poll_drain(uint8_t out[8]);
 #define diag_memop_page(addr, fail) ((void)0)
 #define diag_memop_end(mem) ((void)0)
 #define diag_emit_isp_pins() ((void)0)
+#define diag_emit_line_fault(bit, flags, pin) ((void)0)
 #define diag_poll_drain(out) (0)
 
 #endif

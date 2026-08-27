@@ -25,6 +25,7 @@
 #define DIAG_TRACE_BEGIN            14  /* capture metadata: arm / slots */
 #define DIAG_TRACE_END              15  /* capture metadata: valid / overflow */
 #define DIAG_ISP_PINS               16  /* programmer ISP pin DDR/PIN after disconnect */
+#define DIAG_LINE_FAULT             17  /* PINx did not follow PORT after drive */
 
 /* DIAG_ERROR flags — ENABLEPROG attempt note (B8/B22 forensics) */
 #define DIAG_ERR_EP_AVR             0x01  /* check after AC 53 00 00 (expect 0x53) */
@@ -53,6 +54,14 @@
  */
 #define DIAG_PINS_AFTER_DISC        0x01
 
+/* DIAG_LINE_FAULT — PINx vs last PORT write (not a sniffer).
+ * flags: DRIVE_HIGH or DRIVE_LOW | OK/FAIL
+ * a = bit (PB2 RST, PB3 MOSI, PB5 SCK); OK summary: a = drive mask
+ * b = PINB & ISP_mask
+ */
+#define DIAG_LINE_DRIVE_HIGH        0x01
+#define DIAG_LINE_DRIVE_LOW         0x02
+
 /* DIAG_ENABLEPROG / DIAG_CAPS sequence flags */
 #define DIAG_EP_START               0x01
 #define DIAG_EP_CONT                0x02
@@ -79,6 +88,7 @@
 #define DIAG_FCAP_TRIGGER           (1u << 4)
 #define DIAG_FCAP_PRETRIGGER        (1u << 5)
 #define DIAG_FCAP_SCK_STATS         (1u << 6)
+#define DIAG_FCAP_LINE_FAULT        (1u << 7)
 
 /* Board / physical capabilities (uint32, DIAG_CAPS frames 2..3) */
 #define BOARD_CAP_TARGET_UART       (1u << 0)

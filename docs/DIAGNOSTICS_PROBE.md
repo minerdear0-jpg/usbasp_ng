@@ -19,6 +19,8 @@ Honest product: an **ISP protocol observer** with timestamps and a flight record
 
 TRACE sees only values already sampled by the MCU. If the bug is the sample itself (edge, ringing, INT0 vs PORTB), the probe is both victim and witness. Use TRACE to **aim** a sniffer (when after RST-low the interesting byte lands), not to replace it.
 
+Host **Evidence Record v1** ([EVIDENCE.md](EVIDENCE.md)) is the frozen session container: identity, expected/observed/verdict, `protocol_observed` vs `physical_capture`. EEPROM black box is a later persistence grain, not another TRACE ring.
+
 Correlate stitches two free-running crystals. It is **event order** (RELEASE before READY), not an absolute microsecond delay.
 
 ## Why 328P changes the class of device

@@ -1,0 +1,22 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 11:58 +0600
+Type: ACK
+Subject: [ACK] Evidence v1 host container; EEPROM later
+Re: -
+
+TL;DR
+  Evidence Record v1 на хосте (expected/observed/verdict + protocol vs physical). EEPROM black box не добавлял.
+
+FACT
+  - CLI: diagplane evidence --demo …
+  - firmware_build_id / ISP signature / SCK Hz = null (нет на EP2)
+  - persistence cap нет
+  - docs/EVIDENCE.md
+
+DONT
+  - не TRACE в EEPROM; не PHYSICAL из EP2
+
+NEXT
+  - firmware_build_id на проводе — отдельное зерно
+  - PERSISTENCE EEPROM — после Evidence v1

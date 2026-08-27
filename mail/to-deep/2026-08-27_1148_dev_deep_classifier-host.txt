@@ -1,0 +1,22 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 11:48 +0600
+Type: ACK
+Subject: [ACK] host classifier — ladder silent / poll fail; LINE_FAULT later
+Re: -
+
+TL;DR
+  Редьюсер на хосте: лестница RX=FF → NO TARGET (кабель/питание); MEMOP CONT|FAIL → FLASH POLL @addr. Прошивку не трогал.
+
+FACT
+  - demo enableprog_ladder_silent / memop_poll_fail
+  - один SCK + RX=FF остаётся TARGET SILENT
+  - verify-mismatch avrdude на EP2 нет
+  - «обрыв RST» = DIAG_LINE_FAULT + PINx after drive — отдельный кадр, не beta.1
+
+DONT
+  - не ждать осциллограмму; не парсить stderr avrdude в этом зерне
+
+NEXT
+  - LINE_FAULT (RST/MOSI/SCK readback) — когда договоримся о типе кадра
+  - CRC-страницы на устройстве — дороже, не сейчас

@@ -11,6 +11,7 @@ mod capture;
 mod correlate;
 mod decoder;
 mod demo;
+mod evidence;
 mod jsonl;
 mod protocol;
 mod scene;
@@ -163,6 +164,22 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Frozen diagnostic evidence (expected/observed/verdict) — host container, not EP2
+    Evidence {
+        /// Live USB iSerial (empty = first composite)
+        #[arg(long, default_value = "")]
+        serial: String,
+        #[arg(long, conflicts_with_all = ["demo", "diag"])]
+        file: Option<PathBuf>,
+        #[arg(long, conflicts_with_all = ["file", "diag"])]
+        demo: Option<String>,
+        #[arg(long, conflicts_with_all = ["file", "demo"])]
+        diag: Option<PathBuf>,
+        #[arg(long, default_value = "30")]
+        timeout: u64,
+        #[arg(long)]
+        json: bool,
+    },
     /// Dual-truth event order: EP2 JSONL ↔ oracle UART (not absolute µs)
     Correlate {
         /// Programmer capture as JSONL (`decode FILE --jsonl`)
@@ -266,6 +283,21 @@ fn try_main() -> Result<()> {
             timeout,
             json,
         } => cmd_snapshot(
+            &serial,
+            file.as_ref(),
+            demo.as_deref(),
+            diag.as_ref(),
+            timeout,
+            json,
+        ),
+        Cmd::Evidence {
+            serial,
+            file,
+            demo,
+            diag,
+            timeout,
+            json,
+        } => cmd_evidence(
             &serial,
             file.as_ref(),
             demo.as_deref(),
@@ -394,6 +426,10 @@ fn cmd_capabilities(
         "  SNAPSHOT    {}",
         mark(f.contains(caps::DiagCaps::SNAPSHOT))
     );
+    println!(
+        "  LINE_FAULT  {}",
+        mark(f.contains(caps::DiagCaps::LINE_FAULT))
+    );
     println!();
     let b = adv.board;
     println!("BOARD");
@@ -416,14 +452,14 @@ fn cmd_capabilities(
     Ok(())
 }
 
-fn cmd_snapshot(
+fn ingest_state(
     serial: &str,
     file: Option<&PathBuf>,
     demo_name: Option<&str>,
     diag: Option<&PathBuf>,
     timeout_s: u64,
-    json: bool,
-) -> Result<()> {
+    wait_session_end: bool,
+) -> Result<(AppState, String)> {
     let mut st = AppState::default();
     let source;
     if let Some(path) = file {
@@ -444,10 +480,12 @@ fn cmd_snapshot(
         source = format!("live:{}", h.serial);
         eprintln!("{}", version::banner_short());
         eprintln!("device:    {}", h.serial);
-        eprintln!("waiting for SESSION_END (ISP) within {timeout_s}s…");
+        if wait_session_end {
+            eprintln!("waiting for SESSION_END (ISP) within {timeout_s}s…");
+        }
         let deadline = SystemTime::now() + Duration::from_secs(timeout_s);
         let mut buf = [0u8; 8];
-        while SystemTime::now() < deadline && !st.saw_session_end {
+        while SystemTime::now() < deadline && !(wait_session_end && st.saw_session_end) {
             match h
                 .handle
                 .read_interrupt(EP2_IN, &mut buf, Duration::from_millis(200))
@@ -471,13 +509,43 @@ fn cmd_snapshot(
             bail!("no EP2 frames (start avrdude while this waits, or use --demo)");
         }
     }
+    Ok((st, source))
+}
 
+fn cmd_snapshot(
+    serial: &str,
+    file: Option<&PathBuf>,
+    demo_name: Option<&str>,
+    diag: Option<&PathBuf>,
+    timeout_s: u64,
+    json: bool,
+) -> Result<()> {
+    let (st, source) = ingest_state(serial, file, demo_name, diag, timeout_s, true)?;
     let complete = st.saw_session_end;
     let snap = snapshot::from_state(&source, &st, complete);
     if json {
         snap.emit_json()
     } else {
         snap.emit_human();
+        Ok(())
+    }
+}
+
+fn cmd_evidence(
+    serial: &str,
+    file: Option<&PathBuf>,
+    demo_name: Option<&str>,
+    diag: Option<&PathBuf>,
+    timeout_s: u64,
+    json: bool,
+) -> Result<()> {
+    let (st, source) = ingest_state(serial, file, demo_name, diag, timeout_s, true)?;
+    let complete = st.saw_session_end;
+    let ev = evidence::from_state(&source, &st, complete);
+    if json {
+        ev.emit_json()
+    } else {
+        ev.emit_human();
         Ok(())
     }
 }

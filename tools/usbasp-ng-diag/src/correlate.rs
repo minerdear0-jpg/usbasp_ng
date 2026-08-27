@@ -84,7 +84,7 @@ fn parse_fw_t(msg: &str) -> Option<u16> {
 
 fn kind_from_diag_msg(msg: &str) -> String {
     // "... t=123 HELLO ..." or semantic lines
-    for tok in ["ENABLEPROG", "MEMOP", "ISP_PINS", "RESET", "SESSION_END", "SESSION_BEGIN", "TRACE_END", "TRACE_BEGIN", "SCK_CONFIG", "HELLO", "CAPS", "TRACE_OVERFLOW", "FAULT_SNAPSHOT", "ERROR"] {
+    for tok in ["ENABLEPROG", "MEMOP", "ISP_PINS", "LINE_FAULT", "RESET", "SESSION_END", "SESSION_BEGIN", "TRACE_END", "TRACE_BEGIN", "SCK_CONFIG", "HELLO", "CAPS", "TRACE_OVERFLOW", "FAULT_SNAPSHOT", "ERROR"] {
         if msg.contains(tok) {
             return tok.to_string();
         }

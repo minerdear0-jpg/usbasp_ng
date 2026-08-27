@@ -1,0 +1,22 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 12:05 +0600
+Type: FYI
+Subject: [FYI] DIAG_LINE_FAULT type 17 — PINx vs PORT
+Re: 2026-08-27_1158_dev_deep_evidence-v1.txt
+
+TL;DR
+  Кадр DIAG_LINE_FAULT=17: после drive читаем PINx (RST/MOSI/SCK) на CONNECT.
+
+FACT
+  - FAIL per bit; OK-summary если все три следуют
+  - CAPS LINE_FAULT bit7; schema v1 без bump
+  - host: LINE OPEN — RST did not follow drive
+  - не FX2; YEL0 прошит этим hex
+
+DONT
+  - не emit на каждый ENABLEPROG RST pulse
+  - не PHYSICAL_CAPTURE
+
+NEXT
+  - клетка: J2 open, YEL0 в USB

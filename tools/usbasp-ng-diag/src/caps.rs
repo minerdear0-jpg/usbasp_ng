@@ -18,6 +18,7 @@ impl DiagCaps {
     pub const TRIGGER: u32 = 1 << 4;
     pub const PRETRIGGER: u32 = 1 << 5;
     pub const SCK_STATS: u32 = 1 << 6;
+    pub const LINE_FAULT: u32 = 1 << 7;
 
     pub fn contains(self, bit: u32) -> bool {
         self.0 & bit != 0
@@ -105,6 +106,10 @@ impl CapsAdvert {
             "    {} SCK_STATS",
             DiagCaps::mark(f.contains(DiagCaps::SCK_STATS))
         ));
+        lines.push(format!(
+            "    {} LINE_FAULT",
+            DiagCaps::mark(f.contains(DiagCaps::LINE_FAULT))
+        ));
         lines.push(String::new());
         lines.push("Board:".into());
         lines.push(format!(
@@ -151,6 +156,9 @@ impl CapsAdvert {
         if f.contains(DiagCaps::SCK_STATS) {
             diag.push("SCK_STATS");
         }
+        if f.contains(DiagCaps::LINE_FAULT) {
+            diag.push("LINE_FAULT");
+        }
         let mut board = Vec::new();
         let b = self.board;
         if b.contains(BoardCaps::TARGET_UART) {
@@ -178,13 +186,14 @@ impl CapsAdvert {
     }
 }
 
-/// Current USBasp2 / YEL0 advertisement (TRACE + trigger/pretrigger; no SCK_STATS).
+/// Current USBasp2 / YEL0 advertisement (TRACE + trigger + LINE_FAULT; no SCK_STATS).
 pub const YEL0_FCAP: u32 = DiagCaps::SESSION
     | DiagCaps::SNAPSHOT
     | DiagCaps::TIMESTAMP
     | DiagCaps::TRACE
     | DiagCaps::TRIGGER
-    | DiagCaps::PRETRIGGER;
+    | DiagCaps::PRETRIGGER
+    | DiagCaps::LINE_FAULT;
 pub const YEL0_BCAP: u32 = BoardCaps::SCK_JUMPER;
 
 /// Pack four DIAG_CAPS report payloads (8 bytes each) for demos / goldens.
@@ -248,6 +257,7 @@ mod tests {
         assert!(adv.firmware.contains(DiagCaps::TRACE));
         assert!(adv.firmware.contains(DiagCaps::TRIGGER));
         assert!(adv.firmware.contains(DiagCaps::PRETRIGGER));
+        assert!(adv.firmware.contains(DiagCaps::LINE_FAULT));
         assert!(!adv.firmware.contains(DiagCaps::SCK_STATS));
         assert!(adv.board.contains(BoardCaps::SCK_JUMPER));
         assert!(!adv.board.contains(BoardCaps::PHYSICAL_CAPTURE));

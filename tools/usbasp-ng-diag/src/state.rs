@@ -27,6 +27,13 @@ impl Level {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct EpAttempt {
+    pub sck_id: Option<u8>,
+    pub fail: bool,
+    pub silent: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct LogEvent {
     pub host_ns: u64,
@@ -82,11 +89,17 @@ pub struct AppState {
     pub pins_ok: Option<bool>,
     pub pins_ddr: Option<u8>,
     pub pins_pin: Option<u8>,
+    pub line_ok: Option<bool>,
+    pub line_bit: Option<u8>,
+    pub line_drive_high: Option<bool>,
+    pub line_pin: Option<u8>,
     /// Last MOSI-side semantic frame (ENABLEPROG TX / MEMOP write). Not SPI bits.
     pub mosi_ns: Option<u64>,
     /// Last MISO-side semantic frame (ENABLEPROG RX if not silent / READFLASH).
     pub miso_ns: Option<u64>,
     pub miso_silent: bool,
+    /// One entry per completed ENABLEPROG quartet this session (SCK ladder).
+    pub ep_attempts: Vec<EpAttempt>,
     ep_buf: Vec<DiagFrame>,
     snap_buf: Vec<DiagFrame>,
     caps_buf: Vec<DiagFrame>,
@@ -115,7 +128,8 @@ impl AppState {
             || ((f.ty == ENABLEPROG
                 || f.ty == FAULT_SNAPSHOT
                 || f.ty == MEMOP
-                || f.ty == ISP_PINS)
+                || f.ty == ISP_PINS
+                || f.ty == LINE_FAULT)
                 && f.flags & EP_FAIL != 0);
 
         if f.ty == TRACE_OVERFLOW {
@@ -162,6 +176,11 @@ impl AppState {
                     ]);
                     self.ep_fail = Some(fail);
                     self.miso_silent = self.ep_rx.is_some_and(|rx| rx.iter().all(|&b| b == 0xff));
+                    self.ep_attempts.push(EpAttempt {
+                        sck_id: self.sck_id,
+                        fail,
+                        silent: self.miso_silent,
+                    });
                     if !self.miso_silent {
                         self.miso_ns = Some(host_ns);
                     }
@@ -400,8 +419,35 @@ impl AppState {
                 self.pins_ddr = Some(f.a);
                 self.pins_pin = Some(f.b);
             }
+            LINE_FAULT => {
+                let fail = f.flags & EP_FAIL != 0;
+                if fail && self.line_ok != Some(false) {
+                    self.line_ok = Some(false);
+                    self.line_bit = Some(f.a);
+                    self.line_drive_high = Some(f.flags & LINE_DRIVE_HIGH != 0);
+                    self.line_pin = Some(f.b);
+                } else if !fail && self.line_ok.is_none() {
+                    self.line_ok = Some(true);
+                    self.line_bit = Some(f.a);
+                    self.line_pin = Some(f.b);
+                }
+            }
             _ => {}
         }
+    }
+
+    /// AUTO SCK ladder: every ENABLEPROG failed with RX=FF at ≥2 distinct SCK ids.
+    pub fn ladder_all_silent(&self) -> bool {
+        if self.ep_attempts.len() < 2 {
+            return false;
+        }
+        if !self.ep_attempts.iter().all(|a| a.fail && a.silent) {
+            return false;
+        }
+        let mut ids: Vec<u8> = self.ep_attempts.iter().filter_map(|a| a.sck_id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids.len() >= 2
     }
 
     fn reset_session_ops(&mut self) {
@@ -425,9 +471,14 @@ impl AppState {
         self.pins_ok = None;
         self.pins_ddr = None;
         self.pins_pin = None;
+        self.line_ok = None;
+        self.line_bit = None;
+        self.line_drive_high = None;
+        self.line_pin = None;
         self.mosi_ns = None;
         self.miso_ns = None;
         self.miso_silent = false;
+        self.ep_attempts.clear();
         self.saw_reset = false;
         self.saw_release = false;
         self.reset_asserted = false;

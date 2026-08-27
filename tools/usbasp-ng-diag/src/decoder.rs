@@ -16,6 +16,7 @@ pub fn type_name(ty: u8) -> &'static str {
         TRACE_BEGIN => "TRACE_BEGIN",
         TRACE_END => "TRACE_END",
         ISP_PINS => "ISP_PINS",
+        LINE_FAULT => "LINE_FAULT",
         _ => "UNKNOWN",
     }
 }
@@ -158,6 +159,33 @@ pub fn format_frame(f: &DiagFrame) -> String {
                 bit(f.b, 3),
                 bit(f.b, 4),
                 bit(f.b, 5),
+            );
+        }
+        LINE_FAULT => {
+            let res = if f.flags & EP_FAIL != 0 {
+                "FAIL"
+            } else if f.flags & EP_OK != 0 {
+                "OK"
+            } else {
+                "?"
+            };
+            let drive = if f.flags & LINE_DRIVE_HIGH != 0 {
+                "HIGH"
+            } else if f.flags & LINE_DRIVE_LOW != 0 {
+                "LOW"
+            } else {
+                "—"
+            };
+            let pin = match f.a {
+                2 => "RST",
+                3 => "MOSI",
+                5 => "SCK",
+                _ if f.flags & EP_OK != 0 => "RST|MOSI|SCK",
+                _ => "?",
+            };
+            extra = format!(
+                " {pin} drive={drive} {res} bit={} pin=0x{:02x}",
+                f.a, f.b
             );
         }
         _ => {}
@@ -387,7 +415,7 @@ mod tests {
             .map(|r| DiagFrame::from_report(r).unwrap())
             .collect();
         let s = reassemble_caps(&frames).unwrap();
-        assert!(s.contains("firmware=0x0000003f"));
+        assert!(s.contains("firmware=0x000000bf"));
         assert!(s.contains("board=0x00000002"));
         assert!(s.contains("TRIGGER"));
     }
