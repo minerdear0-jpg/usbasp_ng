@@ -1,6 +1,6 @@
 [package]
 name = "usbasp-ng-diag"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 # Cargo.lock v4 needs cargo from 1.78+. Older rustc cannot read this lockfile.
 rust-version = "1.78"
@@ -17,3 +17,4 @@ ratatui = "0.29"
 rusb = { version = "0.9", features = ["vendored"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"

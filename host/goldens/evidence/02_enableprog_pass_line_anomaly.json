@@ -1,0 +1,12 @@
+{
+  "id": "02_enableprog_pass_line_anomaly",
+  "demo": "pass_with_rst_anomaly",
+  "expect": {
+    "verdict": "PASS_WITH_ANOMALY",
+    "findings": {
+      "ISP.PROGRAMMING_PATH": { "status": "PASS", "confidence": "HIGH", "causal_relevance": "EXPLAINS_SUCCESS" },
+      "LINE.RST_ECHO": { "status": "ANOMALY", "confidence": "LOW", "causal_relevance": "UNKNOWN" }
+    },
+    "must_not_have": ["EVIDENCE.CONFLICT"]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "01_enableprog_pass",
+  "demo": "memop_flash",
+  "expect": {
+    "verdict": "PASS",
+    "findings": {
+      "ISP.ENABLEPROG": { "status": "PASS", "confidence": "HIGH" },
+      "ISP.PROGRAMMING_PATH": { "status": "PASS", "confidence": "HIGH", "causal_relevance": "EXPLAINS_SUCCESS" }
+    },
+    "must_not_have": ["EVIDENCE.CONFLICT", "LINE.RST_ECHO"]
+  }
+}

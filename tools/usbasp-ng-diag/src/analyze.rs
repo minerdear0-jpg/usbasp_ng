@@ -1,48 +1,159 @@
-//! Facade: Evidence → analyzers → correlation → Verdict. Firmware stays dumb.
+//! Facade: analyzers observe; correlator aggregates + verdict. Firmware stays dumb.
 
-pub use crate::analysis::{Analysis, Finding};
+pub use crate::analysis::{Analysis, Finding, ANALYZER_SCHEMA};
 
 use crate::analysis::correlate;
+use crate::capture::CaptureFile;
 use crate::evidence::EvidenceRecord;
+use crate::version;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
+
+pub const CONTAINER_FORMAT: &str = "usbasp2e";
+pub const CONTAINER_VERSION: u8 = 2;
 
 pub fn run_pipeline(ev: &EvidenceRecord) -> Analysis {
-    let findings: Vec<Finding> = crate::analyzers::all()
+    let analyzed: Vec<Finding> = crate::analyzers::all()
         .iter()
         .flat_map(|a| a.analyze(ev))
         .collect();
-    let verdict = correlate(ev, &findings);
-    Analysis { findings, verdict }
+    correlate(ev, &analyzed)
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut h = Sha256::new();
+    h.update(bytes);
+    format!("{:x}", h.finalize())
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Usbasp2eFile {
     pub format: &'static str,
     pub format_version: u8,
-    pub evidence: EvidenceRecord,
-    pub analysis: Analysis,
+    pub manifest: Manifest,
+    pub provenance: ContainerProvenance,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw: Option<RawCapture>,
+    /// Derived observations. Must not replace `raw`.
+    pub observations: EvidenceRecord,
+    pub analysis: AnalysisBlock,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Manifest {
+    pub schema: &'static str,
+    pub engine: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ContainerProvenance {
+    pub firmware_build_id: Option<String>,
+    pub firmware_build_hash: Option<String>,
+    pub board_id: Option<String>,
+    pub diag_schema: Option<u8>,
+    pub diag_capabilities: Option<String>,
+    pub session_id: String,
+    pub capture_id: String,
+    pub diagplane: String,
+    pub protocol: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RawCapture {
+    pub kind: &'static str,
+    pub sha256: String,
+    pub hex: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct AnalysisBlock {
+    pub engine: &'static str,
+    pub analyzer_version: String,
+    pub schema: &'static str,
+    pub derived_from: String,
+    pub findings: Vec<Finding>,
+    pub verdict: crate::analysis::Verdict,
 }
 
 impl Usbasp2eFile {
-    pub fn from_evidence(evidence: EvidenceRecord) -> Self {
-        let analysis = run_pipeline(&evidence);
+    pub fn from_evidence(observations: EvidenceRecord) -> Self {
+        Self::assemble(observations, None)
+    }
+
+    pub fn from_capture(observations: EvidenceRecord, cap: &CaptureFile) -> Self {
+        Self::assemble(observations, Some(cap))
+    }
+
+    fn assemble(observations: EvidenceRecord, cap: Option<&CaptureFile>) -> Self {
+        let analysis = run_pipeline(&observations);
+        let raw = cap.map(|c| {
+            let bytes = c.to_bytes(true);
+            RawCapture {
+                kind: "USBDIAGv",
+                sha256: sha256_hex(&bytes),
+                hex: hex_encode(&bytes),
+            }
+        });
+        let derived_from = match &raw {
+            Some(r) => format!("sha256:{}", r.sha256),
+            None => format!("capture_digest:{}", observations.integrity.capture_digest),
+        };
+        let provenance = ContainerProvenance {
+            firmware_build_id: observations.identity.firmware_build_id.clone(),
+            firmware_build_hash: observations.identity.firmware_build_hash.clone(),
+            board_id: observations.identity.board_id.clone(),
+            diag_schema: observations.identity.hello_schema,
+            diag_capabilities: observations.identity.firmware_caps.clone(),
+            session_id: observations.identity.session_id.clone(),
+            capture_id: observations.identity.capture_id.clone(),
+            diagplane: observations.provenance.diagplane.clone(),
+            protocol: observations.provenance.protocol.clone(),
+        };
         Self {
-            format: "usbasp2e",
-            format_version: 1,
-            evidence,
-            analysis,
+            format: CONTAINER_FORMAT,
+            format_version: CONTAINER_VERSION,
+            manifest: Manifest {
+                schema: ANALYZER_SCHEMA,
+                engine: "usbasp-ng-diag",
+            },
+            provenance,
+            raw,
+            analysis: AnalysisBlock {
+                engine: "usbasp-ng-diag",
+                analyzer_version: version::DIAGPLANE_VERSION.to_string(),
+                schema: ANALYZER_SCHEMA,
+                derived_from,
+                findings: analysis.findings,
+                verdict: analysis.verdict,
+            },
+            observations,
         }
     }
 
     pub fn emit_human(&self) {
         println!(
-            "USBASP2 ANALYSIS  format={} v{}",
-            self.format, self.format_version
+            "USBASP2E  format={} v{}  schema={}",
+            self.format, self.format_version, self.manifest.schema
+        );
+        println!(
+            "analyzer {}  derived_from {}",
+            self.analysis.analyzer_version, self.analysis.derived_from
         );
         println!(
             "session={}  capture={}",
-            self.evidence.identity.session_id, self.evidence.identity.capture_id
+            self.provenance.session_id, self.provenance.capture_id
         );
+        println!(
+            "firmware_build_id={:?}  firmware_build_hash={:?}  board_id={:?}",
+            self.provenance.firmware_build_id,
+            self.provenance.firmware_build_hash,
+            self.provenance.board_id
+        );
+        if let Some(r) = &self.raw {
+            println!("raw {}  sha256={}", r.kind, r.sha256);
+        } else {
+            println!("raw unavailable (live/jsonl ingest)");
+        }
         println!();
         for f in &self.analysis.findings {
             println!(
@@ -84,12 +195,22 @@ impl Usbasp2eFile {
     }
 }
 
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::analysis::{CausalRelevance, Confidence, EvidenceSource, FindingStatus};
     use crate::demo;
-    use crate::evidence;
+    use crate::evidence::{self, PhysicalEvidence};
     use crate::state::AppState;
 
     fn ev(name: &str) -> crate::evidence::EvidenceRecord {
@@ -103,7 +224,7 @@ mod tests {
     fn fail_sw_is_fail_unconfirmed() {
         let a = run_pipeline(&ev("enableprog_fail_sw"));
         assert_eq!(a.verdict.result, "FAIL_UNCONFIRMED");
-        assert!(a.verdict.likely.contains("programming mode"));
+        assert!(a.findings.iter().all(|f| f.id != "ISP.PROGRAMMING_PATH"));
         let ep = a
             .findings
             .iter()
@@ -114,9 +235,54 @@ mod tests {
     }
 
     #[test]
-    fn memop_flash_is_pass() {
+    fn capability_is_not_fail_confirmed() {
+        let mut rec = ev("enableprog_fail_sw");
+        rec.integrity.physical_capture_capability = true;
+        rec.integrity.physical_capture = false;
+        rec.sources.physical = None;
+        let a = run_pipeline(&rec);
+        assert_eq!(a.verdict.result, "FAIL_UNCONFIRMED");
+        assert!(a.findings.iter().all(|f| f.id != "EVIDENCE.CONFLICT"));
+    }
+
+    #[test]
+    fn physical_rst_stayed_high_is_conflict_and_confirmed() {
+        let mut rec = ev("enableprog_fail_sw");
+        rec.sources.physical = Some(PhysicalEvidence {
+            capture_id: "FX2-test".into(),
+            rst_low: Some(false),
+        });
+        rec.integrity.physical_capture = true;
+        let a = run_pipeline(&rec);
+        assert!(a.findings.iter().any(|f| f.id == "EVIDENCE.CONFLICT"));
+        assert_eq!(a.verdict.result, "FAIL_CONFIRMED");
+    }
+
+    #[test]
+    fn memop_flash_confirms_programming_path() {
         let a = run_pipeline(&ev("memop_flash"));
         assert_eq!(a.verdict.result, "PASS");
+        let path = a
+            .findings
+            .iter()
+            .find(|f| f.id == "ISP.PROGRAMMING_PATH")
+            .unwrap();
+        assert_eq!(path.status, FindingStatus::Pass);
+        assert_eq!(path.confidence, Confidence::High);
+        assert_eq!(path.analyzer, "correlator");
+        let ep = a
+            .findings
+            .iter()
+            .find(|f| f.id == "ISP.ENABLEPROG")
+            .unwrap();
+        assert_eq!(ep.status, FindingStatus::Pass);
+    }
+
+    #[test]
+    fn enableprog_pass_without_memop_has_no_path_finding() {
+        let a = run_pipeline(&ev("session_hw_pass"));
+        assert_eq!(a.verdict.result, "PASS");
+        assert!(a.findings.iter().all(|f| f.id != "ISP.PROGRAMMING_PATH"));
     }
 
     #[test]
@@ -131,18 +297,142 @@ mod tests {
         assert_eq!(line.status, FindingStatus::Anomaly);
         assert_eq!(line.confidence, Confidence::Low);
         assert_eq!(line.causal_relevance, CausalRelevance::Unknown);
+        assert!(a.findings.iter().any(|f| f.id == "ISP.PROGRAMMING_PATH"));
+        assert!(a.findings.iter().all(|f| f.id != "EVIDENCE.CONFLICT"));
         let ep = a
             .findings
             .iter()
             .find(|f| f.id == "ISP.ENABLEPROG")
             .unwrap();
         assert_eq!(ep.status, FindingStatus::Pass);
-        assert!(a.verdict.likely.contains("inconsistent"));
+        assert!(a.verdict.likely.contains("anomalous"));
     }
 
     #[test]
     fn line_only_is_inconclusive() {
         let a = run_pipeline(&ev("line_fault_rst"));
         assert_eq!(a.verdict.result, "INCONCLUSIVE");
+    }
+
+    #[test]
+    fn fail_with_line_is_unconfirmed() {
+        let a = run_pipeline(&ev("enableprog_fail_line_anomaly"));
+        assert_eq!(a.verdict.result, "FAIL_UNCONFIRMED");
+        let line = a
+            .findings
+            .iter()
+            .find(|f| f.id == "LINE.RST_ECHO")
+            .unwrap();
+        assert_eq!(line.causal_relevance, CausalRelevance::Unknown);
+        assert!(a.findings.iter().all(|f| f.id != "EVIDENCE.CONFLICT"));
+    }
+
+    #[test]
+    fn container_keeps_raw_and_null_build_hash() {
+        let cap = demo::build_scenario("pass_with_rst_anomaly").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        let ev = evidence::from_state("demo:pass_with_rst_anomaly", &st, true);
+        let pack = Usbasp2eFile::from_capture(ev, &cap);
+        assert_eq!(pack.format_version, 2);
+        assert!(pack.raw.is_some());
+        assert!(pack.analysis.derived_from.starts_with("sha256:"));
+        assert!(pack.provenance.firmware_build_id.is_none());
+        assert!(pack.provenance.firmware_build_hash.is_none());
+        let raw = pack.raw.as_ref().unwrap();
+        let decoded = (0..raw.hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&raw.hex[i..i + 2], 16).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(sha256_hex(&decoded), raw.sha256);
+        assert_eq!(decoded, cap.to_bytes(true));
+    }
+}
+
+#[cfg(test)]
+mod goldens {
+    use super::run_pipeline;
+    use crate::analysis::{CausalRelevance, Confidence, FindingStatus};
+    use crate::demo;
+    use crate::evidence;
+    use crate::state::AppState;
+    use serde::Deserialize;
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[derive(Deserialize)]
+    struct Golden {
+        demo: String,
+        expect: Expect,
+    }
+
+    #[derive(Deserialize)]
+    struct Expect {
+        verdict: String,
+        #[serde(default)]
+        findings: std::collections::BTreeMap<String, FindingExpect>,
+        #[serde(default)]
+        must_not_have: Vec<String>,
+    }
+
+    #[derive(Deserialize)]
+    struct FindingExpect {
+        status: FindingStatus,
+        #[serde(default)]
+        confidence: Option<Confidence>,
+        #[serde(default)]
+        causal_relevance: Option<CausalRelevance>,
+    }
+
+    fn goldens_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../host/goldens/evidence")
+    }
+
+    #[test]
+    fn canonical_evidence_goldens() {
+        let dir = goldens_dir();
+        let mut files: Vec<_> = fs::read_dir(&dir)
+            .unwrap_or_else(|e| panic!("goldens dir {}: {e}", dir.display()))
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
+            .collect();
+        files.sort();
+        assert_eq!(files.len(), 4, "expected four canonical goldens in {}", dir.display());
+        for path in files {
+            let spec: Golden = serde_json::from_str(&fs::read_to_string(&path).unwrap())
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let cap = demo::build_scenario(&spec.demo).unwrap();
+            let mut st = AppState::default();
+            st.ingest_capture(&cap);
+            let ev = evidence::from_state(&format!("demo:{}", spec.demo), &st, true);
+            let a = run_pipeline(&ev);
+            assert_eq!(
+                a.verdict.result, spec.expect.verdict,
+                "{} verdict",
+                path.display()
+            );
+            for (id, exp) in &spec.expect.findings {
+                let f = a
+                    .findings
+                    .iter()
+                    .find(|f| f.id == id.as_str())
+                    .unwrap_or_else(|| panic!("{} missing finding {id}", path.display()));
+                assert_eq!(f.status, exp.status, "{id} status");
+                if let Some(c) = exp.confidence {
+                    assert_eq!(f.confidence, c, "{id} confidence");
+                }
+                if let Some(c) = exp.causal_relevance {
+                    assert_eq!(f.causal_relevance, c, "{id} causal");
+                }
+            }
+            for id in &spec.expect.must_not_have {
+                assert!(
+                    a.findings.iter().all(|f| f.id != id.as_str()),
+                    "{} must not have {id}",
+                    path.display()
+                );
+            }
+        }
     }
 }

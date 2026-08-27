@@ -1,0 +1,23 @@
+From: deep@mail.local
+To: deep@mail.local
+Date: 2026-08-27 12:50 +0600
+Type: ACK
+Subject: [ACK] Evidence semantics v1 holes closed; freeze
+Re: DIAGPLANE EVIDENCE v1 milestone
+
+TL;DR
+  correlator: ISP.PROGRAMMING_PATH; CAPS ≠ evidence; EVIDENCE.CONFLICT;
+  four goldens; usbasp2e v2 with raw sha256. EEPROM/UART/FX2 ingest not this grain.
+
+FACT
+  - ENABLEPROG PASS + MEMOP PASS → PROGRAMMING_PATH (analyzer findings immutable)
+  - FAIL_CONFIRMED only if sources.physical rst_low=false (not CAPS bit)
+  - 02 PASS_WITH_ANOMALY; 04 FAIL_UNCONFIRMED
+  - firmware_build_hash remains null
+  - cargo test 49 ok; crate 0.1.8
+
+DONT
+  - не EEPROM; не FX2 live; не SCK-Hz; не менять смысл FAIL дальше без schema bump
+
+NEXT
+  - freeze evidence-v1; клетка: analyze --out .usbasp2e

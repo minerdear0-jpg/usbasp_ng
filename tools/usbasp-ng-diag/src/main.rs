@@ -197,7 +197,7 @@ enum Cmd {
         timeout: u64,
         #[arg(long)]
         json: bool,
-        /// Write `.usbasp2e` (evidence + analysis JSON)
+        /// Write `.usbasp2e` (raw + observations + derived analysis)
         #[arg(long)]
         out: Option<PathBuf>,
     },
@@ -497,17 +497,20 @@ fn ingest_state(
     diag: Option<&PathBuf>,
     timeout_s: u64,
     wait_session_end: bool,
-) -> Result<(AppState, String)> {
+) -> Result<(AppState, String, Option<CaptureFile>)> {
     let mut st = AppState::default();
     let source;
+    let mut raw = None;
     if let Some(path) = file {
         let cap = CaptureFile::load(path)?;
         st.ingest_capture(&cap);
         source = format!("file:{}", path.display());
+        raw = Some(cap);
     } else if let Some(name) = demo_name {
         let cap = demo::build_scenario(name)?;
         st.ingest_capture(&cap);
         source = format!("demo:{name}");
+        raw = Some(cap);
     } else if let Some(path) = diag {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("read {}", path.display()))?;
@@ -547,7 +550,7 @@ fn ingest_state(
             bail!("no EP2 frames (start avrdude while this waits, or use --demo)");
         }
     }
-    Ok((st, source))
+    Ok((st, source, raw))
 }
 
 fn cmd_snapshot(
@@ -558,7 +561,7 @@ fn cmd_snapshot(
     timeout_s: u64,
     json: bool,
 ) -> Result<()> {
-    let (st, source) = ingest_state(serial, file, demo_name, diag, timeout_s, true)?;
+    let (st, source, _) = ingest_state(serial, file, demo_name, diag, timeout_s, true)?;
     let complete = st.saw_session_end;
     let snap = snapshot::from_state(&source, &st, complete);
     if json {
@@ -577,7 +580,7 @@ fn cmd_evidence(
     timeout_s: u64,
     json: bool,
 ) -> Result<()> {
-    let (st, source) = ingest_state(serial, file, demo_name, diag, timeout_s, true)?;
+    let (st, source, _) = ingest_state(serial, file, demo_name, diag, timeout_s, true)?;
     let complete = st.saw_session_end;
     let ev = evidence::from_state(&source, &st, complete);
     if json {
@@ -597,10 +600,13 @@ fn cmd_analyze(
     json: bool,
     out: Option<&PathBuf>,
 ) -> Result<()> {
-    let (st, source) = ingest_state(serial, file, demo_name, diag, timeout_s, true)?;
+    let (st, source, raw) = ingest_state(serial, file, demo_name, diag, timeout_s, true)?;
     let complete = st.saw_session_end;
     let ev = evidence::from_state(&source, &st, complete);
-    let pack = analyze::Usbasp2eFile::from_evidence(ev);
+    let pack = match raw.as_ref() {
+        Some(cap) => analyze::Usbasp2eFile::from_capture(ev, cap),
+        None => analyze::Usbasp2eFile::from_evidence(ev),
+    };
     if let Some(path) = out {
         pack.write_path(path)?;
         eprintln!("wrote {}", path.display());

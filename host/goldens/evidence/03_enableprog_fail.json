@@ -1,0 +1,11 @@
+{
+  "id": "03_enableprog_fail",
+  "demo": "enableprog_fail_sw",
+  "expect": {
+    "verdict": "FAIL_UNCONFIRMED",
+    "findings": {
+      "ISP.ENABLEPROG": { "status": "FAIL" }
+    },
+    "must_not_have": ["ISP.PROGRAMMING_PATH", "EVIDENCE.CONFLICT"]
+  }
+}

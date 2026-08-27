@@ -7,7 +7,7 @@ Versions (independent):
 - **diagplane** — this client (`Cargo.toml` / `diagplane --version`)
 - **protocol** — EP2 wire schema (`DIAG_SCHEMA_V1` = 1)
 
-TUI header shows both, e.g. `diagplane 0.1.7  protocol 1`.
+TUI header shows both, e.g. `diagplane 0.1.8  protocol 1`.
 
 **Rust:** 1.78 or newer (`rust-version` in `Cargo.toml`). `Cargo.lock` is **v4** — cargo older than 1.78 will refuse it. That is expected; use a current toolchain rather than editing the lockfile. `diagplane.bin` needs no rustc.
 
@@ -58,7 +58,7 @@ Release asset: **`diagplane.bin`** (Linux x86-64, musl static) — same CLI. Bui
 - `watch` — ratatui console UI (file / demo / live); needs an interactive terminal  
 - `snapshot` — one coherent dump of USB/ISP/TRACE/MEMOP (file / demo / jsonl / live)
 - `evidence` — Evidence Record v1: expected/observed/verdict; never claims pin capture from EP2 ([EVIDENCE.md](../../docs/EVIDENCE.md))
-- `analyze` — ISP + RESET analyzers → correlator → Verdict (`PASS_WITH_ANOMALY` when LINE echo fails but ENABLEPROG/MEMOP succeed). `--out file.usbasp2e`. TUI is not this engine.
+- `analyze` — analyzers observe; correlator adds `ISP.PROGRAMMING_PATH` / `EVIDENCE.CONFLICT` and a five-way Verdict. `--out file.usbasp2e` keeps raw USBDIAGv + derived analysis (`analyzer_version`, `derived_from`). CAPS `PHYSICAL_CAPTURE` is not evidence. Goldens: [`host/goldens/evidence/`](../../host/goldens/evidence/).
 
 Contracts: [`docs/DIAGNOSTICS.md`](../../docs/DIAGNOSTICS.md), client notes: [`docs/DIAGNOSTICS_CLIENT.md`](../../docs/DIAGNOSTICS_CLIENT.md).
 

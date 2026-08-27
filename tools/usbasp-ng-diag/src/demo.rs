@@ -83,6 +83,7 @@ fn push_trace_end(
 pub fn list_scenarios() -> &'static [&'static str] {
     &[
         "enableprog_fail_sw",
+        "enableprog_fail_line_anomaly",
         "enableprog_ladder_silent",
         "line_fault_rst",
         "pass_with_rst_anomaly",
@@ -98,9 +99,22 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
     let mut ns = 1_700_000_000_000_000_000u64;
     let mut records = Vec::new();
     match name {
-        "enableprog_fail_sw" => {
+        "enableprog_fail_sw" | "enableprog_fail_line_anomaly" => {
             push_hello_caps(&mut records, &mut ns, 100);
             push(&mut records, &mut ns, report(SESSION_BEGIN, 0, 110, 7, 7));
+            if name == "enableprog_fail_line_anomaly" {
+                push(
+                    &mut records,
+                    &mut ns,
+                    report(
+                        LINE_FAULT,
+                        LINE_DRIVE_HIGH | EP_FAIL,
+                        110,
+                        2,
+                        0x14,
+                    ),
+                );
+            }
             push(
                 &mut records,
                 &mut ns,

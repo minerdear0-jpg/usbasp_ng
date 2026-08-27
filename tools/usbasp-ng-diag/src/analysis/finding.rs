@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::analysis::Confidence;
 
@@ -20,9 +20,10 @@ pub enum Domain {
     IspProtocol,
     PhysicalLine,
     SckConfig,
+    Correlation,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum FindingStatus {
     Pass,
@@ -30,7 +31,7 @@ pub enum FindingStatus {
     Anomaly,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[allow(dead_code)]
 pub enum CausalRelevance {

@@ -33,7 +33,7 @@ impl Analyzer for ResetAnalyzer {
 
         if let Some(c) = ev.claims.iter().find(|c| c.name == "LINE_FAULT") {
             let fail = c.verdict == "FAIL";
-            let phys = ev.integrity.physical_capture;
+            let phys = ev.sources.physical.is_some();
             out.push(Finding {
                 id: "LINE.RST_ECHO",
                 analyzer: self.id(),

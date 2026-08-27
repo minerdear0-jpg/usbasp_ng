@@ -143,6 +143,18 @@ impl CaptureFile {
         }
         Ok(())
     }
+
+    pub fn to_bytes(&self, with_header: bool) -> Vec<u8> {
+        let mut out = Vec::new();
+        if with_header {
+            let h = self.header.clone().unwrap_or_default();
+            out.extend_from_slice(&h.to_bytes());
+        }
+        for r in &self.records {
+            out.extend_from_slice(&r.to_bytes());
+        }
+        out
+    }
 }
 
 pub fn write_header<W: Write>(w: &mut W) -> Result<()> {

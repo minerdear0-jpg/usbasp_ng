@@ -1,0 +1,12 @@
+{
+  "id": "04_enableprog_fail_line_anomaly",
+  "demo": "enableprog_fail_line_anomaly",
+  "expect": {
+    "verdict": "FAIL_UNCONFIRMED",
+    "findings": {
+      "ISP.ENABLEPROG": { "status": "FAIL" },
+      "LINE.RST_ECHO": { "status": "ANOMALY", "confidence": "LOW", "causal_relevance": "UNKNOWN" }
+    },
+    "must_not_have": ["FAIL_CONFIRMED", "ISP.PROGRAMMING_PATH", "EVIDENCE.CONFLICT"]
+  }
+}

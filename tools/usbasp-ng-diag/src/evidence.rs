@@ -19,6 +19,7 @@ pub struct EvidenceRecord {
     pub execution: Execution,
     pub claims: Vec<Claim>,
     pub result: ResultBlock,
+    pub sources: Sources,
     pub integrity: Integrity,
     pub provenance: Provenance,
 }
@@ -32,8 +33,11 @@ pub struct Identity {
     pub hello_profile: Option<u8>,
     pub firmware_caps: Option<String>,
     pub board_caps: Option<String>,
-    /// Not on EP2 today. Null until firmware advertises a build hash.
+    /// Not on EP2 today. Null until firmware advertises a build id. Never copied from bcdDevice.
     pub firmware_build_id: Option<String>,
+    /// Separate from product revision. Null until protocol carries a hash.
+    pub firmware_build_hash: Option<String>,
+    pub board_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -73,6 +77,7 @@ pub struct Execution {
     pub frames: usize,
     pub memop_ok: Option<bool>,
     pub memop_pages: Option<u8>,
+    pub verify_ok: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -97,9 +102,26 @@ pub struct ResultBlock {
 #[derive(Clone, Debug, Serialize)]
 pub struct Integrity {
     pub protocol_observed: bool,
+    /// Board CAPS bit: a physical source *could* exist. Not evidence.
+    pub physical_capture_capability: bool,
+    /// True only if `sources.physical` is present (recorded capture, not CAPS).
     pub physical_capture: bool,
     pub persistent_evidence: bool,
     pub capture_digest: String,
+}
+
+/// Independent evidence channels. Empty until that source is actually recorded.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct Sources {
+    pub physical: Option<PhysicalEvidence>,
+}
+
+/// A recorded physical capture (FX2, sniffer). Presence is evidence; CAPS is not.
+#[derive(Clone, Debug, Serialize)]
+pub struct PhysicalEvidence {
+    pub capture_id: String,
+    /// RST observed low on the wire, if this capture speaks RST.
+    pub rst_low: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -147,6 +169,8 @@ pub fn from_state(source: &str, state: &AppState, complete: bool) -> EvidenceRec
             firmware_caps: caps.map(|c| format!("0x{:08x}", c.firmware.0)),
             board_caps: caps.map(|c| format!("0x{:08x}", c.board.0)),
             firmware_build_id: None,
+            firmware_build_hash: None,
+            board_id: None,
         },
         configuration: Configuration {
             sck_id: state.sck_id,
@@ -174,12 +198,16 @@ pub fn from_state(source: &str, state: &AppState, complete: bool) -> EvidenceRec
             frames: state.events.len(),
             memop_ok: state.last_flash_ok.or(state.memop_end_ok),
             memop_pages: state.last_flash_pages.or(state.memop_end_pages),
+            verify_ok: state.last_verify_ok,
         },
         claims: claims(state),
         result: result_block(state, tone, &diagnosis),
+        sources: Sources { physical: None },
         integrity: Integrity {
             protocol_observed: !state.events.is_empty(),
-            physical_capture: b.is_some_and(|c| c.contains(crate::caps::BoardCaps::PHYSICAL_CAPTURE)),
+            physical_capture_capability: b
+                .is_some_and(|c| c.contains(crate::caps::BoardCaps::PHYSICAL_CAPTURE)),
+            physical_capture: false,
             persistent_evidence: false,
             capture_digest: digest,
         },
@@ -411,7 +439,11 @@ impl EvidenceRecord {
             yn(self.integrity.protocol_observed)
         );
         println!(
-            "  physical_capture  = {}",
+            "  physical_capture_capability = {}",
+            yn(self.integrity.physical_capture_capability)
+        );
+        println!(
+            "  physical_capture_evidence   = {}",
             yn(self.integrity.physical_capture)
         );
         println!(
@@ -461,6 +493,7 @@ mod tests {
         assert!(!ev.integrity.persistent_evidence);
         assert_eq!(ev.target.signature_source, "none");
         assert!(ev.identity.firmware_build_id.is_none());
+        assert!(ev.identity.firmware_build_hash.is_none());
         let ep = ev.claims.iter().find(|c| c.name == "ENABLEPROG").unwrap();
         assert_eq!(ep.verdict, "FAIL");
         assert_eq!(ep.evidence, "protocol");
