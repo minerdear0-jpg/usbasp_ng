@@ -39,7 +39,15 @@ pub fn is_wire_fragment(e: &LogEvent) -> bool {
         || (!e.semantic && matches!(e.ty, ENABLEPROG | FAULT_SNAPSHOT))
 }
 
+/// No EP2 for this long during an open ISP session → stall (target RESET / USB hang).
+pub const ISP_STALL_NS: u64 = 5_000_000_000;
+
 pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
+    diagnosis_at(state, None)
+}
+
+/// `now_ns` = host wall clock (live watch). Demos omit it (no stall).
+pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String) {
     if state.ep_fail == Some(true) {
         let rx = state.ep_rx.unwrap_or([0xff; 4]);
         if rx.iter().all(|&b| b == 0xff) {
@@ -77,6 +85,19 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
             format!("TRACE LOSS — dropped={}", state.stats.dropped),
         );
     }
+
+    let open = state.saw_session && !state.saw_session_end;
+    if open {
+        if let (Some(now), Some(last)) = (now_ns, state.events.last().map(|e| e.host_ns)) {
+            if now.saturating_sub(last) >= ISP_STALL_NS {
+                return (
+                    DiagTone::Bad,
+                    "ISP STALL — no EP2 (target RESET or avrdude hung)".into(),
+                );
+            }
+        }
+    }
+
     if state.last_flash_ok == Some(true) && state.last_verify_ok == Some(true) {
         let w = state.last_flash_pages.unwrap_or(0);
         let r = state.last_verify_pages.unwrap_or(0);
@@ -85,6 +106,12 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
             Some(false) => "  DISC=DRIVE",
             None => "",
         };
+        if open {
+            return (
+                DiagTone::Warn,
+                format!("VERIFY OK — waiting DISCONNECT{pins}"),
+            );
+        }
         return (
             DiagTone::Ok,
             format!("FLASH WRITE {w} pages  VERIFY {r} OK{pins}"),
@@ -93,6 +120,12 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
     if state.memop_end_ok == Some(true) {
         let n = state.memop_end_pages.unwrap_or(0);
         let mem = mem_name(state.memop_kind);
+        if open {
+            return (
+                DiagTone::Warn,
+                format!("{mem} {n} pages — waiting SESSION_END"),
+            );
+        }
         return (DiagTone::Ok, format!("{mem} {n} pages OK"));
     }
     if state.ep_fail == Some(false) && state.memop_kind.is_some() && state.memop_end_ok.is_none()
@@ -104,22 +137,25 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
             .unwrap_or(0);
         return (
             DiagTone::Warn,
-            format!("FLASH WRITE @{addr:#06x}"),
+            format!(
+                "{} @{addr:#06x} — no MEMOP END",
+                mem_name(state.memop_kind)
+            ),
         );
     }
     if state.ep_fail == Some(false) {
-        return (
-            DiagTone::Ok,
-            "ENABLEPROG PASS".into(),
-        );
+        if open {
+            return (
+                DiagTone::Warn,
+                "IN SESSION — ENABLEPROG PASS, avrdude still in ISP".into(),
+            );
+        }
+        return (DiagTone::Ok, "ENABLEPROG PASS".into());
     }
     if state.saw_session {
         return (DiagTone::Info, "—".into());
     }
-    (
-        DiagTone::Info,
-        "—".into(),
-    )
+    (DiagTone::Info, "—".into())
 }
 
 pub fn phases(state: &AppState) -> [(&'static str, PhaseMark); 6] {
@@ -140,7 +176,8 @@ pub fn phases(state: &AppState) -> [(&'static str, PhaseMark); 6] {
     };
     let prog = match state.ep_fail {
         Some(true) => PhaseMark::Fail,
-        Some(false) => PhaseMark::Ok,
+        Some(false) if state.saw_session_end => PhaseMark::Ok,
+        Some(false) => PhaseMark::Active,
         None => PhaseMark::Idle,
     };
     let flash = match (state.memop_kind, state.memop_end_ok) {
@@ -258,7 +295,7 @@ fn mem_name(kind: Option<u8>) -> &'static str {
     match kind {
         Some(MEM_FLASH) => "FLASH WRITE",
         Some(MEM_EEPROM) => "EEPROM WRITE",
-        Some(MEM_READFLASH) => "READFLASH",
+        Some(MEM_READFLASH) => "FLASH READ",
         _ => "MEMOP",
     }
 }
@@ -375,6 +412,65 @@ mod tests {
         assert_eq!(ph[3], ("PROG", PhaseMark::Ok));
         assert_eq!(ph[4], ("FLASH", PhaseMark::Ok));
         assert_eq!(ph[5], ("DISC", PhaseMark::Ok));
+    }
+
+    #[test]
+    fn open_session_is_not_pass() {
+        let cap = demo::build_scenario("session_hw_pass").unwrap();
+        let mut st = AppState::default();
+        for rec in &cap.records {
+            let Some(f) = rec.frame() else { continue };
+            if f.ty == SESSION_END {
+                continue;
+            }
+            st.push_frame(rec.host_ns, f);
+        }
+        assert!(st.saw_session && !st.saw_session_end);
+        let (tone, line) = diagnosis(&st);
+        assert_eq!(tone, DiagTone::Warn, "{line}");
+        assert!(line.contains("IN SESSION"), "{line}");
+        assert_eq!(phases(&st)[3], ("PROG", PhaseMark::Active));
+        let last = st.events.last().unwrap().host_ns;
+        let (tone, line) = diagnosis_at(&st, Some(last + crate::scene::ISP_STALL_NS));
+        assert_eq!(tone, DiagTone::Bad, "{line}");
+        assert!(line.contains("ISP STALL"), "{line}");
+    }
+
+    #[test]
+    fn flash_read_banner_is_not_write() {
+        let cap = demo::build_scenario("session_hw_pass").unwrap();
+        let mut st = AppState::default();
+        for rec in &cap.records {
+            let Some(f) = rec.frame() else { continue };
+            if f.ty == SESSION_END {
+                continue;
+            }
+            st.push_frame(rec.host_ns, f);
+        }
+        st.push_frame(
+            99,
+            DiagFrame {
+                ty: MEMOP,
+                flags: EP_START,
+                timestamp: 0,
+                a: MEM_READFLASH,
+                b: 64,
+            },
+        );
+        st.push_frame(
+            100,
+            DiagFrame {
+                ty: MEMOP,
+                flags: EP_CONT,
+                timestamp: 0,
+                a: 0x00,
+                b: 0x00,
+            },
+        );
+        let (tone, line) = diagnosis(&st);
+        assert_eq!(tone, DiagTone::Warn, "{line}");
+        assert!(line.contains("FLASH READ"), "{line}");
+        assert!(!line.contains("WRITE"), "{line}");
     }
 
     #[test]

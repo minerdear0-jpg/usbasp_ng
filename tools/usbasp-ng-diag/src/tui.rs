@@ -21,9 +21,9 @@ use crate::capture::CaptureFile;
 use crate::correlate::{self, TimelineEvent};
 use crate::demo;
 use crate::decoder::type_name;
-use crate::protocol::{DiagFrame, EP2_IN};
+use crate::protocol::{DiagFrame, EP2_IN, MEM_EEPROM, MEM_FLASH, MEM_READFLASH};
 use crate::scene::{
-    diagnosis, dual_rows, is_wire_fragment, phases, programmer_rows, rel_label, DiagTone,
+    diagnosis_at, dual_rows, is_wire_fragment, phases, programmer_rows, rel_label, DiagTone,
     PhaseMark, ViewRow,
 };
 use crate::state::{AppState, Level};
@@ -278,18 +278,18 @@ fn draw(f: &mut Frame, ui: &Ui) {
     let w = f.area().width;
     let h = f.area().height;
     let wide = w >= 110;
-    // 80×24: FLASH under the bus (never drop the memory rail).
-    // 16:9 (~110+): FLASH on the right, bus faceplate fixed.
-    let inst_h = if h >= 24 && w >= 80 {
-        if wide {
-            7
-        } else {
-            10
-        }
-    } else if h >= 22 && w >= 80 {
-        7
-    } else {
+    let show_inst = h >= 22 && w >= 80;
+    // 16:9: FLASH is a full-height rail (instruments + log). Tall column,
+    // one page per row — no wrapping tiles.
+    // 80×24: rail does not fit; FLASH stays a strip under the bus.
+    let flash_right = wide && show_inst;
+    let flash_below = show_inst && !flash_right && h >= 24;
+    let inst_h = if !show_inst {
         0
+    } else if flash_below {
+        10
+    } else {
+        7
     };
 
     let chunks = Layout::default()
@@ -298,7 +298,6 @@ fn draw(f: &mut Frame, ui: &Ui) {
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
-            Constraint::Length(inst_h),
             Constraint::Min(5),
             Constraint::Length(1),
         ])
@@ -307,15 +306,39 @@ fn draw(f: &mut Frame, ui: &Ui) {
     draw_header(f, chunks[0], ui);
     draw_banner(f, chunks[1], ui);
     draw_phases(f, chunks[2], ui);
-    if inst_h > 0 {
-        draw_instruments(f, chunks[3], ui, wide && inst_h < 10);
-    }
-    if ui.show_caps {
-        draw_caps(f, chunks[4], ui);
+    let body = chunks[3];
+    draw_footer(f, chunks[4], ui);
+
+    if flash_right {
+        let split = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(72), Constraint::Length(32)])
+            .split(body);
+        let left = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(inst_h), Constraint::Min(5)])
+            .split(split[0]);
+        draw_instruments(f, left[0], ui);
+        draw_body_log(f, left[1], ui);
+        draw_flash_map(f, split[1], ui);
     } else {
-        draw_timeline(f, chunks[4], ui);
+        let left = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(inst_h), Constraint::Min(5)])
+            .split(body);
+        if inst_h > 0 {
+            draw_instruments_with_optional_flash(f, left[0], ui, flash_below);
+        }
+        draw_body_log(f, left[1], ui);
     }
-    draw_footer(f, chunks[5], ui);
+}
+
+fn draw_body_log(f: &mut Frame, area: Rect, ui: &Ui) {
+    if ui.show_caps {
+        draw_caps(f, area, ui);
+    } else {
+        draw_timeline(f, area, ui);
+    }
 }
 
 fn sep() -> Span<'static> {
@@ -396,7 +419,11 @@ fn draw_footer(f: &mut Frame, area: Rect, ui: &Ui) {
 }
 
 fn draw_banner(f: &mut Frame, area: Rect, ui: &Ui) {
-    let (tone, line) = diagnosis(&ui.state);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64;
+    let (tone, line) = diagnosis_at(&ui.state, Some(now));
     let (fg, bg, lit) = match tone {
         DiagTone::Bad => (Color::White, Color::Red, true),
         DiagTone::Ok => (Color::Black, Color::Green, true),
@@ -444,15 +471,13 @@ fn dim_block(title: &str, lit: bool) -> Block<'_> {
         .title_style(style)
 }
 
-fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui, flash_right: bool) {
-    let rest = if flash_right {
-        let split = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(72), Constraint::Length(32)])
-            .split(area);
-        draw_flash_map(f, split[1], ui);
-        split[0]
-    } else if area.height >= 10 {
+fn draw_instruments_with_optional_flash(
+    f: &mut Frame,
+    area: Rect,
+    ui: &Ui,
+    flash_below: bool,
+) {
+    let bus = if flash_below && area.height >= 10 {
         let split = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(7), Constraint::Length(3)])
@@ -462,7 +487,10 @@ fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui, flash_right: bool) {
     } else {
         area
     };
+    draw_instruments(f, bus, ui);
+}
 
+fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -470,7 +498,7 @@ fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui, flash_right: bool) {
             Constraint::Min(32),
             Constraint::Length(28),
         ])
-        .split(rest);
+        .split(area);
 
     let isp_lit = ui.state.saw_reset || ui.state.pins_ddr.is_some() || ui.state.sck_id.is_some();
     f.render_widget(
@@ -498,9 +526,24 @@ fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui, flash_right: bool) {
 
 fn draw_flash_map(f: &mut Frame, area: Rect, ui: &Ui) {
     let inner_w = area.width.saturating_sub(2);
+    let inner_h = area.height.saturating_sub(2);
     let lit = ui.state.memop_kind.is_some() || !ui.state.memop_pages.is_empty();
+    let blink = (SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        / 350)
+        % 2
+        == 0;
+    let flash_title = match ui.state.memop_kind {
+        Some(MEM_READFLASH) => "FLASH READ",
+        Some(MEM_FLASH) => "FLASH WRITE",
+        Some(MEM_EEPROM) => "EEPROM",
+        _ => "FLASH",
+    };
     f.render_widget(
-        Paragraph::new(flash_lines(&ui.state, inner_w)).block(dim_block("FLASH", lit)),
+        Paragraph::new(flash_lines(&ui.state, inner_w, inner_h, blink))
+            .block(dim_block(flash_title, lit)),
         area,
     );
 }
@@ -604,25 +647,49 @@ fn hex_cell(b: u8, accent: bool, fail: bool) -> Span<'static> {
     Span::styled(format!(" {b:02X} "), style)
 }
 
+/// Same footprint as a live hex cube; gray = slot exists, wait for ISP.
+fn wait_cell() -> Span<'static> {
+    Span::styled(" -- ", Style::default().fg(Color::DarkGray))
+}
+
+const EP_CUBES: usize = 4;
+
+fn cube_row(label: &'static str, bytes: Option<[u8; 4]>, fail: Option<bool>) -> Line<'static> {
+    let mut spans = vec![Span::styled(
+        format!("{label:<3} "),
+        Style::default().fg(Color::DarkGray),
+    )];
+    for i in 0..EP_CUBES {
+        if i > 0 {
+            spans.push(Span::raw(" "));
+        }
+        match bytes {
+            Some(b) => {
+                let tx_cmd = label == "TX" && i == 1;
+                let is_echo = label == "RX" && b[i] == 0x53;
+                let rx_fail = label == "RX" && fail == Some(true) && i == 0;
+                spans.push(hex_cell(
+                    b[i],
+                    tx_cmd || (is_echo && fail != Some(true)),
+                    rx_fail,
+                ));
+            }
+            None => spans.push(wait_cell()),
+        }
+    }
+    Line::from(spans)
+}
+
 fn enableprog_lines(st: &AppState) -> Vec<Line<'static>> {
-    match (st.ep_tx, st.ep_rx, st.ep_fail) {
-        (Some(tx), Some(rx), Some(fail)) => {
-            let echo_ok = rx.iter().any(|&b| b == 0x53);
-            let mut tx_spans = vec![Span::styled("TX  ", Style::default().fg(Color::DarkGray))];
-            for (i, b) in tx.iter().enumerate() {
-                tx_spans.push(hex_cell(*b, i == 1, false));
-                if i + 1 != tx.len() {
-                    tx_spans.push(Span::raw(" "));
-                }
-            }
-            let mut rx_spans = vec![Span::styled("RX  ", Style::default().fg(Color::DarkGray))];
-            for (i, b) in rx.iter().enumerate() {
-                let is_echo = *b == 0x53;
-                rx_spans.push(hex_cell(*b, is_echo && !fail, fail && i == 0));
-                if i + 1 != rx.len() {
-                    rx_spans.push(Span::raw(" "));
-                }
-            }
+    let tx = cube_row("TX", st.ep_tx, st.ep_fail);
+    let rx = cube_row("RX", st.ep_rx, st.ep_fail);
+    let mut lines = vec![tx, rx];
+    match st.ep_fail {
+        Some(fail) => {
+            let echo_ok = st
+                .ep_rx
+                .map(|b| b.iter().any(|&x| x == 0x53))
+                .unwrap_or(false);
             let res = if fail {
                 Span::styled(" FAIL ", Style::default().fg(Color::White).bg(Color::Red))
             } else {
@@ -644,20 +711,19 @@ fn enableprog_lines(st: &AppState) -> Vec<Line<'static>> {
                 .or(st.err_delay)
                 .map(|d| format!("  t={d}"))
                 .unwrap_or_default();
-            vec![
-                Line::from(tx_spans),
-                Line::from(rx_spans),
-                Line::from(vec![res, echo, Span::raw(delay)]),
-            ]
+            lines.push(Line::from(vec![res, echo, Span::raw(delay)]));
         }
-        _ => vec![
-            Line::from(Span::styled("TX  —", Style::default().fg(Color::DarkGray))),
-            Line::from(Span::styled("RX  —", Style::default().fg(Color::DarkGray))),
-        ],
+        None => {
+            lines.push(Line::from(Span::styled(
+                " --    --",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
     }
+    lines
 }
 
-fn flash_lines(st: &AppState, inner_w: u16) -> Vec<Line<'static>> {
+fn flash_lines(st: &AppState, inner_w: u16, inner_h: u16, blink: bool) -> Vec<Line<'static>> {
     if st.memop_kind.is_none() && st.memop_pages.is_empty() {
         return vec![Line::from(Span::styled(
             "—",
@@ -689,19 +755,52 @@ fn flash_lines(st: &AppState, inner_w: u16) -> Vec<Line<'static>> {
         )));
         return lines;
     }
-    // Right rail is ~30 cols → one cell per row. Wider → pack.
-    let cell_w = 13u16;
-    let per_row = (inner_w / cell_w).max(1) as usize;
+    let cell_w = 12u16;
+    let per_row = if inner_h >= 8 {
+        1
+    } else {
+        (inner_w / cell_w).max(1) as usize
+    };
+    let n = st.memop_pages.len();
+    let room = inner_h.saturating_sub(1) as usize;
+    let mut cap = room.max(1).saturating_mul(per_row);
+    if n > cap {
+        cap = cap.saturating_sub(per_row).max(1);
+    }
+    let start = n.saturating_sub(cap);
+    if start > 0 {
+        lines.push(Line::from(Span::styled(
+            "…",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+    let slice = &st.memop_pages[start..n];
+    let last_i = slice.len().saturating_sub(1);
     let mut row: Vec<Span> = Vec::new();
-    let shown = st.memop_pages.len().min(12);
-    for (i, &(addr, ok)) in st.memop_pages.iter().take(12).enumerate() {
-        let style = if ok {
-            Style::default().fg(Color::Black).bg(Color::Green)
+    for (i, &(addr, ok)) in slice.iter().enumerate() {
+        let sync = i == last_i;
+        let style = if !ok {
+            if blink {
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::Red)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+                    .fg(Color::Red)
+                    .add_modifier(Modifier::BOLD)
+            }
+        } else if sync {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Green)
+                .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::White).bg(Color::Red)
+            Style::default().fg(Color::Black).bg(Color::Green)
         };
+        let mark = if sync { '>' } else { ' ' };
         row.push(Span::styled(
-            format!(" {addr:#06x} {} ", if ok { "OK" } else { "FAIL" }),
+            format!("{mark}{addr:#06x} {} ", if ok { "OK" } else { "NG" }),
             style,
         ));
         if (i + 1) % per_row == 0 {
@@ -712,9 +811,6 @@ fn flash_lines(st: &AppState, inner_w: u16) -> Vec<Line<'static>> {
     }
     if !row.is_empty() {
         lines.push(Line::from(row));
-    }
-    if st.memop_pages.len() > shown {
-        lines.push(Line::from(Span::raw("…")));
     }
     lines
 }

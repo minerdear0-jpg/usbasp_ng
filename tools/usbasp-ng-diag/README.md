@@ -7,7 +7,7 @@ Versions (independent):
 - **diagplane** — this client (`Cargo.toml` / `diagplane --version`)
 - **protocol** — EP2 wire schema (`DIAG_SCHEMA_V1` = 1)
 
-TUI header shows both, e.g. `diagplane 0.1.1  protocol 1`.
+TUI header shows both, e.g. `diagplane 0.1.2  protocol 1`.
 
 **Rust:** 1.78 or newer (`rust-version` in `Cargo.toml`). `Cargo.lock` is **v4** — cargo older than 1.78 will refuse it. That is expected; use a current toolchain rather than editing the lockfile. `diagplane.bin` needs no rustc.
 
