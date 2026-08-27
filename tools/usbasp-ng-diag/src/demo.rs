@@ -85,6 +85,7 @@ pub fn list_scenarios() -> &'static [&'static str] {
         "enableprog_fail_sw",
         "enableprog_ladder_silent",
         "line_fault_rst",
+        "pass_with_rst_anomaly",
         "memop_flash",
         "memop_poll_fail",
         "overflow",
@@ -225,9 +226,22 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
             );
             push(&mut records, &mut ns, report(SESSION_END, 0, 160, 0, 0));
         }
-        "memop_flash" => {
+        "memop_flash" | "pass_with_rst_anomaly" => {
             push_hello_caps(&mut records, &mut ns, 10);
             push(&mut records, &mut ns, report(SESSION_BEGIN, 0, 20, 8, 8));
+            if name == "pass_with_rst_anomaly" {
+                push(
+                    &mut records,
+                    &mut ns,
+                    report(
+                        LINE_FAULT,
+                        LINE_DRIVE_HIGH | EP_FAIL,
+                        21,
+                        2,
+                        0x14,
+                    ),
+                );
+            }
             push(
                 &mut records,
                 &mut ns,

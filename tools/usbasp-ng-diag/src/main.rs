@@ -6,6 +6,8 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod analysis;
+mod analyzers;
 mod analyze;
 mod caps;
 mod capture;

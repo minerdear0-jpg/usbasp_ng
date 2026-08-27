@@ -1,4 +1,4 @@
-//! Ratatui watch UI: diagnosis + phases + instruments + dual-column timeline.
+//! Ratatui watch: faceplate + log + host VERDICT rail. TUI is a viewer, not the analyzer.
 
 use anyhow::{bail, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -10,7 +10,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState};
+use ratatui::widgets::{Block, Borders, Cell, Clear, Padding, Paragraph, Row, Table, TableState};
 use ratatui::Frame;
 use ratatui::Terminal;
 use std::io::{self, IsTerminal, Stdout};
@@ -47,6 +47,7 @@ struct Ui {
     status: String,
     uart_path: Option<PathBuf>,
     timeline: Vec<TimelineEvent>,
+    confirm_clear: bool,
 }
 
 impl Ui {
@@ -64,6 +65,7 @@ impl Ui {
             status: String::new(),
             uart_path,
             timeline: Vec::new(),
+            confirm_clear: false,
         };
         ui.refresh_timeline();
         ui.jump_bot();
@@ -75,6 +77,10 @@ impl Ui {
             self.timeline.clear();
             return;
         };
+        if self.state.events.is_empty() {
+            self.timeline.clear();
+            return;
+        }
         let Ok(text) = std::fs::read_to_string(path) else {
             return;
         };
@@ -135,6 +141,15 @@ impl Ui {
         if self.follow {
             self.jump_bot();
         }
+    }
+
+    fn clear_screen(&mut self) {
+        self.state = AppState::default();
+        self.timeline.clear();
+        self.show_caps = false;
+        self.status.clear();
+        self.follow = true;
+        self.jump_bot();
     }
 }
 
@@ -240,9 +255,32 @@ fn run_loop(
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
+                if ui.confirm_clear {
+                    match key.code {
+                        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                            ui.clear_screen();
+                            ui.confirm_clear = false;
+                        }
+                        KeyCode::Char('n')
+                        | KeyCode::Char('N')
+                        | KeyCode::Esc
+                        | KeyCode::Char('q') => {
+                            ui.confirm_clear = false;
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
                 match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => break,
+                    KeyCode::Char('q') => break,
+                    KeyCode::Esc => break,
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
+                    KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        ui.confirm_clear = true;
+                    }
+                    KeyCode::Char('x') => {
+                        ui.confirm_clear = true;
+                    }
                     KeyCode::Char('f') => {
                         ui.faults_only = !ui.faults_only;
                         ui.on_new_events();
@@ -284,39 +322,86 @@ fn draw(f: &mut Frame, ui: &Ui) {
     // 80×24: rail does not fit; FLASH stays a strip under the bus.
     let flash_right = wide && show_inst;
     let flash_below = show_inst && !flash_right && h >= 24;
+    let show_verdict = h >= 22 && w >= 60;
+    // Full-width host Verdict (evidence viewer). Not firmware. Grows with analyzers.
+    let verdict_h = if !show_verdict {
+        0
+    } else if h >= 36 {
+        9
+    } else if h >= 28 {
+        6
+    } else {
+        4
+    };
     let inst_h = if !show_inst {
         0
     } else if flash_below {
-        10
+        if h < 28 {
+            10
+        } else {
+            11
+        }
     } else {
         7
     };
 
-    let chunks = Layout::default()
+    // Faceplate flush on top. Final band: gap · VERDICT · gap · keys.
+    let chunks = if verdict_h > 0 {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(4),
+                Constraint::Min(5),
+                Constraint::Length(1),
+                Constraint::Length(verdict_h),
+                Constraint::Length(1),
+                Constraint::Length(1),
+            ])
+            .split(f.area())
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(4),
+                Constraint::Min(5),
+                Constraint::Length(1),
+                Constraint::Length(1),
+            ])
+            .split(f.area())
+    };
+
+    let top = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
-            Constraint::Min(5),
             Constraint::Length(1),
         ])
-        .split(f.area());
+        .split(chunks[0]);
 
-    draw_header(f, chunks[0], ui);
-    draw_banner(f, chunks[1], ui);
-    draw_phases(f, chunks[2], ui);
-    let body = chunks[3];
-    draw_footer(f, chunks[4], ui);
+    draw_header(f, top[0], ui);
+    draw_banner(f, top[1], ui);
+    // top[2] empty: diagnosis lamp must not sit on the phase keys
+    draw_phases(f, top[3], ui);
+    let body = chunks[1];
+    if verdict_h > 0 {
+        draw_verdict(f, chunks[3], ui);
+        draw_footer(f, chunks[5], ui);
+    } else {
+        draw_footer(f, chunks[3], ui);
+    }
 
     if flash_right {
         let split = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Min(72), Constraint::Length(32)])
+            .spacing(1)
             .split(body);
         let left = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(inst_h), Constraint::Min(5)])
+            .spacing(1)
             .split(split[0]);
         draw_instruments(f, left[0], ui);
         draw_body_log(f, left[1], ui);
@@ -325,11 +410,15 @@ fn draw(f: &mut Frame, ui: &Ui) {
         let left = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(inst_h), Constraint::Min(5)])
+            .spacing(1)
             .split(body);
         if inst_h > 0 {
             draw_instruments_with_optional_flash(f, left[0], ui, flash_below);
         }
         draw_body_log(f, left[1], ui);
+    }
+    if ui.confirm_clear {
+        draw_clear_confirm(f);
     }
 }
 
@@ -347,9 +436,9 @@ fn sep() -> Span<'static> {
 
 /// 80s dash key: bezel always; lamp only when pressed. Missing control → omit.
 fn dash_key(label: &str, lamp: Option<(Color, Color)>) -> Vec<Span<'static>> {
-    let bezel = Style::default().fg(Color::DarkGray);
+    let bezel = Style::default().fg(Color::Gray);
     let face = match lamp {
-        None => Style::default().fg(Color::DarkGray),
+        None => Style::default().fg(Color::Gray),
         Some((fg, bg)) => Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
     };
     vec![
@@ -369,12 +458,25 @@ fn lamp_run() -> (Color, Color) {
     (Color::Black, Color::Yellow)
 }
 
-fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
-    let sck = match (ui.state.sck_id, ui.state.sck_sw) {
-        (Some(id), Some(true)) => format!("SCK SW {id}"),
-        (Some(id), _) => format!("SCK HW {id}"),
-        _ => "SCK —".into(),
+/// Host-alive lamp: cyan, not the yellow bus keys.
+fn dash_key_alive(on: bool) -> Vec<Span<'static>> {
+    let bezel = Style::default().fg(Color::Cyan);
+    let face = if on {
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Cyan)
     };
+    vec![
+        Span::styled("[", bezel),
+        Span::styled(" RUN ", face),
+        Span::styled("]", bezel),
+    ]
+}
+
+fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
     let mut spans = vec![
         Span::styled(
             crate::version::banner_short(),
@@ -383,10 +485,8 @@ fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
         sep(),
         Span::raw(ui.source_label.clone()),
         sep(),
-        Span::styled(sck, Style::default().fg(Color::DarkGray)),
-        sep(),
     ];
-    spans.extend(dash_key("RUN", ui.follow.then(lamp_run)));
+    spans.extend(dash_key_alive(ui.follow && heartbeat()));
     spans.push(Span::raw(" "));
     spans.extend(dash_key("HOLD", (!ui.follow).then(lamp_run)));
     if ui.uart_path.is_some() {
@@ -409,8 +509,19 @@ fn draw_footer(f: &mut Frame, area: Rect, ui: &Ui) {
     } else {
         String::new()
     };
-    let line = format!("n={n}{usb}    q  w wire  f fault  c caps  j/k  g/G  Space HOLD");
-    let style = if ui.status.starts_with("USB ") {
+    let line = if ui.confirm_clear {
+        "CLEAR screen?   y yes    n / Esc cancel".into()
+    } else {
+        format!(
+            "  n={n}{usb}    q quit    x clear    w wire    f fault    c caps    j/k    g/G    Space HOLD"
+        )
+    };
+    let style = if ui.confirm_clear {
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else if ui.status.starts_with("USB ") {
         Style::default().fg(Color::Red)
     } else {
         Style::default().fg(Color::DarkGray)
@@ -418,12 +529,227 @@ fn draw_footer(f: &mut Frame, area: Rect, ui: &Ui) {
     f.render_widget(Paragraph::new(line).style(style), area);
 }
 
+/// Host Verdict rail — session face, not “any red finding = FAIL”.
+fn draw_verdict(f: &mut Frame, area: Rect, ui: &Ui) {
+    let face = session_face(&ui.state);
+    let inner_w = area.width.saturating_sub(4);
+    let inner_h = area.height.saturating_sub(2);
+    let lit = !matches!(face, SessionFace::Open);
+    f.render_widget(
+        Paragraph::new(verdict_lines(&ui.state, inner_w, inner_h)).block(
+            dim_block("VERDICT", lit).padding(Padding::horizontal(1)),
+        ),
+        area,
+    );
+}
+
+/// Watch face only. Engine correlator is not this module.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SessionFace {
+    Pass,
+    PassAnomaly,
+    FailUnconfirmed,
+    Inconclusive,
+    Open,
+}
+
+fn session_face(st: &AppState) -> SessionFace {
+    let line_fail = st.line_ok == Some(false);
+    let poll_fail = st.memop_pages.iter().any(|(_, ok)| !*ok);
+    let ep_fail = st.ep_fail == Some(true);
+    let ep_pass = st.ep_fail == Some(false);
+    if ep_fail || poll_fail {
+        SessionFace::FailUnconfirmed
+    } else if ep_pass && line_fail {
+        SessionFace::PassAnomaly
+    } else if ep_pass {
+        SessionFace::Pass
+    } else if line_fail {
+        SessionFace::Inconclusive
+    } else {
+        SessionFace::Open
+    }
+}
+
+fn face_lamp(face: SessionFace) -> (&'static str, Style) {
+    match face {
+        SessionFace::FailUnconfirmed => (
+            " FAIL UNCONFIRMED ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        SessionFace::Inconclusive => (
+            " INCONCLUSIVE ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        SessionFace::PassAnomaly => (
+            " PASS WITH ANOMALY ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        SessionFace::Pass => (
+            " PASS ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+        SessionFace::Open => (" OPEN ", Style::default().fg(Color::Gray)),
+    }
+}
+
+fn rst_name(st: &AppState) -> &'static str {
+    match st.line_bit.unwrap_or(0) {
+        2 => "RST",
+        3 => "MOSI",
+        5 => "SCK",
+        _ => "LINE",
+    }
+}
+
+fn clip(s: &str, w: u16) -> String {
+    let n = w as usize;
+    if n == 0 {
+        return String::new();
+    }
+    let mut out = String::new();
+    for (i, ch) in s.chars().enumerate() {
+        if i >= n {
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn kv_line(key: &'static str, val: String, val_style: Style, inner_w: u16) -> Line<'static> {
+    let kv = Style::default().fg(Color::DarkGray);
+    Line::from(vec![
+        Span::styled(format!("{key:<10}"), kv),
+        Span::styled(clip(&val, inner_w.saturating_sub(10)), val_style),
+    ])
+}
+
+fn verdict_lines(st: &AppState, inner_w: u16, inner_h: u16) -> Vec<Line<'static>> {
+    let face = session_face(st);
+    let (word, lamp) = face_lamp(face);
+    let kv = Style::default().fg(Color::DarkGray);
+    let ok = Style::default().fg(Color::Green);
+    let ng = Style::default().fg(Color::Red);
+    let note = Style::default().fg(Color::Yellow);
+    let white = Style::default().fg(Color::White);
+
+    let echo = st.ep_rx.map(|b| b.contains(&0x53)).unwrap_or(false);
+    let pages_ok = st.memop_pages.iter().filter(|(_, ok)| *ok).count();
+    let proto = match (st.ep_fail, echo, pages_ok) {
+        (Some(false), true, n) if n > 0 => format!("✓ ENABLEPROG 0x53  ✓ FLASH {n} pages"),
+        (Some(false), true, _) => "✓ ENABLEPROG 0x53  FLASH —".into(),
+        (Some(false), false, n) if n > 0 => format!("✓ ENABLEPROG PASS  ✓ FLASH {n} pages"),
+        (Some(true), _, _) => "ENABLEPROG FAIL  (primary)".into(),
+        _ => "—".into(),
+    };
+    let pin = st.line_pin.unwrap_or(0);
+    let phys = if st.line_ok == Some(false) {
+        format!(
+            "! {} echo  PINx={pin:#04x}  conf=LOW  capture=no",
+            rst_name(st)
+        )
+    } else if st.line_ok == Some(true) {
+        format!("✓ {} echo follows PORT", rst_name(st))
+    } else {
+        "—".into()
+    };
+    let cause = match face {
+        SessionFace::PassAnomaly => {
+            format!(
+                "{} anomaly → programming failure   NOT ESTABLISHED",
+                rst_name(st)
+            )
+        }
+        SessionFace::FailUnconfirmed if st.ep_fail == Some(true) && st.line_ok == Some(false) => {
+            format!("{} path plausible  physical {} NOT PROVEN", rst_name(st), rst_name(st))
+        }
+        SessionFace::Inconclusive => {
+            "GPIO PINB ≠ connector  PHYSICAL_CAPTURE unavailable".into()
+        }
+        SessionFace::FailUnconfirmed => {
+            "protocol path failed  pin edges NOT PROVEN".into()
+        }
+        SessionFace::Pass => "physical cause  NOT PROVEN".into(),
+        SessionFace::Open => "—".into(),
+    };
+
+    let mut lines = vec![Line::from(vec![
+        Span::styled("SESSION   ", kv),
+        Span::styled(word, lamp),
+    ])];
+    if inner_h >= 2 {
+        let proto_style = if st.ep_fail == Some(true) { ng } else if st.ep_fail == Some(false) { ok } else { kv };
+        lines.push(kv_line("Protocol", proto, proto_style, inner_w));
+    }
+    if inner_h >= 3 {
+        let phys_style = if st.line_ok == Some(false) { ng } else { kv };
+        lines.push(kv_line("Physical", phys, phys_style, inner_w));
+    }
+    if inner_h >= 4 {
+        lines.push(kv_line("Causality", cause, note, inner_w));
+    }
+    if inner_h >= 5 && st.line_ok == Some(false) {
+        let drive = if st.line_drive_high == Some(true) {
+            "HIGH"
+        } else {
+            "LOW"
+        };
+        lines.push(kv_line(
+            "  expected",
+            format!("{drive} on {}  (MCU PINB, not ISP jack)", rst_name(st)),
+            white,
+            inner_w,
+        ));
+    }
+    if inner_h >= 6 {
+        lines.push(kv_line(
+            "  source",
+            "USBASP_INTERNAL  PHYSICAL_CAPTURE unavailable".into(),
+            kv,
+            inner_w,
+        ));
+    }
+    lines
+}
+
 fn draw_banner(f: &mut Frame, area: Rect, ui: &Ui) {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64;
-    let (tone, line) = diagnosis_at(&ui.state, Some(now));
+    let face = session_face(&ui.state);
+    let (tone, line) = match face {
+        SessionFace::PassAnomaly => (
+            DiagTone::Warn,
+            format!(
+                "{} GPIO echo ANOMALY  PINx={:#04x}  not a connector fact — session is PASS WITH ANOMALY",
+                rst_name(&ui.state),
+                ui.state.line_pin.unwrap_or(0)
+            ),
+        ),
+        SessionFace::Inconclusive => (
+            DiagTone::Warn,
+            format!(
+                "{} GPIO echo ANOMALY  PINx={:#04x}  PHYSICAL_CAPTURE no — not session FAIL",
+                rst_name(&ui.state),
+                ui.state.line_pin.unwrap_or(0)
+            ),
+        ),
+        _ => diagnosis_at(&ui.state, Some(now)),
+    };
     let (fg, bg, lit) = match tone {
         DiagTone::Bad => (Color::White, Color::Red, true),
         DiagTone::Ok => (Color::Black, Color::Green, true),
@@ -435,10 +761,13 @@ fn draw_banner(f: &mut Frame, area: Rect, ui: &Ui) {
     } else {
         Style::default().fg(fg)
     };
-    f.render_widget(
-        Paragraph::new(Span::styled(format!(" {line} "), style)),
-        area,
-    );
+    let text = format!("  {line}  ");
+    let para = if lit {
+        Paragraph::new(Span::styled(text, style)).style(Style::default().bg(bg))
+    } else {
+        Paragraph::new(Span::styled(text, style))
+    };
+    f.render_widget(para, area);
 }
 
 fn draw_phases(f: &mut Frame, area: Rect, ui: &Ui) {
@@ -471,6 +800,13 @@ fn dim_block(title: &str, lit: bool) -> Block<'_> {
         .title_style(style)
 }
 
+fn log_block(title: String) -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .padding(Padding::horizontal(1))
+}
+
 fn draw_instruments_with_optional_flash(
     f: &mut Frame,
     area: Rect,
@@ -478,9 +814,10 @@ fn draw_instruments_with_optional_flash(
     flash_below: bool,
 ) {
     let bus = if flash_below && area.height >= 10 {
+        let flash_h = if area.height >= 11 { 4 } else { 3 };
         let split = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(7), Constraint::Length(3)])
+            .constraints([Constraint::Min(7), Constraint::Length(flash_h)])
             .split(area);
         draw_flash_map(f, split[1], ui);
         split[0]
@@ -515,8 +852,8 @@ fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
         || (ui.state.saw_session && !ui.state.saw_session_end)
         || ui.state.trace_write_index.is_some();
     let trace_title = match ui.state.trace_slots {
-        Some(n) => format!("TRACE {n}"),
-        None => "TRACE".into(),
+        Some(n) => format!("TRACE LOG {n}"),
+        None => "TRACE LOG".into(),
     };
     f.render_widget(
         Paragraph::new(trace_lines(&ui.state)).block(dim_block(&trace_title, trace_lit)),
@@ -525,7 +862,7 @@ fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
 }
 
 fn draw_flash_map(f: &mut Frame, area: Rect, ui: &Ui) {
-    let inner_w = area.width.saturating_sub(2);
+    let inner_w = area.width.saturating_sub(4);
     let inner_h = area.height.saturating_sub(2);
     let lit = ui.state.memop_kind.is_some() || !ui.state.memop_pages.is_empty();
     let flash_title = match ui.state.memop_kind {
@@ -536,7 +873,7 @@ fn draw_flash_map(f: &mut Frame, area: Rect, ui: &Ui) {
     };
     f.render_widget(
         Paragraph::new(flash_lines(&ui.state, inner_w, inner_h, blink_now()))
-            .block(dim_block(flash_title, lit)),
+            .block(dim_block(flash_title, lit).padding(Padding::horizontal(1))),
         area,
     );
 }
@@ -551,6 +888,50 @@ fn blink_now() -> bool {
         == 0
 }
 
+/// RUN heartbeat: lamp blinks so a live watch is visibly not frozen.
+fn heartbeat() -> bool {
+    (SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        / 600)
+        % 2
+        == 0
+}
+
+fn draw_clear_confirm(f: &mut Frame) {
+    let area = f.area();
+    let w = 44u16.min(area.width.saturating_sub(2));
+    let h = 5u16.min(area.height.saturating_sub(2));
+    let x = area.x + (area.width.saturating_sub(w)) / 2;
+    let y = area.y + (area.height.saturating_sub(h)) / 2;
+    let pop = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
+    f.render_widget(Clear, pop);
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(Span::styled(
+                " CLEAR session? ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                " y yes     n / Esc cancel ",
+                Style::default().fg(Color::White),
+            )),
+        ])
+        .block(dim_block("CONFIRM", true)),
+        pop,
+    );
+}
+
 fn recent_ns(event: Option<u64>, now: Option<u64>, window_ns: u64) -> bool {
     match (event, now) {
         (Some(t), Some(n)) => n.saturating_sub(t) <= window_ns,
@@ -559,7 +940,7 @@ fn recent_ns(event: Option<u64>, now: Option<u64>, window_ns: u64) -> bool {
     }
 }
 
-/// Semantic bus LED — EP2 has frames, not an SCK/MOSI/MISO oscillogram.
+/// Semantic lamp for EP2 frames (ENABLEPROG TX/RX, MEMOP). Not SCK edges.
 fn vled(on: bool, hot: bool, silent: bool, blink: bool) -> Span<'static> {
     if !on && !silent {
         return Span::styled(" · ", Style::default().fg(Color::DarkGray));
@@ -577,17 +958,6 @@ fn vled(on: bool, hot: bool, silent: bool, blink: bool) -> Span<'static> {
         Style::default().fg(Color::Black).bg(Color::Green)
     };
     Span::styled(" * ", style)
-}
-
-fn pin_after_disc(st: &AppState, bit: u8) -> Option<(&'static str, Style)> {
-    // bit: 2 RST, 3 MOSI, 4 MISO, 5 SCK
-    let ddr = st.pins_ddr?;
-    let driving = ddr & (1 << bit) != 0;
-    Some(if driving {
-        ("DRIVE", Style::default().fg(Color::White).bg(Color::Red))
-    } else {
-        ("Hi-Z", Style::default().fg(Color::Black).bg(Color::Green))
-    })
 }
 
 fn pin_pair(name: &'static str, val: String, style: Style) -> (Span<'static>, Span<'static>) {
@@ -613,12 +983,12 @@ fn isp_pin_lines(st: &AppState, blink: bool) -> Vec<Line<'static>> {
     } else {
         ("—".into(), Style::default().fg(Color::DarkGray))
     };
-    let mosi = if st.mosi_ns.is_some() {
+    let mosi: (String, Style) = if st.mosi_ns.is_some() {
         ("TX".into(), Style::default().fg(Color::White))
     } else {
         ("—".into(), Style::default().fg(Color::DarkGray))
     };
-    let miso = if st.miso_silent {
+    let miso: (String, Style) = if st.miso_silent {
         ("SILENT".into(), Style::default().fg(Color::Red))
     } else if st.miso_ns.is_some() {
         ("RX".into(), Style::default().fg(Color::White))
@@ -651,24 +1021,16 @@ fn isp_pin_lines(st: &AppState, blink: bool) -> Vec<Line<'static>> {
     let (sck_n, sck_v) = pin_pair("SCK", sck.0, sck.1);
     let mosi_txt = Span::styled(format!("{:<6}", mosi.0), mosi.1);
     let miso_txt = Span::styled(format!("{:<6}", miso.0), miso.1);
-    let disc = match (st.pins_ok, st.pins_ddr, st.pins_pin) {
-        (Some(true), ddr, pin) => Span::styled(
-            format!(
-                "Hi-Z  d={:02X} p={:02X}",
-                ddr.unwrap_or(0),
-                pin.unwrap_or(0)
-            ),
+    let disc = match st.pins_ok {
+        Some(true) => Span::styled(
+            "Hi-Z",
             Style::default().fg(Color::Black).bg(Color::Green),
         ),
-        (Some(false), ddr, pin) => Span::styled(
-            format!(
-                "DRIVE d={:02X} p={:02X}",
-                ddr.unwrap_or(0),
-                pin.unwrap_or(0)
-            ),
+        Some(false) => Span::styled(
+            "DRIVE",
             Style::default().fg(Color::White).bg(Color::Red),
         ),
-        (None, _, _) => Span::styled("—", Style::default().fg(Color::DarkGray)),
+        None => Span::styled("—", Style::default().fg(Color::DarkGray)),
     };
     vec![
         Line::from(vec![rst_n, Span::raw(" "), mosi_n]),
@@ -925,19 +1287,30 @@ fn trace_lines(st: &AppState) -> Vec<Line<'static>> {
         ]),
         Line::from(vec![Span::styled("OV   ", kv), ov]),
         Line::from(Span::styled(
-            format!("KIND {kind}  POST {}", st.trace_post.unwrap_or(0)),
+            format!("KIND {kind}  POST {}  LOG", st.trace_post.unwrap_or(0)),
             kv,
         )),
     ]
 }
 
 fn draw_caps(f: &mut Frame, area: Rect, ui: &Ui) {
-    let text = match &ui.state.caps {
+    let mut text = match &ui.state.caps {
         Some(adv) => adv.format_report(&crate::version::banner_short()),
         None => "CAPS: wait CONNECT (not USB plug-in)".into(),
     };
+    if let (Some(ddr), Some(pin)) = (ui.state.pins_ddr, ui.state.pins_pin) {
+        let hz = match ui.state.pins_ok {
+            Some(true) => "Hi-Z",
+            Some(false) => "DRIVE",
+            None => "?",
+        };
+        text.push_str(&format!(
+            "\n\nISP_PINS  {hz}  DDR=0x{ddr:02X}  PIN=0x{pin:02X}\n"
+        ));
+    }
     f.render_widget(
-        Paragraph::new(text).block(dim_block("CAPS", ui.state.caps.is_some())),
+        Paragraph::new(text)
+            .block(dim_block("CAPS", ui.state.caps.is_some()).padding(Padding::horizontal(1))),
         area,
     );
 }
@@ -956,8 +1329,10 @@ fn draw_timeline(f: &mut Frame, area: Rect, ui: &Ui) {
         }
     }
 
+    let gutter = "│";
     let header = if dual {
-        Row::new(["Δt", "PROGRAMMER", "TARGET"]).style(Style::default().add_modifier(Modifier::BOLD))
+        Row::new(["Δt", "PROGRAMMER", gutter, "TARGET"])
+            .style(Style::default().add_modifier(Modifier::BOLD))
     } else {
         Row::new(["Δt", "EVENT"]).style(Style::default().add_modifier(Modifier::BOLD))
     };
@@ -985,6 +1360,10 @@ fn draw_timeline(f: &mut Frame, area: Rect, ui: &Ui) {
                 Row::new(vec![
                     Cell::from(dt),
                     Cell::from(r.prog.clone()),
+                    Cell::from(Span::styled(
+                        gutter,
+                        Style::default().fg(Color::DarkGray),
+                    )),
                     Cell::from(r.target.clone()),
                 ])
                 .style(style)
@@ -997,20 +1376,22 @@ fn draw_timeline(f: &mut Frame, area: Rect, ui: &Ui) {
     let widths = if dual {
         vec![
             Constraint::Length(9),
-            Constraint::Percentage(48),
-            Constraint::Percentage(48),
+            Constraint::Percentage(46),
+            Constraint::Length(1),
+            Constraint::Percentage(46),
         ]
     } else {
         vec![Constraint::Length(9), Constraint::Min(20)]
     };
     let title = if dual {
-        format!(" P | T   n={n}   ORDER RELEASE↔READY ")
+        format!(" P  |  T    n={n}    ORDER RELEASE↔READY ")
     } else {
         format!(" LOG   n={n} ")
     };
     let table = Table::new(table_rows, widths)
         .header(header)
-        .block(Block::default().borders(Borders::ALL).title(title))
+        .column_spacing(2)
+        .block(log_block(title))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
         .highlight_symbol("> ");
     f.render_stateful_widget(table, area, &mut state);
@@ -1018,13 +1399,78 @@ fn draw_timeline(f: &mut Frame, area: Rect, ui: &Ui) {
 
 #[cfg(test)]
 mod tests {
-    use super::HEADLESS_WATCH_HINT;
+    use super::{isp_pin_lines, session_face, verdict_lines, SessionFace, HEADLESS_WATCH_HINT};
+    use crate::state::AppState;
+
+    fn line_text(line: &ratatui::text::Line) -> String {
+        line.spans.iter().map(|s| s.content.as_ref()).collect()
+    }
 
     #[test]
     fn headless_hint_points_at_jsonl() {
         assert!(HEADLESS_WATCH_HINT.contains("demo --jsonl"));
         assert!(HEADLESS_WATCH_HINT.contains("decode FILE --jsonl"));
         assert!(HEADLESS_WATCH_HINT.contains("interactive terminal"));
+    }
+
+    #[test]
+    fn snap_omits_ddr_pin_hex() {
+        let mut st = AppState::default();
+        st.pins_ok = Some(true);
+        st.pins_ddr = Some(0x12);
+        st.pins_pin = Some(0x34);
+        let text = line_text(isp_pin_lines(&st, false).last().unwrap());
+        assert!(text.contains("Hi-Z"), "{text}");
+        assert!(!text.contains("d="), "{text}");
+        assert!(!text.contains("p="), "{text}");
+    }
+
+    #[test]
+    fn verdict_idle_is_open_not_fail() {
+        let st = AppState::default();
+        let lines = verdict_lines(&st, 80, 4);
+        let all = lines.iter().map(line_text).collect::<Vec<_>>().join("\n");
+        assert!(all.contains("OPEN"), "{all}");
+        assert!(!all.contains(" FAIL "), "{all}");
+    }
+
+    #[test]
+    fn line_fault_with_enableprog_pass_is_anomaly_not_session_fail() {
+        let mut st = AppState::default();
+        st.line_ok = Some(false);
+        st.line_bit = Some(2);
+        st.line_drive_high = Some(true);
+        st.line_pin = Some(0x14);
+        st.ep_fail = Some(false);
+        st.ep_rx = Some([0xff, 0xff, 0x53, 0x00]);
+        st.memop_pages = vec![(0, true), (0x200, true), (0x400, true)];
+        assert_eq!(session_face(&st), SessionFace::PassAnomaly);
+        let all = verdict_lines(&st, 96, 4)
+            .iter()
+            .map(line_text)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(all.contains("PASS WITH ANOMALY"), "{all}");
+        assert!(all.contains("ENABLEPROG"), "{all}");
+        assert!(all.contains("RST"), "{all}");
+        assert!(all.contains("NOT ESTABLISHED"), "{all}");
+        assert!(!all.contains(" FAIL "), "{all}");
+    }
+
+    #[test]
+    fn line_fault_without_enableprog_is_inconclusive() {
+        let mut st = AppState::default();
+        st.line_ok = Some(false);
+        st.line_bit = Some(2);
+        st.line_pin = Some(0x14);
+        assert_eq!(session_face(&st), SessionFace::Inconclusive);
+        let all = verdict_lines(&st, 80, 4)
+            .iter()
+            .map(line_text)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(all.contains("INCONCLUSIVE"), "{all}");
+        assert!(!all.contains(" FAIL "), "{all}");
     }
 }
 

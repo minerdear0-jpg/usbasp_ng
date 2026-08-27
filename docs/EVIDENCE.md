@@ -38,9 +38,12 @@ Black box = last forensic record after FROZEN, 1–4 slots, CRC + COMMIT byte, s
 
 ## Analysis (host, not firmware)
 
-Decoder is dumb: frames → Evidence. **IspSessionAnalyzer** is the first plugin (`analyze.rs` trait). Verdict engine correlates findings; it does not live in the 328P.
+Decoder is dumb: frames → Evidence. Analyzers (`isp`, `reset`, `sck`, `session`) emit Findings with domain, scope, confidence, and causal relevance. The correlator produces a session Verdict. It does not live in the 328P.
+
+A LINE_FAULT observation is not a session FAIL. Golden: `diagplane analyze --demo pass_with_rst_anomaly` → `PASS_WITH_ANOMALY`. LINE-only → `INCONCLUSIVE`. ENABLEPROG FAIL without physical capture → `FAIL_UNCONFIRMED`.
 
 ```bash
+diagplane analyze --demo pass_with_rst_anomaly
 diagplane analyze --demo enableprog_fail_sw
 diagplane analyze --file capture.bin --out session.usbasp2e
 ```

@@ -1,0 +1,26 @@
+From: deep@mail.local
+To: deep@mail.local
+Date: 2026-08-27 12:35 +0600
+Type: ACK
+Subject: [ACK] host verdict: observation ≠ finding ≠ cause; firmware untouched
+Re: operator architecture (LINE vs ENABLEPROG)
+
+TL;DR
+  diagplane 0.1.7: ISP+RESET analyzers + correlator. Golden pass_with_rst_anomaly
+  → PASS_WITH_ANOMALY. LINE-only → INCONCLUSIVE. Firmware not flashed.
+
+FACT
+  - analysis/{finding,causality,verdict,correlate} + analyzers/{isp,reset,sck,session}
+  - LINE.RST_ECHO status=ANOMALY confidence=LOW causal=UNKNOWN (PINx = MCU pad)
+  - ENABLEPROG PASS + MEMOP OK outrank LINE; later events can refute an early red
+  - demo pass_with_rst_anomaly (LINE pin=0x14 then 0x53 then pages)
+  - TUI: red finding ≠ red session; LINE-only = INCONCLUSIVE not FAIL
+  - cargo test: 43 ok
+
+DONT
+  - не трогать firmware / не FX2 / не SCK-Hz analyzer
+  - не CAUSE=RST из PINx=0x14
+
+NEXT
+  - клетка: analyze live/file после IF2; смотреть VERDICT PASS_WITH_ANOMALY
+  - FAIL_CONFIRMED только когда появится independent physical capture

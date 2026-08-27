@@ -71,6 +71,8 @@ pub struct Execution {
     pub trace_events: Option<u16>,
     pub trace_overflow: bool,
     pub frames: usize,
+    pub memop_ok: Option<bool>,
+    pub memop_pages: Option<u8>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -170,6 +172,8 @@ pub fn from_state(source: &str, state: &AppState, complete: bool) -> EvidenceRec
             trace_events: state.trace_valid,
             trace_overflow: state.trace_overflow,
             frames: state.events.len(),
+            memop_ok: state.last_flash_ok.or(state.memop_end_ok),
+            memop_pages: state.last_flash_pages.or(state.memop_end_pages),
         },
         claims: claims(state),
         result: result_block(state, tone, &diagnosis),
@@ -212,7 +216,7 @@ fn claims(state: &AppState) -> Vec<Claim> {
             ),
             verdict: if ok { "PASS" } else { "FAIL" },
             evidence: "protocol",
-            confidence: "high",
+            confidence: if ok { "medium" } else { "low" },
         });
     }
     if let Some(fail) = state.ep_fail {
@@ -270,21 +274,22 @@ fn claims(state: &AppState) -> Vec<Claim> {
 }
 
 fn result_block(state: &AppState, tone: DiagTone, diagnosis: &str) -> ResultBlock {
-    let observation = if state.line_ok == Some(false) {
-        "LINE_FAULT PINx did not follow PORT".into()
-    } else if state.ep_fail == Some(true) {
+    let observation = if state.ep_fail == Some(true) {
         "ENABLEPROG FAIL".into()
     } else if state.memop_pages.iter().any(|(_, ok)| !*ok) {
         "MEMOP page poll FAIL".into()
     } else if state.ep_fail == Some(false) {
         "ENABLEPROG PASS".into()
+    } else if state.line_ok == Some(false) {
+        "RST GPIO echo anomaly (no ENABLEPROG yet)".into()
     } else {
         "no ENABLEPROG result".into()
     };
-    let (interpretation, cannot_prove) = if state.line_ok == Some(false) {
+    let (interpretation, cannot_prove) = if state.ep_fail == Some(false) && state.line_ok == Some(false)
+    {
         (
-            "programmer pad did not match the level just written".into(),
-            "open vs short vs another driver — not FX2 / not which cm of ribbon".into(),
+            "programming confirmed; RST PINx echo is an anomaly, not a session FAIL".into(),
+            "physical RST — PINx is the MCU pad, PHYSICAL_CAPTURE=NO".into(),
         )
     } else if state.ladder_all_silent() {
         (
@@ -470,8 +475,19 @@ mod tests {
         let ev = from_state("demo:line_fault_rst", &st, true);
         let lf = ev.claims.iter().find(|c| c.name == "LINE_FAULT").unwrap();
         assert_eq!(lf.verdict, "FAIL");
+        assert_eq!(lf.confidence, "low");
         assert!(!ev.integrity.physical_capture);
-        assert!(ev.result.observation.contains("LINE_FAULT"));
+        assert!(ev.result.observation.contains("echo anomaly"));
+    }
+
+    #[test]
+    fn pass_with_rst_anomaly_is_warn_not_bad() {
+        let cap = demo::build_scenario("pass_with_rst_anomaly").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        let ev = from_state("demo:pass_with_rst_anomaly", &st, true);
+        assert_eq!(ev.result.tone, "warn");
+        assert!(ev.result.interpretation.contains("anomaly"));
     }
 
     #[test]

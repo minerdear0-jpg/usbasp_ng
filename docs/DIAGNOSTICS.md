@@ -203,7 +203,7 @@ Emitted on **CONNECT** from `ispConnect` after ISP pins are outputs. Not a sniff
 | `DRIVE_LOW \| FAIL` | bit | same |
 | `OK` | drive mask | same |
 
-Host: `LINE OPEN — RST did not follow drive HIGH`. Still cannot name open vs short vs another driver, and cannot replace FX2.
+Host: GPIO echo mismatch is an **anomaly** (MCU `PINx`, not the ISP jack). Session verdict is **not** automatically FAIL if ENABLEPROG/MEMOP later succeed (`PASS_WITH_ANOMALY`). Still cannot name open vs short vs another driver, and cannot replace FX2.
 
 ### `DIAG_FAULT_SNAPSHOT` fields (P0)
 

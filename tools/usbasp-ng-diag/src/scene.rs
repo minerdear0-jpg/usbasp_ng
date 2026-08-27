@@ -46,29 +46,26 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
     diagnosis_at(state, None)
 }
 
+fn line_echo_name(state: &AppState) -> &'static str {
+    match state.line_bit.unwrap_or(0) {
+        2 => "RST",
+        3 => "MOSI",
+        5 => "SCK",
+        _ => "PIN",
+    }
+}
+
+fn line_anomaly_note(state: &AppState) -> String {
+    format!(
+        "{} GPIO echo ANOMALY pin={:#04x} (MCU PINx, not connector)",
+        line_echo_name(state),
+        state.line_pin.unwrap_or(0)
+    )
+}
+
 /// `now_ns` = host wall clock (live watch). Demos omit it (no stall).
 pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String) {
-    if state.line_ok == Some(false) {
-        let bit = state.line_bit.unwrap_or(0);
-        let name = match bit {
-            2 => "RST",
-            3 => "MOSI",
-            5 => "SCK",
-            _ => "PIN",
-        };
-        let drive = if state.line_drive_high == Some(true) {
-            "HIGH"
-        } else {
-            "LOW"
-        };
-        return (
-            DiagTone::Bad,
-            format!(
-                "LINE OPEN — {name} (PB{bit}) did not follow drive {drive}  pin={:#04x}",
-                state.line_pin.unwrap_or(0)
-            ),
-        );
-    }
+    // Protocol outcomes outrank LINE_FAULT. PINx echo is not a connector fact.
     if state.ep_fail == Some(true) {
         let n = state.ep_attempts.len();
         let rx = state.ep_rx.unwrap_or([0xff; 4]);
@@ -144,6 +141,15 @@ pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String)
                 format!("VERIFY OK — waiting DISCONNECT{pins}"),
             );
         }
+        if state.line_ok == Some(false) {
+            return (
+                DiagTone::Warn,
+                format!(
+                    "PASS WITH ANOMALY — FLASH WRITE {w} pages  VERIFY {r} OK{pins}  {}",
+                    line_anomaly_note(state)
+                ),
+            );
+        }
         return (
             DiagTone::Ok,
             format!("FLASH WRITE {w} pages  VERIFY {r} OK{pins}"),
@@ -156,6 +162,15 @@ pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String)
             return (
                 DiagTone::Warn,
                 format!("{mem} {n} pages — waiting SESSION_END"),
+            );
+        }
+        if state.line_ok == Some(false) {
+            return (
+                DiagTone::Warn,
+                format!(
+                    "PASS WITH ANOMALY — {mem} {n} pages OK  {}",
+                    line_anomaly_note(state)
+                ),
             );
         }
         return (DiagTone::Ok, format!("{mem} {n} pages OK"));
@@ -182,7 +197,25 @@ pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String)
                 "IN SESSION — ENABLEPROG PASS, avrdude still in ISP".into(),
             );
         }
+        if state.line_ok == Some(false) {
+            return (
+                DiagTone::Warn,
+                format!(
+                    "PASS WITH ANOMALY — ENABLEPROG PASS  {}",
+                    line_anomaly_note(state)
+                ),
+            );
+        }
         return (DiagTone::Ok, "ENABLEPROG PASS".into());
+    }
+    if state.line_ok == Some(false) {
+        return (
+            DiagTone::Warn,
+            format!(
+                "{} — no ENABLEPROG yet; not session FAIL  PHYSICAL_CAPTURE=NO",
+                line_anomaly_note(state)
+            ),
+        );
     }
     if state.saw_session {
         return (DiagTone::Info, "—".into());
@@ -437,8 +470,21 @@ mod tests {
         let mut st = AppState::default();
         st.ingest_capture(&cap);
         let (tone, line) = diagnosis(&st);
-        assert_eq!(tone, DiagTone::Bad);
-        assert!(line.contains("LINE OPEN"), "{line}");
+        assert_eq!(tone, DiagTone::Warn);
+        assert!(line.contains("GPIO echo ANOMALY"), "{line}");
+        assert!(line.contains("RST"), "{line}");
+        assert!(!line.contains("LINE OPEN"), "{line}");
+    }
+
+    #[test]
+    fn rst_anomaly_with_flash_is_pass_with_anomaly() {
+        let cap = demo::build_scenario("pass_with_rst_anomaly").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        let (tone, line) = diagnosis(&st);
+        assert_eq!(tone, DiagTone::Warn);
+        assert!(line.contains("PASS WITH ANOMALY"), "{line}");
+        assert!(line.contains("FLASH WRITE"), "{line}");
         assert!(line.contains("RST"), "{line}");
     }
 
