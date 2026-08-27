@@ -370,6 +370,8 @@ static void emit_ready(void)
     uart_put_hex16(CANARY_LEN);
     PS(",sram_free=");
     uart_put_u16(sram_free());
+    PS(",tcnt1=");
+    uart_put_hex16(TCNT1);
     line_end();
 }
 
@@ -580,7 +582,7 @@ static void emit_counters(void)
 static void emit_help(void)
 {
     LB("HELP");
-    PS(",cmds=help,info,selftest,flash-crc,canary,eeprom-test,sram-test,reset-cause,counters,isp-pins,arm,clear,wdt-test,fault");
+    PS(",cmds=help,info,selftest,flash-crc,canary,eeprom-test,sram-test,reset-cause,counters,isp-pins,arm,clear,wdt-test,fault,time");
     line_end();
 }
 
@@ -768,7 +770,12 @@ static void handle_cmd(char *s)
         cmd_clear();
     else if (!strcmp(s, "wdt-test"))
         cmd_wdt_test();
-    else {
+    else if (!strcmp(s, "time")) {
+        LB("TIME");
+        PS(",tcnt1=");
+        uart_put_hex16(TCNT1);
+        line_end();
+    } else {
         LB("ERROR");
         PS(",unknown=");
         uart_puts(s);

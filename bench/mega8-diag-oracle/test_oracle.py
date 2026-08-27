@@ -47,6 +47,8 @@ def test_parse_lines() -> None:
     r = parse_uart_line("@00000012 READY,who=canary,mcu=m8,f_cpu=16000000,sig_expect=1E9307")
     assert r is not None
     assert r.t_ms == 12
+    stamped = parse_uart_line("1700000000000000000 @00000012 READY,who=canary,tcnt1=00AB")
+    assert stamped is not None and stamped.event == "READY" and stamped.kv.get("tcnt1") == "00AB"
     assert r.event == "READY"
     assert r.kv["who"] == "canary"
     assert r.kv["mcu"] == "m8"

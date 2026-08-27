@@ -1,6 +1,6 @@
 //! Ratatui watch UI: diagnosis + phases + instruments + dual-column timeline.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState};
 use ratatui::Frame;
 use ratatui::Terminal;
-use std::io::{self, Stdout};
+use std::io::{self, IsTerminal, Stdout};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -61,7 +61,7 @@ impl Ui {
             wire: false,
             table_state,
             follow: true,
-            status: "q quit  w wire  f faults  c caps  j/k  g/G  Space follow".into(),
+            status: String::new(),
             uart_path,
             timeline: Vec::new(),
         };
@@ -139,6 +139,7 @@ impl Ui {
 }
 
 pub fn run(source: WatchSource, uart: Option<PathBuf>) -> Result<()> {
+    require_interactive_tty()?;
     let (label, state, live) = match source {
         WatchSource::File(path) => {
             let cap = CaptureFile::load(&path)?;
@@ -183,6 +184,17 @@ pub fn run(source: WatchSource, uart: Option<PathBuf>) -> Result<()> {
     result
 }
 
+pub(crate) const HEADLESS_WATCH_HINT: &str = "\
+watch requires an interactive terminal (pty)
+for headless use:  demo --jsonl  |  decode FILE --jsonl  |  snapshot";
+
+pub(crate) fn require_interactive_tty() -> Result<()> {
+    if io::stdin().is_terminal() && io::stdout().is_terminal() {
+        return Ok(());
+    }
+    bail!("{}", HEADLESS_WATCH_HINT);
+}
+
 fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     ui: &mut Ui,
@@ -211,7 +223,7 @@ fn run_loop(
                 }
                 Ok(_) | Err(rusb::Error::Timeout) => {}
                 Err(e) => {
-                    ui.status = format!("USB error: {e} (q to quit)");
+                    ui.status = format!("USB {e}");
                 }
             }
         } else if ui.uart_path.is_some() {
@@ -265,9 +277,20 @@ fn run_loop(
 fn draw(f: &mut Frame, ui: &Ui) {
     let w = f.area().width;
     let h = f.area().height;
-    // Mockup: instruments stay visible on 80×24, not only 100×24.
-    // Bus faceplate stays put. FLASH rails on the right on 16:9 (~110+ cols).
-    let inst_h = if h >= 22 && w >= 80 { 7 } else { 0 };
+    let wide = w >= 110;
+    // 80×24: FLASH under the bus (never drop the memory rail).
+    // 16:9 (~110+): FLASH on the right, bus faceplate fixed.
+    let inst_h = if h >= 24 && w >= 80 {
+        if wide {
+            7
+        } else {
+            10
+        }
+    } else if h >= 22 && w >= 80 {
+        7
+    } else {
+        0
+    };
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -285,51 +308,91 @@ fn draw(f: &mut Frame, ui: &Ui) {
     draw_banner(f, chunks[1], ui);
     draw_phases(f, chunks[2], ui);
     if inst_h > 0 {
-        draw_instruments(f, chunks[3], ui);
+        draw_instruments(f, chunks[3], ui, wide && inst_h < 10);
     }
     if ui.show_caps {
         draw_caps(f, chunks[4], ui);
     } else {
         draw_timeline(f, chunks[4], ui);
     }
-    let help = Paragraph::new(ui.status.as_str()).style(Style::default().fg(Color::DarkGray));
-    f.render_widget(help, chunks[5]);
+    draw_footer(f, chunks[5], ui);
+}
+
+fn sep() -> Span<'static> {
+    Span::styled(" │ ", Style::default().fg(Color::DarkGray))
+}
+
+/// 80s dash key: bezel always; lamp only when pressed. Missing control → omit.
+fn dash_key(label: &str, lamp: Option<(Color, Color)>) -> Vec<Span<'static>> {
+    let bezel = Style::default().fg(Color::DarkGray);
+    let face = match lamp {
+        None => Style::default().fg(Color::DarkGray),
+        Some((fg, bg)) => Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
+    };
+    vec![
+        Span::styled("[", bezel),
+        Span::styled(format!(" {label} "), face),
+        Span::styled("]", bezel),
+    ]
+}
+
+fn lamp_ok() -> (Color, Color) {
+    (Color::Black, Color::Green)
+}
+fn lamp_ng() -> (Color, Color) {
+    (Color::White, Color::Red)
+}
+fn lamp_run() -> (Color, Color) {
+    (Color::Black, Color::Yellow)
 }
 
 fn draw_header(f: &mut Frame, area: Rect, ui: &Ui) {
     let sck = match (ui.state.sck_id, ui.state.sck_sw) {
-        (Some(id), Some(true)) => format!("SW SCK id={id}"),
-        (Some(id), _) => format!("HW SCK id={id}"),
+        (Some(id), Some(true)) => format!("SCK SW {id}"),
+        (Some(id), _) => format!("SCK HW {id}"),
         _ => "SCK —".into(),
     };
     let mut spans = vec![
         Span::styled(
-            format!(" {} ", crate::version::banner_short()),
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
+            crate::version::banner_short(),
+            Style::default().fg(Color::White),
         ),
-        Span::raw(format!("  {}  {sck}", ui.source_label)),
+        sep(),
+        Span::raw(ui.source_label.clone()),
+        sep(),
+        Span::styled(sck, Style::default().fg(Color::DarkGray)),
+        sep(),
     ];
+    spans.extend(dash_key("RUN", ui.follow.then(lamp_run)));
+    spans.push(Span::raw(" "));
+    spans.extend(dash_key("HOLD", (!ui.follow).then(lamp_run)));
     if ui.uart_path.is_some() {
-        spans.push(Span::styled(
-            "  DUAL",
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-        ));
+        spans.push(Span::raw(" "));
+        spans.extend(dash_key("DUAL", Some(lamp_run())));
     }
-    if ui.follow {
-        spans.push(Span::styled("  follow", Style::default().fg(Color::DarkGray)));
-    } else {
-        spans.push(Span::styled("  paused", Style::default().fg(Color::Yellow)));
-    }
-    if ui.wire {
-        spans.push(Span::styled("  WIRE", Style::default().fg(Color::Magenta)));
-    }
-    if ui.faults_only {
-        spans.push(Span::styled("  FAULTS", Style::default().fg(Color::Red)));
-    }
+    spans.push(Span::raw(" "));
+    spans.extend(dash_key("WIRE", ui.wire.then(|| (Color::Black, Color::White))));
+    spans.push(Span::raw(" "));
+    spans.extend(dash_key("FAULT", ui.faults_only.then(lamp_ng)));
+    spans.push(Span::raw(" "));
+    spans.extend(dash_key("CAPS", ui.show_caps.then(lamp_run)));
     f.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+fn draw_footer(f: &mut Frame, area: Rect, ui: &Ui) {
+    let n = ui.rows().len();
+    let usb = if ui.status.starts_with("USB ") {
+        format!("  {}", ui.status)
+    } else {
+        String::new()
+    };
+    let line = format!("n={n}{usb}    q  w wire  f fault  c caps  j/k  g/G  Space HOLD");
+    let style = if ui.status.starts_with("USB ") {
+        Style::default().fg(Color::Red)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+    f.render_widget(Paragraph::new(line).style(style), area);
 }
 
 fn draw_banner(f: &mut Frame, area: Rect, ui: &Ui) {
@@ -357,42 +420,42 @@ fn draw_phases(f: &mut Frame, area: Rect, ui: &Ui) {
         if i > 0 {
             spans.push(Span::raw(" "));
         }
-        let (sym, fg, bg) = match mark {
-            PhaseMark::Ok => ("✓", Color::Black, Color::Green),
-            PhaseMark::Fail => ("×", Color::White, Color::Red),
-            PhaseMark::Active => ("▶", Color::Black, Color::Yellow),
-            PhaseMark::Idle => (" ", Color::DarkGray, Color::Reset),
+        let lamp = match mark {
+            PhaseMark::Idle => None,
+            PhaseMark::Ok => Some(lamp_ok()),
+            PhaseMark::Fail => Some(lamp_ng()),
+            PhaseMark::Active => Some(lamp_run()),
         };
-        spans.push(Span::styled(
-            format!(" {name} {sym} "),
-            match mark {
-                PhaseMark::Idle => Style::default().fg(Color::DarkGray),
-                _ => Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
-            },
-        ));
+        spans.extend(dash_key(name, lamp));
     }
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn dim_block(title: &str, lit: bool) -> Block<'_> {
     let style = if lit {
-        Style::default()
+        Style::default().fg(Color::White)
     } else {
         Style::default().fg(Color::DarkGray)
     };
     Block::default()
         .borders(Borders::ALL)
-        .title(title.to_string())
+        .title(format!(" {title} "))
         .border_style(style)
         .title_style(style)
 }
 
-fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
-    // Chassis is always there on 16:9. FLASH never pops in and shoves the bus.
-    let bus = if area.width >= 110 {
+fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui, flash_right: bool) {
+    let rest = if flash_right {
         let split = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Min(72), Constraint::Length(32)])
+            .split(area);
+        draw_flash_map(f, split[1], ui);
+        split[0]
+    } else if area.height >= 10 {
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(7), Constraint::Length(3)])
             .split(area);
         draw_flash_map(f, split[1], ui);
         split[0]
@@ -407,7 +470,7 @@ fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
             Constraint::Min(32),
             Constraint::Length(28),
         ])
-        .split(bus);
+        .split(rest);
 
     let isp_lit = ui.state.saw_reset || ui.state.pins_ddr.is_some() || ui.state.sck_id.is_some();
     f.render_widget(
@@ -419,7 +482,10 @@ fn draw_instruments(f: &mut Frame, area: Rect, ui: &Ui) {
         Paragraph::new(enableprog_lines(&ui.state)).block(dim_block("ENABLEPROG", ep_lit)),
         cols[1],
     );
-    let trace_lit = ui.state.trace_triggered || ui.state.trace_overflow;
+    let trace_lit = ui.state.trace_triggered
+        || ui.state.trace_overflow
+        || (ui.state.saw_session && !ui.state.saw_session_end)
+        || ui.state.trace_write_index.is_some();
     let trace_title = match ui.state.trace_slots {
         Some(n) => format!("TRACE {n}"),
         None => "TRACE".into(),
@@ -468,32 +534,30 @@ fn isp_pin_lines(st: &AppState) -> Vec<Line<'static>> {
             Style::default().fg(Color::Black).bg(Color::Yellow),
         )
     } else if st.saw_release {
-        ("RELEASE".into(), Style::default().fg(Color::Cyan))
+        ("RELEASE".into(), Style::default().fg(Color::White))
     } else {
         ("—".into(), Style::default().fg(Color::DarkGray))
     };
     let mosi = if let Some(v) = pin_after_disc(st, 3) {
         (v.0.to_string(), v.1)
     } else if in_prog {
-        ("out".into(), Style::default().fg(Color::Cyan))
+        ("OUT".into(), Style::default().fg(Color::White))
     } else {
         ("—".into(), Style::default().fg(Color::DarkGray))
     };
     let miso = if let Some(v) = pin_after_disc(st, 4) {
         (v.0.to_string(), v.1)
     } else if in_prog {
-        ("float".into(), Style::default().fg(Color::DarkGray))
+        ("IN".into(), Style::default().fg(Color::DarkGray))
     } else {
         ("—".into(), Style::default().fg(Color::DarkGray))
     };
     let sck = match (st.sck_id, st.sck_sw) {
-        (Some(id), Some(true)) => {
-            (
-                format!("SW {id}"),
-                Style::default().fg(Color::Black).bg(Color::Yellow),
-            )
-        }
-        (Some(id), _) => (format!("HW {id}"), Style::default().fg(Color::Cyan)),
+        (Some(id), Some(true)) => (
+            format!("SW {id}"),
+            Style::default().fg(Color::Black).bg(Color::Yellow),
+        ),
+        (Some(id), _) => (format!("HW {id}"), Style::default().fg(Color::White)),
         _ => ("—".into(), Style::default().fg(Color::DarkGray)),
     };
     let (rst_n, rst_v) = pin_pair("RST", rst.0, rst.1);
@@ -532,16 +596,12 @@ fn hex_cell(b: u8, accent: bool, fail: bool) -> Span<'static> {
     } else if accent {
         Style::default()
             .fg(Color::Black)
-            .bg(Color::Cyan)
+            .bg(Color::White)
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::White).bg(Color::DarkGray)
     };
     Span::styled(format!(" {b:02X} "), style)
-}
-
-fn empty_cell() -> Span<'static> {
-    Span::styled(" ·· ", Style::default().fg(Color::DarkGray))
 }
 
 fn enableprog_lines(st: &AppState) -> Vec<Line<'static>> {
@@ -569,68 +629,40 @@ fn enableprog_lines(st: &AppState) -> Vec<Line<'static>> {
                 Span::styled(" PASS ", Style::default().fg(Color::Black).bg(Color::Green))
             };
             let echo = if echo_ok {
-                Span::raw("  echo 53 ok")
+                Span::styled("  ECHO 53", Style::default().fg(Color::Black).bg(Color::Green))
             } else {
                 Span::styled(
-                    "  echo 53 missing",
-                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                    "  ECHO 53 MISS",
+                    Style::default()
+                        .fg(Color::White)
+                        .bg(Color::Red)
+                        .add_modifier(Modifier::BOLD),
                 )
             };
             let delay = st
                 .snap_delay
                 .or(st.err_delay)
-                .map(|d| format!("  delay={d}"))
+                .map(|d| format!("  t={d}"))
                 .unwrap_or_default();
             vec![
                 Line::from(tx_spans),
                 Line::from(rx_spans),
                 Line::from(vec![res, echo, Span::raw(delay)]),
-                Line::from(Span::styled(
-                    "expect 53 in RX  (programming enable echo)",
-                    Style::default().fg(Color::DarkGray),
-                )),
             ]
         }
         _ => vec![
-            Line::from(vec![
-                Span::styled("TX  ", Style::default().fg(Color::DarkGray)),
-                empty_cell(),
-                Span::raw(" "),
-                empty_cell(),
-                Span::raw(" "),
-                empty_cell(),
-                Span::raw(" "),
-                empty_cell(),
-            ]),
-            Line::from(vec![
-                Span::styled("RX  ", Style::default().fg(Color::DarkGray)),
-                empty_cell(),
-                Span::raw(" "),
-                empty_cell(),
-                Span::raw(" "),
-                empty_cell(),
-                Span::raw(" "),
-                empty_cell(),
-            ]),
+            Line::from(Span::styled("TX  —", Style::default().fg(Color::DarkGray))),
+            Line::from(Span::styled("RX  —", Style::default().fg(Color::DarkGray))),
         ],
     }
 }
 
 fn flash_lines(st: &AppState, inner_w: u16) -> Vec<Line<'static>> {
     if st.memop_kind.is_none() && st.memop_pages.is_empty() {
-        return vec![
-            Line::from(Span::styled("—", Style::default().fg(Color::DarkGray))),
-            Line::from(vec![
-                empty_cell(),
-                Span::raw(" "),
-                empty_cell(),
-            ]),
-            Line::from(vec![
-                empty_cell(),
-                Span::raw(" "),
-                empty_cell(),
-            ]),
-        ];
+        return vec![Line::from(Span::styled(
+            "—",
+            Style::default().fg(Color::DarkGray),
+        ))];
     }
     let psz = st.memop_pagesize.unwrap_or(0) as u16;
     let lo = st.memop_pages.first().map(|(a, _)| *a);
@@ -652,7 +684,7 @@ fn flash_lines(st: &AppState, inner_w: u16) -> Vec<Line<'static>> {
     ))];
     if st.memop_pages.is_empty() {
         lines.push(Line::from(Span::styled(
-            "no CONT yet (END is authority)",
+            "CONT —  END is authority",
             Style::default().fg(Color::DarkGray),
         )));
         return lines;
@@ -688,64 +720,65 @@ fn flash_lines(st: &AppState, inner_w: u16) -> Vec<Line<'static>> {
 }
 
 fn trace_lines(st: &AppState) -> Vec<Line<'static>> {
-    let slots = st.trace_slots.unwrap_or(0);
     let life = if st.trace_triggered {
         "FROZEN"
     } else if st.saw_session && !st.saw_session_end {
         "ARMED"
+    } else if st.trace_write_index.is_some() {
+        "END"
     } else {
         "IDLE"
     };
-    let n = 16u16;
-    let (fill, mark_t) = if st.trace_triggered {
-        (9u16, true)
-    } else {
-        (0, false)
+    let life_style = match life {
+        "FROZEN" => Style::default()
+            .fg(Color::Black)
+            .bg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+        "ARMED" => Style::default().fg(Color::Black).bg(Color::Yellow),
+        "END" => Style::default().fg(Color::White),
+        _ => Style::default().fg(Color::DarkGray),
     };
-    let mut bar = String::new();
-    for i in 0..n {
-        if mark_t && i == fill {
-            bar.push('T');
-        } else if i < fill {
-            bar.push('█');
-        } else {
-            bar.push('·');
-        }
-    }
-    let bar_style = if st.trace_triggered {
-        Style::default().fg(Color::Cyan)
-    } else {
-        Style::default().fg(Color::DarkGray)
+    let kv = Style::default().fg(Color::DarkGray);
+    let slots = st.trace_slots.map(|n| n as u16);
+    let occ = match (st.trace_write_index, slots, st.trace_valid) {
+        (Some(w), Some(s), Some(v)) => format!("{w}/{s}  V={v}"),
+        (Some(w), Some(s), None) => format!("{w}/{s}"),
+        (Some(w), None, _) => format!("{w}/—"),
+        _ => "—".into(),
     };
-    let ov = if st.trace_overflow { "YES" } else { "no" };
+    let ov = if st.trace_overflow {
+        Span::styled(
+            "YES",
+            Style::default()
+                .fg(Color::White)
+                .bg(Color::Red)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else if st.trace_write_index.is_some() || st.saw_session {
+        Span::styled("no", Style::default().fg(Color::White))
+    } else {
+        Span::styled("—", kv)
+    };
     let kind = match st.trace_kind {
         Some(3) => "ENABLEPROG_FAIL",
         Some(4) => "TRACE_OVERFLOW",
-        Some(0) | None => "NONE",
+        Some(0) => "NONE",
         Some(_) => "?",
-    };
-    let life_style = if st.trace_triggered {
-        Style::default().fg(Color::Black).bg(Color::Yellow)
-    } else {
-        Style::default().fg(Color::DarkGray)
+        None => "—",
     };
     vec![
         Line::from(vec![
-            Span::raw("["),
-            Span::styled(bar, bar_style),
-            Span::raw("]  "),
+            Span::styled("ST   ", kv),
             Span::styled(format!(" {life} "), life_style),
         ]),
+        Line::from(vec![
+            Span::styled("OCC  ", kv),
+            Span::styled(occ, Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![Span::styled("OV   ", kv), ov]),
         Line::from(Span::styled(
-            if st.trace_triggered || st.trace_overflow || st.saw_session {
-                format!(
-                    "slots={slots}  overflow={ov}  kind={kind}  post={}",
-                    st.trace_post.unwrap_or(0)
-                )
-            } else {
-                "—".into()
-            },
-            Style::default().fg(Color::DarkGray),
+            format!("KIND {kind}  POST {}", st.trace_post.unwrap_or(0)),
+            kv,
         )),
     ]
 }
@@ -753,10 +786,10 @@ fn trace_lines(st: &AppState) -> Vec<Line<'static>> {
 fn draw_caps(f: &mut Frame, area: Rect, ui: &Ui) {
     let text = match &ui.state.caps {
         Some(adv) => adv.format_report(&crate::version::banner_short()),
-        None => "Capabilities: (waiting for DIAG_CAPS — ISP CONNECT, not USB plug-in)".into(),
+        None => "CAPS: wait CONNECT (not USB plug-in)".into(),
     };
     f.render_widget(
-        Paragraph::new(text).block(Block::default().borders(Borders::ALL).title("capabilities")),
+        Paragraph::new(text).block(dim_block("CAPS", ui.state.caps.is_some())),
         area,
     );
 }
@@ -795,7 +828,7 @@ fn draw_timeline(f: &mut Frame, area: Rect, ui: &Ui) {
                 match r.level {
                     Level::Error => Style::default().fg(Color::Red),
                     Level::Warn => Style::default().fg(Color::Yellow),
-                    Level::Info => Style::default().fg(Color::Cyan),
+                    Level::Info => Style::default(),
                     Level::Debug => Style::default().fg(Color::DarkGray),
                 }
             };
@@ -823,14 +856,27 @@ fn draw_timeline(f: &mut Frame, area: Rect, ui: &Ui) {
         vec![Constraint::Length(9), Constraint::Min(20)]
     };
     let title = if dual {
-        format!("timeline dual ({n})  yellow = RELEASE↔READY")
+        format!(" P | T   n={n}   ORDER RELEASE↔READY ")
     } else {
-        format!("timeline ({n})")
+        format!(" LOG   n={n} ")
     };
     let table = Table::new(table_rows, widths)
         .header(header)
         .block(Block::default().borders(Borders::ALL).title(title))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
-        .highlight_symbol("▶ ");
+        .highlight_symbol("> ");
     f.render_stateful_widget(table, area, &mut state);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::HEADLESS_WATCH_HINT;
+
+    #[test]
+    fn headless_hint_points_at_jsonl() {
+        assert!(HEADLESS_WATCH_HINT.contains("demo --jsonl"));
+        assert!(HEADLESS_WATCH_HINT.contains("decode FILE --jsonl"));
+        assert!(HEADLESS_WATCH_HINT.contains("interactive terminal"));
+    }
+}
+

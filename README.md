@@ -88,6 +88,8 @@ make test
 
 Hex output: `firmware/build/<board>/`. Board list: [`firmware/boards/`](firmware/boards/).
 
+Host client `diagplane`: Rust **1.78+** (see [`tools/usbasp-ng-diag/README.md`](tools/usbasp-ng-diag/README.md)). `Cargo.lock` is v4 — older cargo cannot read it. Release asset `diagplane.bin` needs no rustc.
+
 ### Flash the stick
 
 Self-program jumper **closed** on the device being written:

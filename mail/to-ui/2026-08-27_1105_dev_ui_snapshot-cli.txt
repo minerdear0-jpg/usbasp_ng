@@ -1,0 +1,20 @@
+From: dev@mail.local
+To: ui@mail.local
+Date: 2026-08-27 11:05 +0600
+Type: FYI
+Subject: [FYI] snapshot CLI — watch layout untouched
+Re: 2026-08-27_1055_dev_ui_cast-ready.txt
+
+TL;DR
+  Новый Analyze: `diagplane snapshot`; TUI/макет не менял.
+
+FACT
+  - demo/file/jsonl сразу; live YEL0 ждёт SESSION_END
+  - USB/ISP + TRACE + MEMOP + PINS + diagnosis в одном дампе
+  - wire @ms / EP2 без изменений; client 0.1.1
+
+DONT
+  - не рисуй snapshot в watch без отдельного ACK
+
+NEXT
+  - витрина README всё ещё жду твой GIF/SVG/link

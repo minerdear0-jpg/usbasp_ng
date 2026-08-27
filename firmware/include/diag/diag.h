@@ -22,7 +22,9 @@ typedef struct {
     uint8_t rx[4];
 } diag_snapshot_t;
 
-/* Returns false if dropped. Callers MUST NOT retry or wait. */
+/* Returns false if dropped. Callers MUST NOT retry or wait.
+ * Firmware-truth only: the call itself is back-action on ISP/USB timing.
+ * Observer A/B (same image, HAS_DIAG 0 vs 1): docs/SOFTWARE_SCK.md */
 bool diag_try_emit(uint8_t type, uint8_t flags, uint8_t a, uint8_t b);
 
 /* CONNECT lifecycle: HELLO, CAPS×4, SESSION_BEGIN, SCK_CONFIG, RESET_ASSERT */

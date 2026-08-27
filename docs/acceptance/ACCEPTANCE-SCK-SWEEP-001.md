@@ -21,7 +21,12 @@ Earlier isolation (classic mega8 programmer → mega8 clone target):
 Conclusion:
   Software SCK works with USBasp2 (ATmega328P programmer) against
   ATmega8 mounted on a Nano PCB. Gate closed — no further firmware
-  speculation or mandatory FX2 capture for release.
+  speculation or mandatory FX2 capture for **USBasp2** release.
+
+Classic mega8 programmer remains a shipping daily image; SW ENABLEPROG
+FAIL on mega8↔mega8 clone is a known limitation of that pair, not an
+open USBasp2 blocker. Do not treat compact mega8 HIDUART TRACE as a
+replay of the classic failure (different USB image; HIDUART mega8 frozen).
 ```
 
 ## Closing evidence (2026-08-26)

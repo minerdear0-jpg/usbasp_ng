@@ -101,5 +101,6 @@ python3 bench/mega8-diag-oracle/harness.py run --diag-jsonl /tmp/yel0.jsonl
 Default trigger `ENABLEPROG_FAIL` is **not** produced by this firmware. Unplug
 MISO / starve SCK / power — then watch POST→FROZEN on YEL0.
 
-UART console: `help`, `selftest`, `flash-crc`, `canary`, `arm`, `wdt-test`, …
-Prefix `>` optional.
+UART console: `help`, `selftest`, `flash-crc`, `canary`, `arm`, `wdt-test`, `time`, …
+Prefix `>` optional. `time` / READY include `tcnt1` (Timer1). `harness.py monitor`
+prefixes `host_ns` so correlate can print dt ± doubt.

@@ -1,7 +1,15 @@
 //! Dual-truth timeline: PROGRAMMER (EP2) ↔ TARGET (oracle UART).
 //!
-//! Sync (no FX2 yet): host_ns(RESET RELEASE) ≈ target READY/APP_START @ t_ms=0+.
-//! Map target `@TTTTTTTT` → host_ns ≈ release_host_ns + (t_ms - t0_ms) * 1e6.
+//! Two time bases:
+//! - **event_order** — UART log has no host receive stamps. READY is glued to
+//!   RESET RELEASE. Order only; no ±doubt.
+//! - **host_observer** — UART lines prefixed with host_ns (NTP/Cristian wire
+//!   is the host). READY sits at its receive time. `dt_ready_host_ns` is the
+//!   measured RELEASE→READY interval on that common clock; `doubt_ns` is
+//!   |dt|/2 (RFC 5905-style half round-trip of the observation).
+//!
+//! Target `tcnt1` on READY is the canary's Timer1 (sub-ms); it does not by
+//! itself sync to the programmer crystal — the host stamps do.
 
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
@@ -41,6 +49,25 @@ pub(crate) struct UartRow {
     t_ms: u32,
     kind: String,
     raw: String,
+    host_ns: Option<u64>,
+    tcnt1: Option<u16>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimeBasis {
+    EventOrder,
+    HostObserver,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ClockSync {
+    pub time_basis: TimeBasis,
+    /// host_ns(READY) − host_ns(RELEASE) when both known (host observer).
+    pub dt_ready_host_ns: Option<i64>,
+    /// Cristian bound |dt|/2; None if event_order (unbounded).
+    pub doubt_ns: Option<u64>,
+    pub tcnt1_ready: Option<u16>,
 }
 
 fn parse_fw_t(msg: &str) -> Option<u16> {
@@ -103,13 +130,17 @@ pub(crate) fn parse_uart_log(text: &str) -> Result<Vec<UartRow>> {
     let mut out = Vec::new();
     for line in text.lines() {
         let line = line.trim();
-        if !line.starts_with('@') || line.len() < 10 {
+        if line.is_empty() {
             continue;
         }
-        let t_ms: u32 = line[1..9]
+        let (host_ns, at) = split_uart_host_prefix(line);
+        if !at.starts_with('@') || at.len() < 10 {
+            continue;
+        }
+        let t_ms: u32 = at[1..9]
             .parse()
             .with_context(|| format!("bad @ms in {line}"))?;
-        let rest = line[9..].trim_start_matches(',').trim();
+        let rest = at[9..].trim_start_matches(',').trim();
         let kind = rest
             .split(',')
             .next()
@@ -122,10 +153,36 @@ pub(crate) fn parse_uart_log(text: &str) -> Result<Vec<UartRow>> {
         out.push(UartRow {
             t_ms,
             kind,
-            raw: line.to_string(),
+            raw: at.to_string(),
+            host_ns,
+            tcnt1: parse_kv_hex16(at, "tcnt1"),
         });
     }
     Ok(out)
+}
+
+fn split_uart_host_prefix(line: &str) -> (Option<u64>, &str) {
+    let Some((a, b)) = line.split_once(char::is_whitespace) else {
+        return (None, line);
+    };
+    if !b.starts_with('@') {
+        return (None, line);
+    }
+    match a.parse::<u64>() {
+        Ok(ns) => (Some(ns), b),
+        Err(_) => (None, line),
+    }
+}
+
+fn parse_kv_hex16(line: &str, key: &str) -> Option<u16> {
+    let pat = format!("{key}=");
+    let idx = line.find(&pat)?;
+    let rest = &line[idx + pat.len()..];
+    let tok: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_hexdigit())
+        .collect();
+    u16::from_str_radix(&tok, 16).ok()
 }
 
 fn find_release_host_ns(prog: &[ProgRow]) -> Option<u64> {
@@ -135,16 +192,58 @@ fn find_release_host_ns(prog: &[ProgRow]) -> Option<u64> {
         .map(|r| r.host_ns)
 }
 
-fn find_target_t0_ms(uart: &[UartRow]) -> Option<u32> {
+fn find_target_t0(uart: &[UartRow]) -> Option<&UartRow> {
     uart.iter()
         .find(|r| r.kind == "READY" || r.kind == "APP_START")
-        .map(|r| r.t_ms)
+}
+
+fn push_target(
+    events: &mut Vec<TimelineEvent>,
+    uart: Vec<UartRow>,
+    origin_ns: Option<u64>,
+    t0_ms: Option<u32>,
+) {
+    if let (Some(origin), Some(t0)) = (origin_ns, t0_ms) {
+        for u in uart {
+            let dt_ms = u.t_ms as i64 - t0 as i64;
+            let host_ns = if dt_ms >= 0 {
+                Some(origin.saturating_add((dt_ms as u64).saturating_mul(1_000_000)))
+            } else {
+                Some(origin.saturating_sub(((-dt_ms) as u64).saturating_mul(1_000_000)))
+            };
+            events.push(TimelineEvent {
+                source: Source::Target,
+                host_ns,
+                t_fw: None,
+                t_ms: Some(u.t_ms),
+                kind: u.kind,
+                msg: u.raw,
+            });
+        }
+    } else {
+        for u in uart {
+            events.push(TimelineEvent {
+                source: Source::Target,
+                host_ns: u.host_ns,
+                t_fw: None,
+                t_ms: Some(u.t_ms),
+                kind: u.kind,
+                msg: u.raw,
+            });
+        }
+    }
 }
 
 /// Merge programmer EP2 JSONL + oracle UART log into one host_ns timeline.
-pub(crate) fn merge_timeline(prog: Vec<ProgRow>, uart: Vec<UartRow>) -> Result<Vec<TimelineEvent>> {
+pub(crate) fn merge_timeline(
+    prog: Vec<ProgRow>,
+    uart: Vec<UartRow>,
+) -> Result<(Vec<TimelineEvent>, ClockSync)> {
     let release_ns = find_release_host_ns(&prog);
-    let t0_ms = find_target_t0_ms(&uart);
+    let t0 = find_target_t0(&uart);
+    let t0_ms = t0.map(|r| r.t_ms);
+    let ready_host = t0.and_then(|r| r.host_ns);
+    let tcnt1_ready = t0.and_then(|r| r.tcnt1);
 
     let mut events: Vec<TimelineEvent> = prog
         .into_iter()
@@ -158,36 +257,25 @@ pub(crate) fn merge_timeline(prog: Vec<ProgRow>, uart: Vec<UartRow>) -> Result<V
         })
         .collect();
 
-    if let (Some(rel), Some(t0)) = (release_ns, t0_ms) {
-        for u in uart {
-            let dt_ms = u.t_ms as i64 - t0 as i64;
-            let host_ns = if dt_ms >= 0 {
-                Some(rel.saturating_add((dt_ms as u64).saturating_mul(1_000_000)))
-            } else {
-                Some(rel.saturating_sub(((-dt_ms) as u64).saturating_mul(1_000_000)))
-            };
-            events.push(TimelineEvent {
-                source: Source::Target,
-                host_ns,
-                t_fw: None,
-                t_ms: Some(u.t_ms),
-                kind: u.kind,
-                msg: u.raw,
-            });
+    let sync = if let (Some(rel), Some(rdy)) = (release_ns, ready_host) {
+        let dt = rdy as i64 - rel as i64;
+        let doubt = dt.unsigned_abs() / 2;
+        push_target(&mut events, uart, Some(rdy), t0_ms);
+        ClockSync {
+            time_basis: TimeBasis::HostObserver,
+            dt_ready_host_ns: Some(dt),
+            doubt_ns: Some(doubt),
+            tcnt1_ready,
         }
     } else {
-        // No sync — still emit target rows without host_ns.
-        for u in uart {
-            events.push(TimelineEvent {
-                source: Source::Target,
-                host_ns: None,
-                t_fw: None,
-                t_ms: Some(u.t_ms),
-                kind: u.kind,
-                msg: u.raw,
-            });
+        push_target(&mut events, uart, release_ns, t0_ms);
+        ClockSync {
+            time_basis: TimeBasis::EventOrder,
+            dt_ready_host_ns: None,
+            doubt_ns: None,
+            tcnt1_ready,
         }
-    }
+    };
 
     events.sort_by(|a, b| match (a.host_ns, b.host_ns) {
         (Some(x), Some(y)) => x.cmp(&y).then_with(|| a.kind.cmp(&b.kind)),
@@ -195,10 +283,10 @@ pub(crate) fn merge_timeline(prog: Vec<ProgRow>, uart: Vec<UartRow>) -> Result<V
         (None, Some(_)) => std::cmp::Ordering::Greater,
         (None, None) => a.t_ms.cmp(&b.t_ms),
     });
-    Ok(events)
+    Ok((events, sync))
 }
 
-pub fn correlate_files(diag_jsonl: &Path, uart_log: &Path) -> Result<Vec<TimelineEvent>> {
+pub fn correlate_files(diag_jsonl: &Path, uart_log: &Path) -> Result<(Vec<TimelineEvent>, ClockSync)> {
     let diag = fs::read_to_string(diag_jsonl)
         .with_context(|| format!("read {}", diag_jsonl.display()))?;
     let uart =
@@ -211,7 +299,6 @@ pub fn correlate_files(diag_jsonl: &Path, uart_log: &Path) -> Result<Vec<Timelin
     merge_timeline(prog, uart)
 }
 
-/// Merge already-decoded programmer events with a UART log (TUI; CLI dump unchanged).
 pub fn merge_programmer_and_uart(
     prog: Vec<(u64, String, String)>,
     uart_text: &str,
@@ -226,12 +313,27 @@ pub fn merge_programmer_and_uart(
         })
         .collect();
     let uart = parse_uart_log(uart_text)?;
-    merge_timeline(prog, uart)
+    Ok(merge_timeline(prog, uart)?.0)
 }
 
-pub fn emit_human(events: &[TimelineEvent]) {
-    println!("# dual-truth timeline  source=PROGRAMMER|TARGET");
-    println!("# sync: RESET RELEASE host_ns ↔ READY/APP_START target ms");
+pub fn emit_human(events: &[TimelineEvent], sync: &ClockSync) {
+    match sync.time_basis {
+        TimeBasis::EventOrder => {
+            println!("# time_basis=event_order  (no host stamps on UART; READY glued to RELEASE)");
+            println!("# doubt_ns=unbounded  — not an absolute delay");
+        }
+        TimeBasis::HostObserver => {
+            println!(
+                "# time_basis=host_observer  dt_ready_host_ns={}  doubt_ns={}  (Cristian |dt|/2)",
+                sync.dt_ready_host_ns.unwrap_or(0),
+                sync.doubt_ns.unwrap_or(0)
+            );
+            if let Some(t) = sync.tcnt1_ready {
+                println!("# tcnt1_ready={t:04x}");
+            }
+        }
+    }
+    println!("# dual-truth  source=PROGRAMMER|TARGET  sync=RELEASE↔READY");
     for e in events {
         let src = match e.source {
             Source::Programmer => "PROGRAMMER",
@@ -253,7 +355,18 @@ pub fn emit_human(events: &[TimelineEvent]) {
     }
 }
 
-pub fn emit_jsonl(events: &[TimelineEvent]) {
+pub fn emit_jsonl(events: &[TimelineEvent], sync: &ClockSync) {
+    println!(
+        "{}",
+        json!({
+            "kind": "meta",
+            "time_basis": sync.time_basis,
+            "dt_ready_host_ns": sync.dt_ready_host_ns,
+            "doubt_ns": sync.doubt_ns,
+            "tcnt1_ready": sync.tcnt1_ready,
+            "sync": "RESET_RELEASE_to_READY",
+        })
+    );
     for e in events {
         let row = json!({
             "source": e.source,
@@ -285,11 +398,35 @@ mod tests {
 "#;
         let prog = parse_diag_jsonl(diag).unwrap();
         let uart = parse_uart_log(uart).unwrap();
-        let ev = merge_timeline(prog, uart).unwrap();
+        let (ev, sync) = merge_timeline(prog, uart).unwrap();
+        assert_eq!(sync.time_basis, TimeBasis::EventOrder);
+        assert_eq!(sync.doubt_ns, None);
         let ready = ev.iter().find(|e| e.kind == "READY").unwrap();
         assert_eq!(ready.source, Source::Target);
         assert_eq!(ready.host_ns, Some(2_000_000_000));
         let crc = ev.iter().find(|e| e.kind == "FLASH_CRC").unwrap();
         assert_eq!(crc.host_ns, Some(2_000_000_000 + 391 * 1_000_000));
+    }
+
+    #[test]
+    fn host_stamps_give_cristian_doubt() {
+        let diag = r#"
+{"host_ns":2000000000,"kind":"frame","msg":"t=  200 RESET flags=0x02 RELEASE"}
+"#;
+        let uart = r#"
+2029000000 @00000000 READY,who=canary,tcnt1=0042
+2029000000 @00000029 APP_START
+"#;
+        let prog = parse_diag_jsonl(diag).unwrap();
+        let uart = parse_uart_log(uart).unwrap();
+        let (ev, sync) = merge_timeline(prog, uart).unwrap();
+        assert_eq!(sync.time_basis, TimeBasis::HostObserver);
+        assert_eq!(sync.dt_ready_host_ns, Some(29_000_000));
+        assert_eq!(sync.doubt_ns, Some(14_500_000));
+        assert_eq!(sync.tcnt1_ready, Some(0x42));
+        let ready = ev.iter().find(|e| e.kind == "READY").unwrap();
+        assert_eq!(ready.host_ns, Some(2_029_000_000));
+        let app = ev.iter().find(|e| e.kind == "APP_START").unwrap();
+        assert_eq!(app.host_ns, Some(2_029_000_000 + 29 * 1_000_000));
     }
 }

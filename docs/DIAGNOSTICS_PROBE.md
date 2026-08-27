@@ -8,7 +8,18 @@
 USBasp  →  USBasp NG  →  USBasp NG Development Probe
 ```
 
-Honest product: an **ISP development probe** with observability, measurement, and capture — while `avrdude -c usbasp` still sees ordinary USBasp (L1 unchanged).
+Honest product: an **ISP protocol observer** with timestamps and a flight recorder — while `avrdude -c usbasp` still sees ordinary USBasp (L1 unchanged).
+
+**Two measurement classes (do not collapse them):**
+
+| Question | Instrument |
+|----------|------------|
+| What does firmware *think* happened? | Diagplane (EP2 TRACE / FAULT_SNAPSHOT / correlate) |
+| What happened on the pins? | Scope / sniffer / FX2 |
+
+TRACE sees only values already sampled by the MCU. If the bug is the sample itself (edge, ringing, INT0 vs PORTB), the probe is both victim and witness. Use TRACE to **aim** a sniffer (when after RST-low the interesting byte lands), not to replace it.
+
+Correlate stitches two free-running crystals. It is **event order** (RELEASE before READY), not an absolute microsecond delay.
 
 ## Why 328P changes the class of device
 
@@ -205,12 +216,15 @@ source=PROGRAMMER | source=TARGET
 
 Never merge into one unlabeled stream.
 
-**Host (first slice):** `diagplane correlate --diag ep2.jsonl --uart oracle.txt`  
-aligns target `@ms` onto `host_ns` using **RESET RELEASE ↔ READY/APP_START** (Timer1 path). FX2/PulseView physical edges come later — same `T` in the event, third column.
+**Host:** `diagplane correlate --diag ep2.jsonl --uart oracle.txt`  
+- UART without host stamps → `time_basis=event_order` (READY glued to RELEASE; `doubt_ns=unbounded`).  
+- UART lines `HOST_NS @TTTTTTTT EVENT` (harness `monitor` stamps) → `time_basis=host_observer`: common host clock, `dt_ready_host_ns` ± `doubt_ns=|dt|/2` (Cristian). Target `tcnt1` on READY is extra, not a second sync by itself.
 
 ### 8. Snapshot-now
 
 Host command → one coherent dump: USB/ISP/SCK/RESET, last transaction, ring occupancy, drops, trigger/trace state. Better than a pile of GET opcodes.
+
+**Host (this slice):** `diagplane snapshot` from demo / capture / JSONL, or live EP2 until `SESSION_END`. Assembled from AppState — no extra GET on the wire.
 
 ### 9. Wire protocol evolution (v1 header)
 
@@ -249,4 +263,6 @@ So ENABLEPROG, FAULT_SNAPSHOT, TRACE, TARGET_UART, SCK_STATS can grow without ye
 2. **Do** grow features behind `USBASP_HAS_DIAG` + diag caps on **USBasp2** boards.  
 3. **Do** keep L1 USBasp sacred.  
 4. **Do** pass live YEL0 `capabilities` acceptance before TRACE code. *(done)*  
-5. Next: richer predicates / host-selectable arm only if needed — cycle ARM→trigger→post→freeze→replay is closed.
+5. Next: richer predicates / host-selectable arm only if needed — cycle ARM→trigger→post→freeze→replay is closed.  
+6. TRACE_END is a **sniffer aiming mark** (when after RST-low the interesting byte is), not a substitute for pin capture.  
+7. `correlate` without UART host stamps is event order. With stamps, print `dt ± doubt` (Cristian |dt|/2 on the host). Do not treat unstamped deltas as microseconds.

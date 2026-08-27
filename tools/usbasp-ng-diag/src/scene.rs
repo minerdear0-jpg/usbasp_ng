@@ -45,13 +45,13 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
         if rx.iter().all(|&b| b == 0xff) {
             return (
                 DiagTone::Bad,
-                "TARGET SILENT — ENABLEPROG FAIL, RX=FF, echo 53 missing".into(),
+                "TARGET SILENT — ENABLEPROG FAIL  RX=FF  ECHO 53 MISS".into(),
             );
         }
         return (
             DiagTone::Bad,
             format!(
-                "BUS NOISE — ENABLEPROG FAIL, RX {:02X} {:02X}.. expect echo 53",
+                "BUS NOISE — ENABLEPROG FAIL  RX {:02X} {:02X}  ECHO 53 MISS",
                 rx[0], rx[1]
             ),
         );
@@ -59,7 +59,7 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
     if state.pins_ok == Some(false) {
         return (
             DiagTone::Bad,
-            "PINS STILL DRIVING — Hi-Z not released (RST/MOSI/SCK DDR)".into(),
+            "PINS STILL DRIVING — DDR RST/MOSI/SCK".into(),
         );
     }
     if let Some(&(addr, false)) = state.memop_pages.iter().find(|(_, ok)| !*ok) {
@@ -74,23 +74,20 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
     if state.trace_overflow {
         return (
             DiagTone::Warn,
-            format!(
-                "TRACE LOSS — dropped={} history has holes",
-                state.stats.dropped
-            ),
+            format!("TRACE LOSS — dropped={}", state.stats.dropped),
         );
     }
     if state.last_flash_ok == Some(true) && state.last_verify_ok == Some(true) {
         let w = state.last_flash_pages.unwrap_or(0);
         let r = state.last_verify_pages.unwrap_or(0);
         let pins = match state.pins_ok {
-            Some(true) => " · pins Hi-Z",
-            Some(false) => " · PINS STILL DRIVING",
+            Some(true) => "  DISC=Hi-Z",
+            Some(false) => "  DISC=DRIVE",
             None => "",
         };
         return (
             DiagTone::Ok,
-            format!("FLASH WRITE {w} pages · VERIFY READFLASH {r} OK{pins}"),
+            format!("FLASH WRITE {w} pages  VERIFY {r} OK{pins}"),
         );
     }
     if state.memop_end_ok == Some(true) {
@@ -106,14 +103,14 @@ pub fn diagnosis(state: &AppState) -> (DiagTone, String) {
             .map(|(a, _)| *a)
             .unwrap_or(0);
         return (
-            DiagTone::Info,
-            format!("FLASH WRITE in progress @{addr:#06x}"),
+            DiagTone::Warn,
+            format!("FLASH WRITE @{addr:#06x}"),
         );
     }
     if state.ep_fail == Some(false) {
         return (
             DiagTone::Ok,
-            "ENABLEPROG PASS — programming mode entered".into(),
+            "ENABLEPROG PASS".into(),
         );
     }
     if state.saw_session {
@@ -403,7 +400,7 @@ mod tests {
 "#;
         let prog = parse_diag_jsonl(diag).unwrap();
         let uart = parse_uart_log(uart).unwrap();
-        let ev = merge_timeline(prog, uart).unwrap();
+        let (ev, _) = merge_timeline(prog, uart).unwrap();
         let rows = dual_rows(&ev, Some(1_000_000_000), false);
         let anchor = rows.iter().find(|r| r.is_anchor).expect("anchor row");
         assert!(anchor.prog.contains("RELEASE"), "{}", anchor.prog);

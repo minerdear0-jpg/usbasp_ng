@@ -145,6 +145,8 @@ uchar ispEnterProgrammingMode(void)
 
     while (sck >= USBASP_ISP_SCK_0_5) {
         ispSetSCKOption(sck);
+        /* Inside the ENABLEPROG RST loop. HAS_DIAG=0 compiles this to a nop.
+         * Same-image A/B (not classic vs HIDUART): docs/SOFTWARE_SCK.md */
         diag_emit_sck_config();
         uchar (*spiTx)(uchar) = isp_bus.transfer;
         board_led_isp_activity();

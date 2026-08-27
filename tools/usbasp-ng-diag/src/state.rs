@@ -51,6 +51,8 @@ pub struct AppState {
     pub trace_end_line: Option<String>,
     pub trace_kind: Option<u8>,
     pub trace_post: Option<u8>,
+    pub trace_valid: Option<u16>,
+    pub trace_write_index: Option<u16>,
     pub saw_connect: bool,
     pub saw_session: bool,
     pub saw_session_end: bool,
@@ -227,6 +229,14 @@ impl AppState {
                 self.trace_end_buf.push(f);
                 if self.trace_end_buf.len() == 4 {
                     if let Some(line) = reassemble_trace_end(&self.trace_end_buf) {
+                        self.trace_valid = Some(u16::from_le_bytes([
+                            self.trace_end_buf[0].a,
+                            self.trace_end_buf[0].b,
+                        ]));
+                        self.trace_write_index = Some(u16::from_le_bytes([
+                            self.trace_end_buf[1].a,
+                            self.trace_end_buf[1].b,
+                        ]));
                         if self.trace_end_buf[1].flags & 0x80 != 0 {
                             self.trace_overflow = true;
                         }

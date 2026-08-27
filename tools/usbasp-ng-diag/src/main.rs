@@ -14,6 +14,7 @@ mod demo;
 mod jsonl;
 mod protocol;
 mod scene;
+mod snapshot;
 mod state;
 mod tui;
 mod usb;
@@ -117,7 +118,7 @@ enum Cmd {
         /// Programmer JSONL (`decode FILE --jsonl`)
         #[arg(long, conflicts_with_all = ["file", "demo"])]
         diag: Option<PathBuf>,
-        /// Target UART log — dual-column (RESET RELEASE ↔ READY)
+        /// Target UART log — dual-column event order (RELEASE ↔ READY, not µs)
         #[arg(long)]
         uart: Option<PathBuf>,
     },
@@ -142,7 +143,27 @@ enum Cmd {
         #[arg(long, default_value = "30")]
         timeout: u64,
     },
-    /// Dual-truth timeline: EP2 JSONL ↔ oracle UART log (Timer1 path; no FX2 yet)
+    /// One coherent instrument dump (USB/ISP/TRACE/MEMOP) — Analyze, no extra wire
+    Snapshot {
+        /// Live USB iSerial (empty = first composite)
+        #[arg(long, default_value = "")]
+        serial: String,
+        /// Load a capture.bin
+        #[arg(long, conflicts_with_all = ["demo", "diag"])]
+        file: Option<PathBuf>,
+        /// Load a demo scenario
+        #[arg(long, conflicts_with_all = ["file", "diag"])]
+        demo: Option<String>,
+        /// Programmer JSONL (`decode FILE --jsonl`)
+        #[arg(long, conflicts_with_all = ["file", "demo"])]
+        diag: Option<PathBuf>,
+        /// Seconds to wait for SESSION_END on live EP2
+        #[arg(long, default_value = "30")]
+        timeout: u64,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Dual-truth event order: EP2 JSONL ↔ oracle UART (not absolute µs)
     Correlate {
         /// Programmer capture as JSONL (`decode FILE --jsonl`)
         #[arg(long)]
@@ -168,7 +189,14 @@ fn out_mode(json: bool, jsonl: bool, faults: bool) -> OutMode {
     }
 }
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(e) = try_main() {
+        eprintln!("{e:#}");
+        std::process::exit(1);
+    }
+}
+
+fn try_main() -> Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
         Cmd::Decode {
@@ -230,12 +258,27 @@ fn main() -> Result<()> {
             demo,
             timeout,
         } => cmd_capabilities(&serial, file.as_ref(), demo.as_deref(), timeout),
+        Cmd::Snapshot {
+            serial,
+            file,
+            demo,
+            diag,
+            timeout,
+            json,
+        } => cmd_snapshot(
+            &serial,
+            file.as_ref(),
+            demo.as_deref(),
+            diag.as_ref(),
+            timeout,
+            json,
+        ),
         Cmd::Correlate { diag, uart, jsonl } => {
-            let events = correlate::correlate_files(&diag, &uart)?;
+            let (events, sync) = correlate::correlate_files(&diag, &uart)?;
             if jsonl {
-                correlate::emit_jsonl(&events);
+                correlate::emit_jsonl(&events, &sync);
             } else {
-                correlate::emit_human(&events);
+                correlate::emit_human(&events, &sync);
             }
             Ok(())
         }
@@ -371,6 +414,72 @@ fn cmd_capabilities(
         println!("HELLO.flags=0x{flags:02x}  (legacy compact; prefer DIAG_CAPS)");
     }
     Ok(())
+}
+
+fn cmd_snapshot(
+    serial: &str,
+    file: Option<&PathBuf>,
+    demo_name: Option<&str>,
+    diag: Option<&PathBuf>,
+    timeout_s: u64,
+    json: bool,
+) -> Result<()> {
+    let mut st = AppState::default();
+    let source;
+    if let Some(path) = file {
+        let cap = CaptureFile::load(path)?;
+        st.ingest_capture(&cap);
+        source = format!("file:{}", path.display());
+    } else if let Some(name) = demo_name {
+        let cap = demo::build_scenario(name)?;
+        st.ingest_capture(&cap);
+        source = format!("demo:{name}");
+    } else if let Some(path) = diag {
+        let text = std::fs::read_to_string(path)
+            .with_context(|| format!("read {}", path.display()))?;
+        st.ingest_jsonl(&text)?;
+        source = format!("jsonl:{}", path.display());
+    } else {
+        let h = usb::open_composite(serial)?;
+        source = format!("live:{}", h.serial);
+        eprintln!("{}", version::banner_short());
+        eprintln!("device:    {}", h.serial);
+        eprintln!("waiting for SESSION_END (ISP) within {timeout_s}s…");
+        let deadline = SystemTime::now() + Duration::from_secs(timeout_s);
+        let mut buf = [0u8; 8];
+        while SystemTime::now() < deadline && !st.saw_session_end {
+            match h
+                .handle
+                .read_interrupt(EP2_IN, &mut buf, Duration::from_millis(200))
+            {
+                Ok(n) if n >= 6 => {
+                    if let Some(f) = DiagFrame::from_report(&buf[..n]) {
+                        if f.ty != 0 {
+                            let ns = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_nanos() as u64;
+                            st.push_frame(ns, f);
+                        }
+                    }
+                }
+                Ok(_) | Err(rusb::Error::Timeout) => {}
+                Err(e) => bail!("USB read: {e}"),
+            }
+        }
+        if st.events.is_empty() {
+            bail!("no EP2 frames (start avrdude while this waits, or use --demo)");
+        }
+    }
+
+    let complete = st.saw_session_end;
+    let snap = snapshot::from_state(&source, &st, complete);
+    if json {
+        snap.emit_json()
+    } else {
+        snap.emit_human();
+        Ok(())
+    }
 }
 
 fn cmd_demo(

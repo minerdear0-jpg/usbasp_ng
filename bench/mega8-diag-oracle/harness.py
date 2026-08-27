@@ -275,7 +275,7 @@ def cmd_monitor(port: str) -> int:
     try:
         while True:
             for raw in uart.read_lines(1.0):
-                print(raw, flush=True)
+                print(f"{time.time_ns()} {raw}", flush=True)
     except KeyboardInterrupt:
         print(file=sys.stderr)
         return 0

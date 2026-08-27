@@ -6,7 +6,7 @@ Architectural separation for HIDUART / research builds when `USBASP_HAS_DIAG=1`.
 
 **USBasp2 (ATmega328P):** same L1 USBasp; Diagnostics evolves toward an **ISP development probe** (observability + measurement + capture) — not AVR-ICE. Philosophy and roadmap: **[DIAGNOSTICS_PROBE.md](DIAGNOSTICS_PROBE.md)**. P0/RC wire below stays frozen until an explicit DIAG v2 bump.
 
-Companion physical truth for SW SCK was scoped then **closed** on USBasp2: [SOFTWARE_SCK.md](SOFTWARE_SCK.md), [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md). Telemetry is **firmware truth**; optional FX2 remains interesting for dual-timestamp science, not a release gate.
+Companion physical truth for SW SCK was scoped then **closed** on USBasp2: [SOFTWARE_SCK.md](SOFTWARE_SCK.md), [ACCEPTANCE-SCK-SWEEP-001](acceptance/ACCEPTANCE-SCK-SWEEP-001.md). Telemetry is **firmware truth**; TRACE is a protocol flight recorder (same semantic frames, frozen around a trigger) — not an oscillogram of SCK/MOSI/MISO. Optional FX2 remains interesting for dual-timestamp science, not a USBasp2 release gate. Classic mega8 SW-SCK vs mega8 clone is a known daily-image limitation; see SOFTWARE_SCK.
 
 Sweet spot:
 

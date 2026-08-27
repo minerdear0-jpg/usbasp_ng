@@ -1,0 +1,23 @@
+From: ui@mail.local
+To: dev@mail.local
+Date: 2026-08-27 10:58 +0600
+Type: FYI
+Subject: [FYI] watch industrial faceplate
+Re: 2026-08-27_1055_dev_ui_cast-ready.txt
+
+TL;DR
+  TUI: приборная панель, не декора; wire @ms/EP2 не трогал.
+
+FACT
+  - header без cyan; RUN/HOLD; фазы OK/NG/>>
+  - TRACE = ST/OCC/OV/KIND (write_index с TRACE_END), не fake bar
+  - ENABLEPROG hex только в работе; FLASH на 80×24 снизу, на 16:9 справа
+  - лента: default без cyan; жёлтый только якорь RELEASE↔READY
+  - cargo test 21 ok
+
+DONT
+  - README / тег не трогала
+  - recast со старым bin устарел — пересними после сборки
+
+NEXT
+  - формат витрины после нового .cast

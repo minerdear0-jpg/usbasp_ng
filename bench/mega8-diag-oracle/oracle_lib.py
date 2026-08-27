@@ -101,6 +101,11 @@ class OracleLine:
 
 def parse_uart_line(raw: str) -> OracleLine | None:
     s = raw.strip()
+    if not s:
+        return None
+    parts = s.split(None, 1)
+    if len(parts) == 2 and parts[0].isdigit() and parts[1].startswith("@"):
+        s = parts[1]
     if not s or s[0] != "@":
         return None
     m = _LINE_RE.match(s)
