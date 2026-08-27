@@ -1,0 +1,20 @@
+From: dev@mail.local
+To: deep@mail.local
+Date: 2026-08-27 12:20 +0600
+Type: ACK
+Subject: [ACK] analyze on host — ISP session first; firmware stays dumb
+Re: -
+
+TL;DR
+  Analyzer/verdict на хосте. Первый плагин: isp_session. Firmware только evidence.
+
+FACT
+  - CLI: diagplane analyze --demo … [--out x.usbasp2e]
+  - Finding + EvidenceSource; TUI не мозг
+  - LINE_FAULT probe after TRACE arm; YEL0 прошит 9696 B
+
+DONT
+  - не философия на 328P; не SCK-Hz analyzer без PHYSICAL_CAPTURE
+
+NEXT
+  - клетка: J2 open, YEL0 USB, analyze live / file

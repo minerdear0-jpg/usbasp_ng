@@ -7,7 +7,7 @@ Versions (independent):
 - **diagplane** — this client (`Cargo.toml` / `diagplane --version`)
 - **protocol** — EP2 wire schema (`DIAG_SCHEMA_V1` = 1)
 
-TUI header shows both, e.g. `diagplane 0.1.3  protocol 1`.
+TUI header shows both, e.g. `diagplane 0.1.4  protocol 1`.
 
 **Rust:** 1.78 or newer (`rust-version` in `Cargo.toml`). `Cargo.lock` is **v4** — cargo older than 1.78 will refuse it. That is expected; use a current toolchain rather than editing the lockfile. `diagplane.bin` needs no rustc.
 
@@ -37,14 +37,16 @@ cargo build --release
 ./target/release/usbasp-ng-diag snapshot --serial YEL0
 ./target/release/usbasp-ng-diag evidence --demo enableprog_fail_sw
 ./target/release/usbasp-ng-diag evidence --demo enableprog_ladder_silent --json
+./target/release/usbasp-ng-diag analyze --demo enableprog_fail_sw
+./target/release/usbasp-ng-diag analyze --demo memop_flash --out /tmp/cage.usbasp2e --json
 ./target/release/usbasp-ng-diag correlate --diag ep2.jsonl --uart oracle.txt
 # UART host stamps (python3 harness.py monitor):  HOST_NS @ms EVENT
 # → dt_ready_host_ns ± doubt_ns  (Cristian |dt|/2)
 ```
 
-TUI keys: `q` quit, `x` / `Ctrl+L` clear (confirm `y`), `w` wire frames, `f` faults, `c` caps, `j`/`k` scroll, `g`/`G` top/bottom, `Space` HOLD/RUN (RUN blinks = alive). Dual-column when `--uart` is set (yellow row = RELEASE↔READY **order**, not absolute µs).
+TUI keys: `q` quit, `x` / `Ctrl+L` clear (confirm `y`), `w` wire frames, `f` faults, `c` caps, `j`/`k` scroll, `g`/`G` top/bottom, `Space` HOLD/RUN (RUN blinks = alive). Dual-column when `--uart` is set (yellow row = RELEASE↔READY **order**, not absolute µs). Full-width **VERDICT** rail under the log is a host evidence viewer (`evidence` / future analyzers), not firmware.
 
-Diagplane answers **what firmware thinks happened**. Pin edges need a sniffer; TRACE aims it, it does not replace it.
+Diagplane answers **what firmware observed**. **Why** is a host analysis layer. Pin edges need a sniffer; TRACE aims it, it does not replace it.
 
 Live `capabilities`: device on USB alone is not a diag session — see [ACCEPTANCE-DIAG-TRIGGER-001](../../docs/acceptance/ACCEPTANCE-DIAG-TRIGGER-001.md).
 
@@ -56,6 +58,7 @@ Release asset: **`diagplane.bin`** (Linux x86-64, musl static) — same CLI. Bui
 - `watch` — ratatui console UI (file / demo / live); needs an interactive terminal  
 - `snapshot` — one coherent dump of USB/ISP/TRACE/MEMOP (file / demo / jsonl / live)
 - `evidence` — Evidence Record v1: expected/observed/verdict; never claims pin capture from EP2 ([EVIDENCE.md](../../docs/EVIDENCE.md))
+- `analyze` — ISP session analyzer → Findings → Verdict; `--out file.usbasp2e` for offline replay. TUI is not this engine.
 
 Contracts: [`docs/DIAGNOSTICS.md`](../../docs/DIAGNOSTICS.md), client notes: [`docs/DIAGNOSTICS_CLIENT.md`](../../docs/DIAGNOSTICS_CLIENT.md).
 

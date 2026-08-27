@@ -17,6 +17,7 @@ void isp_out_set_bit(uchar bit);
 void isp_out_clr_bit(uchar bit);
 uchar isp_out_set_bit_verify(uchar bit);
 uchar isp_out_clr_bit_verify(uchar bit);
+void isp_line_probe(void);
 uchar ispTransmit_sw(uchar send_byte);
 uchar ispTransmit_hw(uchar send_byte);
 uchar ispEnterProgrammingMode(void);

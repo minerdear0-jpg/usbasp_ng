@@ -112,6 +112,8 @@ def main() -> int:
     assert "isp_out_set_bit_verify" in isp
     assert "isp_out_clr_bit_verify" in isp
     assert "isp_line_probe" in isp
+    assert "diag_trace_arm" in diag_c
+    assert "isp_line_probe" in diag_c
     assert "if (tries == 1)" in isp
     sw = isp[isp.index("ispTransmit_sw") : isp.index("ispTransmit_hw")]
     assert "diag_" not in sw

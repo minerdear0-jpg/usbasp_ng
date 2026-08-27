@@ -421,14 +421,15 @@ impl AppState {
             }
             LINE_FAULT => {
                 let fail = f.flags & EP_FAIL != 0;
-                if fail && self.line_ok != Some(false) {
+                if fail {
                     self.line_ok = Some(false);
                     self.line_bit = Some(f.a);
                     self.line_drive_high = Some(f.flags & LINE_DRIVE_HIGH != 0);
                     self.line_pin = Some(f.b);
-                } else if !fail && self.line_ok.is_none() {
+                } else if f.flags & EP_OK != 0 {
                     self.line_ok = Some(true);
                     self.line_bit = Some(f.a);
+                    self.line_drive_high = None;
                     self.line_pin = Some(f.b);
                 }
             }
@@ -471,10 +472,7 @@ impl AppState {
         self.pins_ok = None;
         self.pins_ddr = None;
         self.pins_pin = None;
-        self.line_ok = None;
-        self.line_bit = None;
-        self.line_drive_high = None;
-        self.line_pin = None;
+        // LINE_FAULT is emitted in ispConnect before SESSION_BEGIN.
         self.mosi_ns = None;
         self.miso_ns = None;
         self.miso_silent = false;
@@ -506,6 +504,32 @@ mod tests {
         assert!(caps.firmware.contains(DiagCaps::TRACE));
         assert!(caps.firmware.contains(DiagCaps::TRIGGER));
         assert!(!caps.firmware.contains(DiagCaps::SCK_STATS));
+    }
+
+    #[test]
+    fn line_fault_survives_session_begin() {
+        let mut st = AppState::default();
+        st.push_frame(
+            1,
+            DiagFrame {
+                ty: LINE_FAULT,
+                flags: EP_OK,
+                timestamp: 0,
+                a: 0x2c,
+                b: 0x0c,
+            },
+        );
+        st.push_frame(
+            2,
+            DiagFrame {
+                ty: SESSION_BEGIN,
+                flags: 0,
+                timestamp: 0,
+                a: 8,
+                b: 8,
+            },
+        );
+        assert_eq!(st.line_ok, Some(true));
     }
 
     #[test]

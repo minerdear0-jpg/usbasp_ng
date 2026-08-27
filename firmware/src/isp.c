@@ -105,9 +105,11 @@ static uchar isp_probe_bit(uchar bit)
     }
     return ok;
 }
+#endif
 
-static void isp_line_probe(void)
+void isp_line_probe(void)
 {
+#if USBASP_HAS_DIAG
     uchar ok;
 
     ok = isp_probe_bit(ISP_MOSI);
@@ -119,8 +121,8 @@ static void isp_line_probe(void)
         diag_emit_line_fault(drive, DIAG_EP_RESULT_OK,
             (uint8_t)(ISP_IN & isp_pin_mask()));
     }
-}
 #endif
+}
 
 void ispConnect(void)
 {
@@ -131,9 +133,6 @@ void ispConnect(void)
     isp_out_clr_bit(ISP_RST);
     ISP_OUT &= ~(1 << ISP_SCK);
     ISP_OUT |= (1 << ISP_MISO);
-#if USBASP_HAS_DIAG
-    isp_line_probe();
-#endif
     /* 2011: RST high-low longer than two target SCK before ENABLEPROG. */
     clockWait(1);
     isp_out_set_bit(ISP_RST);

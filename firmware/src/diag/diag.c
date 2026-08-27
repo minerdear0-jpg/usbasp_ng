@@ -321,6 +321,8 @@ void diag_on_connect(void)
     diag_emit_trace_begin();
 
     (void)diag_try_emit(DIAG_SESSION_BEGIN, 0, requested_sck, effective_sck);
+    /* After TRACE arm — ispConnect probe would be wiped. Pins still outputs. */
+    isp_line_probe();
     diag_emit_sck_config();
     diag_reset_driven = DIAG_RESET_ASSERT;
     (void)diag_try_emit(DIAG_RESET, DIAG_RESET_ASSERT, 0, 0);

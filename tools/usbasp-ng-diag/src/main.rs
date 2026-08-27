@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod analyze;
 mod caps;
 mod capture;
 mod correlate;
@@ -180,6 +181,24 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Offline analysis: Evidence → Findings → Verdict (no firmware philosophy)
+    Analyze {
+        #[arg(long, default_value = "")]
+        serial: String,
+        #[arg(long, conflicts_with_all = ["demo", "diag"])]
+        file: Option<PathBuf>,
+        #[arg(long, conflicts_with_all = ["file", "diag"])]
+        demo: Option<String>,
+        #[arg(long, conflicts_with_all = ["file", "demo"])]
+        diag: Option<PathBuf>,
+        #[arg(long, default_value = "30")]
+        timeout: u64,
+        #[arg(long)]
+        json: bool,
+        /// Write `.usbasp2e` (evidence + analysis JSON)
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Dual-truth event order: EP2 JSONL ↔ oracle UART (not absolute µs)
     Correlate {
         /// Programmer capture as JSONL (`decode FILE --jsonl`)
@@ -304,6 +323,23 @@ fn try_main() -> Result<()> {
             diag.as_ref(),
             timeout,
             json,
+        ),
+        Cmd::Analyze {
+            serial,
+            file,
+            demo,
+            diag,
+            timeout,
+            json,
+            out,
+        } => cmd_analyze(
+            &serial,
+            file.as_ref(),
+            demo.as_deref(),
+            diag.as_ref(),
+            timeout,
+            json,
+            out.as_ref(),
         ),
         Cmd::Correlate { diag, uart, jsonl } => {
             let (events, sync) = correlate::correlate_files(&diag, &uart)?;
@@ -546,6 +582,31 @@ fn cmd_evidence(
         ev.emit_json()
     } else {
         ev.emit_human();
+        Ok(())
+    }
+}
+
+fn cmd_analyze(
+    serial: &str,
+    file: Option<&PathBuf>,
+    demo_name: Option<&str>,
+    diag: Option<&PathBuf>,
+    timeout_s: u64,
+    json: bool,
+    out: Option<&PathBuf>,
+) -> Result<()> {
+    let (st, source) = ingest_state(serial, file, demo_name, diag, timeout_s, true)?;
+    let complete = st.saw_session_end;
+    let ev = evidence::from_state(&source, &st, complete);
+    let pack = analyze::Usbasp2eFile::from_evidence(ev);
+    if let Some(path) = out {
+        pack.write_path(path)?;
+        eprintln!("wrote {}", path.display());
+    }
+    if json {
+        pack.emit_json()
+    } else {
+        pack.emit_human();
         Ok(())
     }
 }

@@ -36,6 +36,19 @@ Signature sources (when present): `ISP` (host avrdude), `target_uart`, `USBASP_O
 
 Black box = last forensic record after FROZEN, 1–4 slots, CRC + COMMIT byte, sequence number. Not a TRACE ring. Caps bit `PERSISTENCE` means atomic save/restore of that record — **not** “the MCU has EEPROM”. Policy: OFF / LAST_FAILURE / LAST_SESSION. Host Evidence v1 first.
 
+## Analysis (host, not firmware)
+
+Decoder is dumb: frames → Evidence. **IspSessionAnalyzer** is the first plugin (`analyze.rs` trait). Verdict engine correlates findings; it does not live in the 328P.
+
+```bash
+diagplane analyze --demo enableprog_fail_sw
+diagplane analyze --file capture.bin --out session.usbasp2e
+```
+
+`.usbasp2e` = JSON `{ format, evidence, analysis }`. Improve the analyzer later without flashing the stick.
+
+SCK Hz / FX2 analyzers wait on `PHYSICAL_CAPTURE` and timestamps-as-period — not this grain.
+
 ## CLI
 
 ```bash
