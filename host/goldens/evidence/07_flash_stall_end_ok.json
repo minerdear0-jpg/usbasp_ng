@@ -1,0 +1,18 @@
+{
+  "id": "07_flash_stall_end_ok",
+  "demo": "flash_stall_end_ok",
+  "expect": {
+    "verdict": "FAIL_UNCONFIRMED",
+    "findings": {
+      "ISP.ENABLEPROG": { "status": "PASS", "confidence": "HIGH" },
+      "ISP.MEMOP_STALL": { "status": "FAIL", "confidence": "MEDIUM", "causal_relevance": "REQUIRED" },
+      "LINE.RST_ECHO": { "status": "ANOMALY" }
+    },
+    "must_not_have": [
+      "ISP.PROGRAMMING_PATH",
+      "ISP.FLASH",
+      "ISP.FLASH_POLL",
+      "ISP.MEMOP_INCOMPLETE"
+    ]
+  }
+}

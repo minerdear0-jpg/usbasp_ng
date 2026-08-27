@@ -8,6 +8,11 @@ use crate::decoder::{
 use crate::jsonl::{enableprog_failed, level_for, snapshot_failed, FaultStats};
 use crate::protocol::*;
 
+/// Host gap between MEMOP frames during a FLASH/EEPROM write that marks a stall
+/// (USB I/O drop / hung avrdude). Firmware may still emit END|OK afterward —
+/// that is not a successful write.
+pub const MEMOP_GAP_STALL_NS: u64 = 3_000_000_000;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Level {
     Error,
@@ -87,6 +92,12 @@ pub struct AppState {
     /// Sticky: any FLASH/EEPROM CONT|FAIL this session (survives following READFLASH START).
     pub flash_poll_failed: bool,
     pub flash_poll_fail_addr: Option<u16>,
+    /// Sticky: host gap ≥ [`MEMOP_GAP_STALL_NS`] mid FLASH/EEPROM write (survives READFLASH).
+    pub memop_stalled: bool,
+    /// Host ns of last MEMOP frame in the current open op (START/CONT/END).
+    memop_last_ns: Option<u64>,
+    /// Largest host gap observed during the stalled write (for claims).
+    pub memop_stall_gap_ns: Option<u64>,
     pub last_verify_pages: Option<u8>,
     pub last_verify_ok: Option<bool>,
     pub pins_ok: Option<bool>,
@@ -388,18 +399,24 @@ impl AppState {
                     self.memop_end_ok = None;
                     match f.a {
                         MEM_FLASH | MEM_EEPROM => {
-                            // New write: clear sticky poll fail for this op only.
+                            // New write: clear sticky poll/stall for this op only.
                             self.flash_poll_failed = false;
                             self.flash_poll_fail_addr = None;
+                            self.memop_stalled = false;
+                            self.memop_stall_gap_ns = None;
+                            self.memop_last_ns = None;
                             self.mosi_ns = Some(host_ns);
                         }
                         MEM_READFLASH => {
-                            // Do not clear flash_poll_failed — write FAILs must outlive verify MEMOP.
+                            // Do not clear flash_poll_failed / memop_stalled — write faults outlive verify.
+                            self.memop_last_ns = None;
                             self.miso_ns = Some(host_ns);
                         }
                         _ => {}
                     }
+                    self.note_memop_timing(host_ns);
                 } else if f.flags & EP_CONT != 0 {
+                    self.note_memop_timing(host_ns);
                     let addr = (u16::from(f.a) << 8) | u16::from(f.b);
                     let ok = f.flags & EP_FAIL == 0;
                     self.memop_pages.push((addr, ok));
@@ -418,6 +435,7 @@ impl AppState {
                         _ => {}
                     }
                 } else if f.flags & EP_END != 0 {
+                    self.note_memop_timing(host_ns);
                     self.memop_kind = Some(f.a);
                     self.memop_end_pages = Some(f.b);
                     let end_ok = f.flags & EP_FAIL == 0;
@@ -425,8 +443,9 @@ impl AppState {
                     match f.a {
                         MEM_FLASH | MEM_EEPROM => {
                             self.last_flash_pages = Some(f.b);
-                            // END|OK must not wash CONT|FAIL (ribbon tear mid-write).
-                            self.last_flash_ok = Some(end_ok && !self.flash_poll_failed);
+                            // END|OK must not wash CONT|FAIL or a mid-write host stall.
+                            self.last_flash_ok =
+                                Some(end_ok && !self.flash_poll_failed && !self.memop_stalled);
                         }
                         MEM_READFLASH => {
                             self.last_verify_pages = Some(f.b);
@@ -473,6 +492,23 @@ impl AppState {
         ids.len() >= 2
     }
 
+    fn note_memop_timing(&mut self, host_ns: u64) {
+        if let Some(prev) = self.memop_last_ns {
+            let gap = host_ns.saturating_sub(prev);
+            if gap >= MEMOP_GAP_STALL_NS {
+                match self.memop_kind {
+                    Some(MEM_FLASH) | Some(MEM_EEPROM) => {
+                        self.memop_stalled = true;
+                        self.memop_stall_gap_ns =
+                            Some(self.memop_stall_gap_ns.map_or(gap, |g| g.max(gap)));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        self.memop_last_ns = Some(host_ns);
+    }
+
     fn reset_session_ops(&mut self) {
         self.ep_tx = None;
         self.ep_rx = None;
@@ -491,6 +527,9 @@ impl AppState {
         self.last_flash_ok = None;
         self.flash_poll_failed = false;
         self.flash_poll_fail_addr = None;
+        self.memop_stalled = false;
+        self.memop_last_ns = None;
+        self.memop_stall_gap_ns = None;
         self.last_verify_pages = None;
         self.last_verify_ok = None;
         self.pins_ok = None;
@@ -613,6 +652,20 @@ mod tests {
         assert_eq!(st.flash_poll_fail_addr, Some(0x1200));
         assert_eq!(st.last_flash_ok, Some(false));
         assert_eq!(st.last_verify_ok, Some(true));
+        assert!(st.saw_session_end);
+    }
+
+    #[test]
+    fn flash_stall_sticky_across_readflash() {
+        let cap = demo::build_scenario("flash_stall_end_ok").unwrap();
+        let mut st = AppState::default();
+        st.ingest_capture(&cap);
+        assert!(st.memop_stalled);
+        assert!(st.memop_stall_gap_ns.unwrap_or(0) >= MEMOP_GAP_STALL_NS);
+        assert_eq!(st.last_flash_ok, Some(false));
+        assert_eq!(st.last_flash_pages, Some(68));
+        assert_eq!(st.last_verify_ok, Some(true));
+        assert!(!st.flash_poll_failed);
         assert!(st.saw_session_end);
     }
 }

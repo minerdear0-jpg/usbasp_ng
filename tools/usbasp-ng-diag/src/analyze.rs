@@ -73,6 +73,8 @@ pub struct AnalysisBlock {
     pub derived_from: String,
     pub findings: Vec<Finding>,
     pub verdict: crate::analysis::Verdict,
+    /// Communication only — never changes verdict / evidence.
+    pub explanation: crate::explanation::Explanation,
 }
 
 impl Usbasp2eFile {
@@ -86,6 +88,7 @@ impl Usbasp2eFile {
 
     fn assemble(observations: EvidenceRecord, cap: Option<&CaptureFile>) -> Self {
         let analysis = run_pipeline(&observations);
+        let explanation = crate::explanation::explain(&observations, &analysis);
         let raw = cap.map(|c| {
             let bytes = c.to_bytes(true);
             RawCapture {
@@ -125,6 +128,7 @@ impl Usbasp2eFile {
                 derived_from,
                 findings: analysis.findings,
                 verdict: analysis.verdict,
+                explanation,
             },
             observations,
         }
@@ -154,6 +158,9 @@ impl Usbasp2eFile {
         } else {
             println!("raw unavailable (live/jsonl ingest)");
         }
+        println!();
+        self.analysis.explanation.emit_human();
+        println!("── evidence (machine) ──");
         println!();
         for f in &self.analysis.findings {
             println!(
@@ -310,6 +317,16 @@ mod tests {
     }
 
     #[test]
+    fn flash_stall_end_ok_is_fail_not_pass_anomaly() {
+        let a = run_pipeline(&ev("flash_stall_end_ok"));
+        assert_eq!(a.verdict.result, "FAIL_UNCONFIRMED", "{:?}", a.verdict.likely);
+        assert!(a.findings.iter().any(|f| f.id == "ISP.MEMOP_STALL"));
+        assert!(a.findings.iter().all(|f| f.id != "ISP.PROGRAMMING_PATH"));
+        assert!(a.findings.iter().all(|f| f.id != "ISP.FLASH"));
+        assert!(a.verdict.likely.contains("stalled"));
+    }
+
+    #[test]
     fn line_only_is_inconclusive() {
         let a = run_pipeline(&ev("line_fault_rst"));
         assert_eq!(a.verdict.result, "INCONCLUSIVE");
@@ -399,7 +416,7 @@ mod goldens {
             .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
             .collect();
         files.sort();
-        assert_eq!(files.len(), 6, "expected six canonical goldens in {}", dir.display());
+        assert_eq!(files.len(), 7, "expected seven canonical goldens in {}", dir.display());
         for path in files {
             let spec: Golden = serde_json::from_str(&fs::read_to_string(&path).unwrap())
                 .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
@@ -455,7 +472,7 @@ mod corpus {
 
     #[test]
     fn replay_corpus_is_nine_isp_sessions() {
-        assert_eq!(demo::replay_corpus().len(), 11);
+        assert_eq!(demo::replay_corpus().len(), 12);
     }
 
     #[test]

@@ -12,12 +12,14 @@ the contract.
 | `04_enableprog_fail_line_anomaly.json` | LINE + ENABLEPROG FAIL, still not `FAIL_CONFIRMED` |
 | `05_flash_abort_line_anomaly.json` | LINE + ENABLEPROG PASS + CONT pages, **no MEMOP END** → `FAIL_UNCONFIRMED` (not PASS) |
 | `06_flash_poll_fail_end_ok.json` | CONT|FAIL then END|OK + READFLASH → still `FAIL_UNCONFIRMED` (sticky poll) |
+| `07_flash_stall_end_ok.json` | multi-second host gap mid-write then END|OK → `FAIL_UNCONFIRMED` (sticky stall; not PASS_WITH_ANOMALY) |
 
 `LINE_FAULT` is never a physical proof. `PHYSICAL_CAPTURE` **capability** is
 never evidence. `EVIDENCE.CONFLICT` requires two recorded sources.
 
 CONT OK pages are not a finished write. `PASS` / `PASS_WITH_ANOMALY` require a
-completed session outcome (MEMOP END if a MEMOP started).
+completed session outcome (MEMOP END if a MEMOP started) **without** sticky poll
+FAIL or mid-write host stall.
 
 Replay corpus (nine ISP demos): `cargo test corpus` in `tools/usbasp-ng-diag`.
 Same capture must yield the same analysis JSON; raw sha256 must not move when

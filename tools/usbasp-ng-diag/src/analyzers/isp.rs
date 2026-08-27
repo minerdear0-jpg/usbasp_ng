@@ -88,6 +88,26 @@ impl Analyzer for IspAnalyzer {
             });
         }
 
+        if let Some(c) = ev.claims.iter().find(|c| c.name == "MEMOP_STALL") {
+            out.push(Finding {
+                id: "ISP.MEMOP_STALL",
+                analyzer: self.id(),
+                domain: Domain::IspProtocol,
+                status: FindingStatus::Fail,
+                scope: "SESSION",
+                confidence: Confidence::Medium,
+                causal_relevance: CausalRelevance::Required,
+                claim: "FLASH/EEPROM write stalled on the host timeline".into(),
+                expected: c.expected.clone(),
+                observed: c.observed.clone(),
+                source: EvidenceSource::UsbaspInternal,
+                evidence: vec![
+                    "multi-second gap between MEMOP frames mid-write".into(),
+                    "MEMOP END|OK after stall is not a successful flash".into(),
+                ],
+            });
+        }
+
         if let Some(c) = ev.claims.iter().find(|c| c.name == "ISP_PINS") {
             let fail = c.verdict == "FAIL";
             out.push(Finding {

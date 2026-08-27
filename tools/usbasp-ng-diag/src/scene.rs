@@ -106,6 +106,18 @@ pub fn diagnosis_at(state: &AppState, now_ns: Option<u64>) -> (DiagTone, String)
             ),
         );
     }
+    if state.memop_stalled {
+        let gap_ms = state
+            .memop_stall_gap_ns
+            .unwrap_or(crate::state::MEMOP_GAP_STALL_NS)
+            / 1_000_000;
+        return (
+            DiagTone::Bad,
+            format!(
+                "MEMOP STALL — {gap_ms}ms host gap mid FLASH write. END|OK after stall is not success (USB drop / hung host plausible)"
+            ),
+        );
+    }
     if let Some(&(addr, false)) = state.memop_pages.iter().find(|(_, ok)| !*ok) {
         return (
             DiagTone::Bad,

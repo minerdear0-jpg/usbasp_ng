@@ -695,13 +695,14 @@ enum SessionFace {
 fn session_face(st: &AppState) -> SessionFace {
     let line_fail = st.line_ok == Some(false);
     let poll_fail = st.flash_poll_failed || st.memop_pages.iter().any(|(_, ok)| !*ok);
+    let stalled = st.memop_stalled;
     let ep_fail = st.ep_fail == Some(true);
     let ep_pass = st.ep_fail == Some(false);
     let memop_open = st.memop_kind.is_some() && st.memop_end_ok.is_none();
     let memop_fail = st.memop_end_ok == Some(false) || st.last_flash_ok == Some(false);
     let done = st.saw_session_end;
 
-    if ep_fail || poll_fail || memop_fail {
+    if ep_fail || poll_fail || stalled || memop_fail {
         SessionFace::FailUnconfirmed
     } else if memop_open {
         // CONT pages without MEMOP END: still writing, or aborted mid-write.
@@ -803,39 +804,53 @@ fn verdict_lines(st: &AppState, inner_w: u16, inner_h: u16) -> Vec<Line<'static>
     let pages_ok = st.memop_pages.iter().filter(|(_, ok)| *ok).count();
     let pages_fail = st.memop_pages.iter().filter(|(_, ok)| !*ok).count();
     let sticky_fail = st.flash_poll_failed;
+    let stalled = st.memop_stalled;
     let proto = match (
         st.ep_fail,
         echo,
         sticky_fail || pages_fail > 0,
+        stalled,
         st.last_flash_ok,
         st.memop_end_ok,
         pages_ok,
         pages_fail,
     ) {
-        (Some(false), _, true, _, _, ok_n, fail_n) => {
+        (Some(false), _, true, _, _, _, ok_n, fail_n) => {
             let addr = st
                 .flash_poll_fail_addr
                 .map(|a| format!(" @{a:#06x}"))
                 .unwrap_or_default();
             format!("✓ ENABLEPROG  FLASH POLL FAIL{addr}  CONT ok={ok_n} fail={fail_n}")
         }
-        (Some(false), true, false, Some(true), _, n, _) if n > 0 || st.last_flash_pages.is_some() => {
+        (Some(false), _, _, true, _, _, _, _) => {
+            let gap_ms = st
+                .memop_stall_gap_ns
+                .unwrap_or(crate::state::MEMOP_GAP_STALL_NS)
+                / 1_000_000;
+            format!(
+                "✓ ENABLEPROG  FLASH STALL ≥{gap_ms}ms  END {} pages (not success)",
+                st.last_flash_pages.unwrap_or(0)
+            )
+        }
+        (Some(false), true, false, false, Some(true), _, n, _)
+            if n > 0 || st.last_flash_pages.is_some() =>
+        {
             format!(
                 "✓ ENABLEPROG 0x53  ✓ FLASH END {} pages",
                 st.last_flash_pages.unwrap_or(n as u8)
             )
         }
-        (Some(false), true, false, Some(false), _, _, _) => {
+        (Some(false), true, false, false, Some(false), _, _, _) => {
             "✓ ENABLEPROG 0x53  FLASH END FAIL".into()
         }
-        (Some(false), true, false, None, None, n, _) if n > 0 => {
+        (Some(false), true, false, false, None, None, n, _) if n > 0 => {
             format!("✓ ENABLEPROG 0x53  FLASH {n} pages — no MEMOP END")
         }
-        (Some(false), true, false, None, None, _, _) if st.memop_kind.is_some() => {
+        (Some(false), true, false, false, None, None, _, _) if st.memop_kind.is_some() => {
             "✓ ENABLEPROG 0x53  FLASH — no MEMOP END".into()
         }
-        (Some(false), true, false, _, _, _, _) => "✓ ENABLEPROG 0x53".into(),
-        (Some(true), _, _, _, _, _, _) => "ENABLEPROG FAIL  (primary)".into(),
+        (Some(false), true, false, false, _, _, _, _) => "✓ ENABLEPROG 0x53".into(),
+        (Some(true), _, _, _, _, _, _, _) => "ENABLEPROG FAIL  (primary)".into(),
         _ => "—".into(),
     };
     let pin = st.line_pin.unwrap_or(0);
@@ -855,6 +870,9 @@ fn verdict_lines(st: &AppState, inner_w: u16, inner_h: u16) -> Vec<Line<'static>
                 "{} anomaly → programming failure   NOT ESTABLISHED",
                 rst_name(st)
             )
+        }
+        SessionFace::FailUnconfirmed if stalled => {
+            "MEMOP stall  host USB drop plausible  RST NOT ESTABLISHED".into()
         }
         SessionFace::FailUnconfirmed if st.memop_kind.is_some() && st.memop_end_ok.is_none() => {
             "MEMOP incomplete  host USB drop plausible  RST NOT ESTABLISHED".into()
@@ -1714,6 +1732,31 @@ mod tests {
             .join("\n");
         assert!(all.contains("FAIL UNCONFIRMED"), "{all}");
         assert!(all.contains("POLL FAIL"), "{all}");
+        assert!(!all.contains("PASS WITH ANOMALY"), "{all}");
+    }
+
+    #[test]
+    fn flash_stall_end_ok_is_not_pass_anomaly() {
+        let mut st = AppState::default();
+        st.line_ok = Some(false);
+        st.line_bit = Some(2);
+        st.line_pin = Some(0x14);
+        st.ep_fail = Some(false);
+        st.ep_rx = Some([0xff, 0xff, 0x53, 0x00]);
+        st.memop_stalled = true;
+        st.memop_stall_gap_ns = Some(17_000_000_000);
+        st.last_flash_ok = Some(false);
+        st.last_flash_pages = Some(68);
+        st.memop_end_ok = Some(true);
+        st.saw_session_end = true;
+        assert_eq!(session_face(&st), SessionFace::FailUnconfirmed);
+        let all = verdict_lines(&st, 96, 4)
+            .iter()
+            .map(line_text)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(all.contains("FAIL UNCONFIRMED"), "{all}");
+        assert!(all.contains("STALL"), "{all}");
         assert!(!all.contains("PASS WITH ANOMALY"), "{all}");
     }
 

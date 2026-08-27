@@ -91,6 +91,7 @@ pub fn list_scenarios() -> &'static [&'static str] {
         "memop_poll_fail",
         "flash_abort_line_anomaly",
         "flash_poll_fail_end_ok",
+        "flash_stall_end_ok",
         "overflow",
         "session_hw_pass",
         "capabilities_yel0",
@@ -110,6 +111,7 @@ pub fn replay_corpus() -> &'static [&'static str] {
         "memop_poll_fail",
         "flash_abort_line_anomaly",
         "flash_poll_fail_end_ok",
+        "flash_stall_end_ok",
         "session_hw_pass",
     ]
 }
@@ -569,6 +571,98 @@ pub fn build_scenario(name: &str) -> anyhow::Result<CaptureFile> {
                 &mut records,
                 &mut ns,
                 report(ISP_PINS, PINS_AFTER_DISC | EP_OK, 61, 0x00, 0x00),
+            );
+            push(&mut records, &mut ns, report(SESSION_END, 0, 62, 0, 0));
+        }
+        "flash_stall_end_ok" => {
+            // USB dies mid-write (~17s host gap): no CONT|FAIL, firmware still END|OK.
+            // Host must NOT paint PASS / PASS_WITH_ANOMALY (stall sticky across READFLASH).
+            push_hello_caps(&mut records, &mut ns, 10);
+            push(&mut records, &mut ns, report(SESSION_BEGIN, 0, 20, 8, 8));
+            push(
+                &mut records,
+                &mut ns,
+                report(
+                    LINE_FAULT,
+                    LINE_DRIVE_HIGH | EP_FAIL,
+                    21,
+                    2,
+                    0x14,
+                ),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(SCK_CONFIG, 0, 22, 8, TRANSPORT_HW),
+            );
+            push(&mut records, &mut ns, report(RESET, RESET_ASSERT, 23, 0, 0));
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_START, 30, 0xac, 0x53),
+            );
+            push(&mut records, &mut ns, report(ENABLEPROG, EP_CONT, 31, 0, 0));
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_CONT, 32, 0xff, 0xff),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(ENABLEPROG, EP_END | EP_OK, 33, 0x53, 0),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_START, 40, MEM_FLASH, 64),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_CONT | EP_OK, 41, 0x00, 0x00),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_CONT | EP_OK, 42, 0x10, 0x00),
+            );
+            // ~17s host silence (USB I/O error), then a late CONT|OK and END|OK.
+            ns += 17_000_000_000;
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_CONT | EP_OK, 43, 0x10, 0xc0),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_END | EP_OK, 44, MEM_FLASH, 68),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_START, 50, MEM_READFLASH, 64),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_CONT | EP_OK, 51, 0x00, 0x00),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(MEMOP, EP_END | EP_OK, 52, MEM_READFLASH, 88),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(RESET, RESET_RELEASE, 60, 0, 0),
+            );
+            push(
+                &mut records,
+                &mut ns,
+                report(ISP_PINS, PINS_AFTER_DISC | EP_OK, 61, 0x00, 0x0c),
             );
             push(&mut records, &mut ns, report(SESSION_END, 0, 62, 0, 0));
         }

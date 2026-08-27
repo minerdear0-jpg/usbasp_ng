@@ -15,6 +15,7 @@ mod correlate;
 mod decoder;
 mod demo;
 mod evidence;
+mod explanation;
 mod jsonl;
 mod protocol;
 mod scene;

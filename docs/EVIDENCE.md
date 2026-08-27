@@ -17,7 +17,7 @@ Semantics **evidence-v1** is **frozen**. Do not change the meaning of findings, 
 
 LINE GPIO anomaly + ENABLEPROG PASS + MEMOP PASS is the regression of the whole model (`PASS_WITH_ANOMALY`), not a special case to suppress.
 
-**PASS is a session outcome, not “ENABLEPROG happened”.** If MEMOP START/CONT is seen without MEMOP END, verdict is `FAIL_UNCONFIRMED` (`ISP.MEMOP_INCOMPLETE`). CONT OK pages do not mean the write finished. If any FLASH CONT|FAIL was seen, that failure is **sticky** across a following READFLASH MEMOP — `MEMOP END … OK` does not wash it into PASS (ribbon tear mid-write). avrdude verify-mismatch is still not on EP2 — but poll FAIL *is*.
+**PASS is a session outcome, not “ENABLEPROG happened”.** If MEMOP START/CONT is seen without MEMOP END, verdict is `FAIL_UNCONFIRMED` (`ISP.MEMOP_INCOMPLETE`). CONT OK pages do not mean the write finished. If any FLASH CONT|FAIL was seen, that failure is **sticky** across a following READFLASH MEMOP — `MEMOP END … OK` does not wash it into PASS (ribbon tear mid-write). If the host timeline shows a **multi-second gap mid FLASH/EEPROM write** and firmware still emits `MEMOP END|OK`, that stall is **sticky** (`ISP.MEMOP_STALL`) — END after a USB drop is not success. avrdude verify-mismatch is still not on EP2 — but poll FAIL and stall *are*.
 
 ```text
 raw evidence → observations → findings → claims → correlation → verdict

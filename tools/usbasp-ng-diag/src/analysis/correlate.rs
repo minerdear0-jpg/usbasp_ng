@@ -43,7 +43,7 @@ fn aggregates(ev: &EvidenceRecord, analyzed: &[Finding]) -> Vec<Finding> {
         });
     }
 
-    if ep_pass && flash_ok && !ev.execution.memop_incomplete {
+    if ep_pass && flash_ok && !ev.execution.memop_incomplete && !ev.execution.memop_stalled {
         let mut evidence = vec![
             "ENABLEPROG PASS → programming_mode CONFIRMED".into(),
             "MEMOP END PASS → programming_path CONFIRMED".into(),
@@ -112,6 +112,7 @@ fn verdict_of(ev: &EvidenceRecord, findings: &[Finding]) -> Verdict {
     let incomplete = has(findings, "ISP.MEMOP_INCOMPLETE", FindingStatus::Fail);
     let conflict = findings.iter().any(|f| f.id == "EVIDENCE.CONFLICT");
     let flash_fail = findings.iter().any(|f| f.id == "ISP.FLASH_POLL");
+    let stall = findings.iter().any(|f| f.id == "ISP.MEMOP_STALL");
     let phys_src = ev.sources.physical.is_some();
 
     let supported: Vec<String> = findings
@@ -127,6 +128,23 @@ fn verdict_of(ev: &EvidenceRecord, findings: &[Finding]) -> Verdict {
             not_proven: vec![
                 "bad cell vs lock vs ISP drop".into(),
                 "avrdude verify-mismatch (not on EP2)".into(),
+            ],
+        };
+    }
+
+    if stall {
+        return Verdict {
+            result: "FAIL_UNCONFIRMED",
+            likely: "FLASH write stalled on the host timeline (multi-second gap mid-MEMOP). MEMOP END|OK after the gap is not a completed write.".into(),
+            supported_by: supported,
+            not_proven: vec![
+                "host USB I/O error vs target vs cable".into(),
+                if line_anom {
+                    "RST GPIO echo as cause (anomaly only; not established)"
+                } else {
+                    "physical cause"
+                }
+                .into(),
             ],
         };
     }

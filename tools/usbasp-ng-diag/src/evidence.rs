@@ -82,6 +82,8 @@ pub struct Execution {
     pub memop_started: bool,
     /// START/CONT without MEMOP END — write/read did not finish on EP2.
     pub memop_incomplete: bool,
+    /// Host gap mid FLASH/EEPROM write (≥3s between MEMOP frames). Sticky across READFLASH.
+    pub memop_stalled: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -200,7 +202,7 @@ pub fn from_state(source: &str, state: &AppState, complete: bool) -> EvidenceRec
             trace_events: state.trace_valid,
             trace_overflow: state.trace_overflow,
             frames: state.events.len(),
-            memop_ok: if state.flash_poll_failed {
+            memop_ok: if state.flash_poll_failed || state.memop_stalled {
                 Some(false)
             } else {
                 state.last_flash_ok.or(state.memop_end_ok)
@@ -211,10 +213,13 @@ pub fn from_state(source: &str, state: &AppState, complete: bool) -> EvidenceRec
                 || !state.memop_pages.is_empty()
                 || state.memop_end_ok.is_some()
                 || state.last_flash_ok.is_some()
-                || state.flash_poll_failed,
+                || state.flash_poll_failed
+                || state.memop_stalled,
             memop_incomplete: (state.memop_kind.is_some() || !state.memop_pages.is_empty())
                 && state.memop_end_ok.is_none()
-                && !state.flash_poll_failed,
+                && !state.flash_poll_failed
+                && !state.memop_stalled,
+            memop_stalled: state.memop_stalled,
         },
         claims: claims(state),
         result: result_block(state, tone, &diagnosis),
@@ -303,6 +308,20 @@ fn claims(state: &AppState) -> Vec<Claim> {
             confidence: "medium",
         });
     }
+    if state.memop_stalled {
+        let gap_ms = state
+            .memop_stall_gap_ns
+            .unwrap_or(crate::state::MEMOP_GAP_STALL_NS)
+            / 1_000_000;
+        out.push(Claim {
+            name: "MEMOP_STALL",
+            expected: "MEMOP CONT/END within a few hundred ms during FLASH write".into(),
+            observed: format!("host gap ≥{gap_ms}ms mid-write; END|OK does not clear stall"),
+            verdict: "FAIL",
+            evidence: "protocol",
+            confidence: "medium",
+        });
+    }
     if let Some(ok) = state.pins_ok {
         out.push(Claim {
             name: "ISP_PINS",
@@ -323,7 +342,9 @@ fn claims(state: &AppState) -> Vec<Claim> {
 fn result_block(state: &AppState, tone: DiagTone, diagnosis: &str) -> ResultBlock {
     let observation = if state.ep_fail == Some(true) {
         "ENABLEPROG FAIL".into()
-    } else if state.memop_pages.iter().any(|(_, ok)| !*ok) {
+    } else if state.memop_stalled {
+        "MEMOP stall (host gap mid FLASH write)".into()
+    } else if state.memop_pages.iter().any(|(_, ok)| !*ok) || state.flash_poll_failed {
         "MEMOP page poll FAIL".into()
     } else if state.ep_fail == Some(false) {
         "ENABLEPROG PASS".into()
@@ -332,7 +353,17 @@ fn result_block(state: &AppState, tone: DiagTone, diagnosis: &str) -> ResultBloc
     } else {
         "no ENABLEPROG result".into()
     };
-    let (interpretation, cannot_prove) = if state.ep_fail == Some(false) && state.line_ok == Some(false)
+    let (interpretation, cannot_prove) = if state.memop_stalled {
+        (
+            "FLASH write stalled on the host timeline; MEMOP END|OK after a multi-second gap is not a completed write".into(),
+            "host USB I/O drop vs cable vs target — not distinguished on EP2".into(),
+        )
+    } else if state.flash_poll_failed || state.memop_pages.iter().any(|(_, ok)| !*ok) {
+        (
+            "flash page write did not complete polling".into(),
+            "bad cell vs lock vs ISP drop during that page; verify-mismatch is avrdude-only".into(),
+        )
+    } else if state.ep_fail == Some(false) && state.line_ok == Some(false)
     {
         (
             "programming confirmed; RST PINx echo is an anomaly, not a session FAIL".into(),
@@ -347,11 +378,6 @@ fn result_block(state: &AppState, tone: DiagTone, diagnosis: &str) -> ResultBloc
         (
             "target did not enter programming mode (silent MISO)".into(),
             "RESET/SCK/MISO/electrical — not distinguished on EP2".into(),
-        )
-    } else if state.memop_pages.iter().any(|(_, ok)| !*ok) {
-        (
-            "flash page write did not complete polling".into(),
-            "bad cell vs lock vs ISP drop during that page; verify-mismatch is avrdude-only".into(),
         )
     } else if state.ep_fail == Some(false) {
         (
